@@ -8,15 +8,36 @@
 ### 1.2 핵심 기술 스택
 | 영역 | 기술 | 버전/사양 |
 |------|------|-----------|
-| 프레임워크 | Next.js | 14.x (App Router) |
+| 프레임워크 | Next.js | 16.x (App Router) |
 | 언어 | TypeScript | 5.x |
-| 스타일링 | Tailwind CSS | 3.x |
-| 인증/DB/스토리지 | Supabase | - |
-| 벡터 검색 | pgvector | - |
+| 스타일링 | Tailwind CSS | 4.x |
+| 데이터베이스 | Neon PostgreSQL | pgvector 확장 |
+| ORM | Drizzle ORM | - |
+| 인증 | Iron Session | - |
+| Rate Limiting | Upstash Redis | - |
+| 파일 저장소 | S3 호환 스토리지 | - |
 | 작업 큐 | Inngest | - |
-| LLM | OpenAI GPT-4o-mini | - |
-| 임베딩 | text-embedding-3-small | 1536 차원 |
 | 배포 | Vercel | Pro |
+
+### 1.3 AI 모델 스택 (2025년 12월 기준)
+| 용도 | 모델 | 가격 (1M 토큰) | 비고 |
+|------|------|----------------|------|
+| **LLM (메인)** | Gemini 2.5 Flash-Lite | $0.10 / $0.40 | 가성비 최고, 카카오 4초 OK |
+| **LLM (폴백)** | GPT-4o-mini | $0.15 / $0.60 | 안정성 폴백 |
+| **임베딩** | BGE-m3-ko | 무료 (셀프호스팅) | 한국어 +13.4% 성능 향상, 1024차원 |
+| **FTS** | Nori + BM25 | - | Hybrid Retrieval용 |
+
+#### 모델 선정 근거
+- **Gemini 2.5 Flash-Lite**: 2025년 12월 기준 가장 저렴하면서 빠른 모델. TTFT ~180ms로 카카오톡 4초 제한 충족
+- **BGE-m3-ko**: BGE-M3의 한국어 파인튜닝 버전. MIRACL 벤치마크에서 원본 대비 13.4% 성능 향상
+- **Hybrid Retrieval**: Dense (BGE-m3-ko) + Sparse (Nori BM25) 조합으로 한국어 검색 품질 극대화
+
+#### 고려된 대안
+| 모델 | 장점 | 단점 | 결정 |
+|------|------|------|------|
+| Kakao Kanana-2 | 한국어 MMLU 89%, 토크나이저 30%↑ | 상업적 사용 시 별도 계약 필요 | 향후 검토 |
+| Gemini 3 Flash | 최신, 2.5 Pro보다 빠름 | 비용 5배 ($0.50/$3.00) | MVP 이후 검토 |
+| Upstage Solar Embedding | 상용 SLA, Ko-MIRACL +7.84점 | 유료 | 엔터프라이즈 플랜용 |
 
 ---
 
@@ -110,7 +131,8 @@ CREATE TABLE chunks (
   tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
   document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
-  embedding vector(1536),
+  embedding vector(1024),  -- BGE-m3-ko: 1024 차원
+  content_tsv tsvector GENERATED ALWAYS AS (to_tsvector('korean', content)) STORED,  -- Hybrid Retrieval용
   chunk_index INTEGER,
   quality_score REAL,
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'modified')),
@@ -146,6 +168,7 @@ CREATE TABLE usage_logs (
 -- 인덱스
 CREATE INDEX idx_chunks_tenant ON chunks(tenant_id);
 CREATE INDEX idx_chunks_embedding ON chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX idx_chunks_fts ON chunks USING gin(content_tsv);  -- Hybrid Retrieval용 FTS 인덱스
 CREATE INDEX idx_conversations_tenant ON conversations(tenant_id);
 CREATE INDEX idx_documents_tenant ON documents(tenant_id);
 ```
@@ -283,7 +306,7 @@ function calculateQualityScore(chunk: Chunk): number {
 }
 ```
 
-### 4.3 RAG 검색 및 응답 생성
+### 4.3 RAG 검색 및 응답 생성 (Hybrid Retrieval)
 
 ```typescript
 // lib/rag/retrieval.ts
@@ -294,18 +317,15 @@ export async function ragChat(
 ): Promise<string> {
   const { maxChunks = 3, channel = 'web' } = options;
 
-  // 1. 쿼리 임베딩
-  const queryEmbedding = await embedText(query);
+  // 1. Hybrid Search (Dense + Sparse)
+  const relevantChunks = await hybridSearch(tenantId, query, maxChunks);
 
-  // 2. 유사 청크 검색
-  const relevantChunks = await searchChunks(tenantId, queryEmbedding, maxChunks);
-
-  // 3. 컨텍스트 구성
+  // 2. 컨텍스트 구성
   const context = relevantChunks
     .map(c => c.content)
     .join('\n\n---\n\n');
 
-  // 4. LLM 응답 생성
+  // 3. LLM 응답 생성 (Gemini 2.5 Flash-Lite)
   const systemPrompt = channel === 'kakao'
     ? KAKAO_SYSTEM_PROMPT  // 짧은 응답 유도
     : WEB_SYSTEM_PROMPT;
@@ -315,20 +335,64 @@ export async function ragChat(
   return response;
 }
 
-// Supabase pgvector 검색
-async function searchChunks(
+// Hybrid Search: Dense (BGE-m3-ko) + Sparse (BM25)
+async function hybridSearch(
   tenantId: string,
-  embedding: number[],
+  query: string,
   limit: number
 ): Promise<Chunk[]> {
-  const { data } = await supabase.rpc('search_chunks', {
-    query_embedding: embedding,
-    match_tenant: tenantId,
-    match_count: limit,
-    match_threshold: 0.7
+  // 1. Dense 검색 (BGE-m3-ko 임베딩)
+  const queryEmbedding = await embedText(query);  // BGE-m3-ko
+  const denseResults = await db.execute(sql`
+    SELECT id, content, 1 - (embedding <=> ${queryEmbedding}::vector) as score
+    FROM chunks
+    WHERE tenant_id = ${tenantId} AND status = 'approved'
+    ORDER BY embedding <=> ${queryEmbedding}::vector
+    LIMIT ${limit * 2}
+  `);
+
+  // 2. Sparse 검색 (Nori + BM25)
+  const sparseResults = await db.execute(sql`
+    SELECT id, content, ts_rank(content_tsv, plainto_tsquery('korean', ${query})) as score
+    FROM chunks
+    WHERE tenant_id = ${tenantId} AND status = 'approved'
+      AND content_tsv @@ plainto_tsquery('korean', ${query})
+    ORDER BY score DESC
+    LIMIT ${limit * 2}
+  `);
+
+  // 3. Reciprocal Rank Fusion (RRF)
+  return rerank(denseResults, sparseResults, limit);
+}
+
+// RRF 알고리즘으로 결과 병합
+function rerank(
+  denseResults: Chunk[],
+  sparseResults: Chunk[],
+  limit: number,
+  k: number = 60
+): Chunk[] {
+  const scores = new Map<string, { chunk: Chunk; score: number }>();
+
+  denseResults.forEach((chunk, rank) => {
+    const rrf = 1 / (k + rank + 1);
+    scores.set(chunk.id, { chunk, score: rrf });
   });
 
-  return data;
+  sparseResults.forEach((chunk, rank) => {
+    const rrf = 1 / (k + rank + 1);
+    const existing = scores.get(chunk.id);
+    if (existing) {
+      existing.score += rrf;
+    } else {
+      scores.set(chunk.id, { chunk, score: rrf });
+    }
+  });
+
+  return Array.from(scores.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(s => s.chunk);
 }
 ```
 
@@ -536,13 +600,33 @@ function kakaoResponse(text: string) {
 ## 7. 환경 변수
 
 ```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+# 데이터베이스 (Neon PostgreSQL)
+DATABASE_URL=postgresql://...
 
-# OpenAI
-OPENAI_API_KEY=
+# 세션 암호화 키 (32자 이상 권장)
+SESSION_SECRET=your-secret-key-at-least-32-characters
+
+# Upstash Redis (Rate Limiting)
+UPSTASH_REDIS_REST_URL=https://...
+UPSTASH_REDIS_REST_TOKEN=...
+
+# S3 호환 스토리지
+S3_BUCKET=your-bucket-name
+S3_REGION=ap-northeast-2
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY=...
+S3_ENDPOINT=https://...  # MinIO/Cloudflare R2 등 사용 시
+
+# Google Gemini (LLM)
+GOOGLE_GENERATIVE_AI_API_KEY=...
+
+# OpenAI (폴백용)
+OPENAI_API_KEY=...
+
+# BGE-m3-ko 임베딩 서버 (셀프호스팅)
+EMBEDDING_API_URL=http://localhost:8000
+# 또는 Hugging Face Inference API 사용 시
+# HF_API_KEY=...
 
 # Inngest
 INNGEST_EVENT_KEY=
@@ -563,28 +647,44 @@ RESEND_API_KEY=
 ```json
 {
   "dependencies": {
-    "next": "14.x",
-    "@supabase/supabase-js": "^2.x",
-    "@supabase/ssr": "^0.x",
-    "openai": "^4.x",
-    "ai": "^3.x",
+    "next": "16.x",
+    "react": "19.x",
+    "react-dom": "19.x",
+    "@neondatabase/serverless": "^1.x",
+    "drizzle-orm": "^0.45.x",
+    "iron-session": "^8.x",
+    "@upstash/ratelimit": "^2.x",
+    "@upstash/redis": "^1.x",
+    "@aws-sdk/client-s3": "^3.x",
+    "@aws-sdk/s3-request-presigner": "^3.x",
+    "@google/generative-ai": "^0.x",
+    "openai": "^6.x",
+    "ai": "^6.x",
     "inngest": "^3.x",
-    "pdf-parse": "^1.x",
+    "pdf-parse": "^2.x",
     "mammoth": "^1.x",
     "papaparse": "^5.x",
-    "zod": "^3.x",
-    "tailwindcss": "^3.x",
-    "@radix-ui/react-*": "latest",
+    "zod": "^4.x",
+    "tailwindcss": "^4.x",
     "class-variance-authority": "^0.x",
     "clsx": "^2.x",
-    "lucide-react": "^0.x"
+    "lucide-react": "^0.x",
+    "bcrypt": "^6.x",
+    "otplib": "^12.x",
+    "qrcode": "^1.x",
+    "resend": "^6.x",
+    "uuid": "^13.x"
   },
   "devDependencies": {
     "typescript": "^5.x",
     "@types/node": "^20.x",
-    "@types/react": "^18.x",
-    "eslint": "^8.x",
-    "prettier": "^3.x"
+    "@types/react": "^19.x",
+    "drizzle-kit": "^0.31.x",
+    "vitest": "^4.x",
+    "@testing-library/react": "^16.x",
+    "@playwright/test": "^1.x",
+    "eslint": "^9.x",
+    "eslint-config-next": "16.x"
   }
 }
 ```
@@ -628,14 +728,65 @@ RESEND_API_KEY=
 ### 단기 (3-6개월)
 - 자동 응답 품질 평가 시스템
 - 상담 로그 분석 대시보드
-- Claude 폴백 (OpenAI 장애 대비)
+- Gemini 3 Flash 업그레이드 (비용 대비 성능 검토)
+- Kakao Kanana-2 검토 (상업적 라이선스 확보 시)
 
 ### 중기 (6-12개월)
 - 팀 멤버 초대 기능
 - API 제공 (외부 연동)
 - 자동 결제 시스템 (Stripe/Toss)
+- Upstage Solar Embedding (엔터프라이즈 플랜)
 
 ### 장기 (12개월+)
-- 다국어 지원
 - 음성 상담 연동
-- 자체 LLM 파인튜닝
+- 자체 임베딩 모델 파인튜닝
+- HNSW 인덱스 전환 (대용량 데이터 대응)
+
+---
+
+## 12. AI 모델 폴백 전략
+
+```typescript
+// lib/llm/provider.ts
+const LLM_PROVIDERS = [
+  {
+    name: 'gemini',
+    model: 'gemini-2.5-flash-lite',
+    priority: 1,
+    healthCheck: async () => { /* ... */ }
+  },
+  {
+    name: 'openai',
+    model: 'gpt-4o-mini',
+    priority: 2,
+    healthCheck: async () => { /* ... */ }
+  }
+];
+
+export async function generateWithFallback(
+  prompt: string,
+  options: GenerateOptions
+): Promise<string> {
+  for (const provider of LLM_PROVIDERS) {
+    try {
+      const isHealthy = await provider.healthCheck();
+      if (!isHealthy) continue;
+
+      return await generate(provider, prompt, options);
+    } catch (error) {
+      logger.warn(`Provider ${provider.name} failed, trying next...`, error);
+      continue;
+    }
+  }
+
+  throw new AppError(ErrorCode.LLM_UNAVAILABLE, '모든 LLM 서비스가 응답하지 않습니다.');
+}
+```
+
+### 폴백 시나리오
+
+| 상황 | 메인 | 폴백 | 비고 |
+|------|------|------|------|
+| 정상 | Gemini 2.5 Flash-Lite | - | - |
+| Gemini 장애 | - | GPT-4o-mini | 자동 전환 |
+| 모두 장애 | - | - | 에러 메시지 + 재시도 안내 |

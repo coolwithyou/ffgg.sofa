@@ -1,0 +1,199 @@
+/**
+ * Rate Limiting 미들웨어
+ * [W-003] Upstash Redis 기반 Rate Limiting
+ */
+
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
+import { NextRequest, NextResponse } from 'next/server';
+import { ErrorCode, AppError } from '@/lib/errors';
+import { logger } from '@/lib/logger';
+
+// Redis 클라이언트 (환경변수 필요)
+let redis: Redis | null = null;
+
+function getRedis(): Redis | null {
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    return null;
+  }
+
+  if (!redis) {
+    redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+  }
+
+  return redis;
+}
+
+// 티어별 Rate Limit 설정
+export const RATE_LIMITS = {
+  // API 요청 제한 (분당)
+  api: {
+    basic: { requests: 60, window: '1m' },
+    standard: { requests: 300, window: '1m' },
+    premium: { requests: 1000, window: '1m' },
+  },
+  // 인증 요청 제한 (더 엄격)
+  auth: {
+    login: { requests: 5, window: '15m' },
+    register: { requests: 3, window: '1h' },
+    passwordReset: { requests: 3, window: '1h' },
+  },
+  // 파일 업로드 제한
+  upload: {
+    basic: { requests: 10, window: '1h' },
+    standard: { requests: 50, window: '1h' },
+    premium: { requests: 200, window: '1h' },
+  },
+  // 챗봇 요청 제한
+  chat: {
+    basic: { requests: 100, window: '1d' },
+    standard: { requests: 1000, window: '1d' },
+    premium: { requests: 10000, window: '1d' },
+  },
+} as const;
+
+type WindowString = '1m' | '15m' | '1h' | '1d';
+
+function parseWindow(window: WindowString): Parameters<typeof Ratelimit.slidingWindow>[1] {
+  const mapping: Record<WindowString, Parameters<typeof Ratelimit.slidingWindow>[1]> = {
+    '1m': '1 m',
+    '15m': '15 m',
+    '1h': '1 h',
+    '1d': '1 d',
+  };
+  return mapping[window];
+}
+
+// Rate Limiter 인스턴스 캐시
+const limiters = new Map<string, Ratelimit>();
+
+function getRateLimiter(
+  prefix: string,
+  requests: number,
+  window: WindowString
+): Ratelimit | null {
+  const redisClient = getRedis();
+  if (!redisClient) {
+    // Redis가 없으면 rate limiting 비활성화 (개발 환경)
+    return null;
+  }
+
+  const key = `${prefix}:${requests}:${window}`;
+
+  if (!limiters.has(key)) {
+    limiters.set(
+      key,
+      new Ratelimit({
+        redis: redisClient,
+        limiter: Ratelimit.slidingWindow(requests, parseWindow(window)),
+        prefix: `ratelimit:${prefix}`,
+        analytics: true,
+      })
+    );
+  }
+
+  return limiters.get(key)!;
+}
+
+export interface RateLimitResult {
+  success: boolean;
+  limit: number;
+  remaining: number;
+  reset: number;
+}
+
+/**
+ * Rate Limit 체크
+ */
+export async function checkRateLimit(
+  identifier: string,
+  type: 'api' | 'auth' | 'upload' | 'chat',
+  tier: 'basic' | 'standard' | 'premium' | 'login' | 'register' | 'passwordReset' = 'basic'
+): Promise<RateLimitResult> {
+  const config = (RATE_LIMITS[type] as Record<string, { requests: number; window: WindowString }>)[tier];
+
+  if (!config) {
+    logger.warn('Unknown rate limit config', { type, tier });
+    return { success: true, limit: 0, remaining: 0, reset: 0 };
+  }
+
+  const limiter = getRateLimiter(`${type}:${tier}`, config.requests, config.window);
+
+  if (!limiter) {
+    // Redis 없으면 항상 허용 (개발 환경)
+    return { success: true, limit: config.requests, remaining: config.requests, reset: 0 };
+  }
+
+  try {
+    const result = await limiter.limit(identifier);
+
+    return {
+      success: result.success,
+      limit: result.limit,
+      remaining: result.remaining,
+      reset: result.reset,
+    };
+  } catch (error) {
+    logger.error('Rate limit check failed', error as Error, { identifier, type, tier });
+    // 에러 시 허용 (fail-open)
+    return { success: true, limit: config.requests, remaining: config.requests, reset: 0 };
+  }
+}
+
+/**
+ * Rate Limit 미들웨어 헬퍼
+ */
+export async function withRateLimit(
+  request: NextRequest,
+  type: 'api' | 'auth' | 'upload' | 'chat',
+  tier: 'basic' | 'standard' | 'premium' = 'basic',
+  identifier?: string
+): Promise<NextResponse | null> {
+  // 식별자: IP 또는 사용자 ID
+  const id =
+    identifier ||
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    'unknown';
+
+  const result = await checkRateLimit(id, type, tier);
+
+  if (!result.success) {
+    logger.warn('Rate limit exceeded', {
+      identifier: id,
+      type,
+      tier,
+      limit: result.limit,
+      reset: result.reset,
+    });
+
+    return NextResponse.json(
+      new AppError(ErrorCode.RATE_LIMIT_EXCEEDED).toSafeResponse(),
+      {
+        status: 429,
+        headers: {
+          'X-RateLimit-Limit': result.limit.toString(),
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': result.reset.toString(),
+          'Retry-After': Math.ceil((result.reset - Date.now()) / 1000).toString(),
+        },
+      }
+    );
+  }
+
+  return null; // 허용됨
+}
+
+/**
+ * API Route에서 사용하는 Rate Limit 데코레이터
+ */
+export function rateLimitHeaders(result: RateLimitResult): HeadersInit {
+  return {
+    'X-RateLimit-Limit': result.limit.toString(),
+    'X-RateLimit-Remaining': result.remaining.toString(),
+    'X-RateLimit-Reset': result.reset.toString(),
+  };
+}
