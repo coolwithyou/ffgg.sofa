@@ -34,8 +34,27 @@ const SESSION_TTL = 30 * 60; // 30분 (초 단위)
 // 개발용 기본 비밀번호 (32자 이상 필요)
 const DEV_SESSION_PASSWORD = 'dev_session_password_must_be_32_chars_long';
 
-// 세션 비밀번호 (빌드 시에는 기본값 사용)
-const SESSION_PASSWORD = process.env.SESSION_SECRET || DEV_SESSION_PASSWORD;
+// 세션 비밀번호 - 프로덕션에서는 환경변수 필수
+const SESSION_PASSWORD = (() => {
+  const secret = process.env.SESSION_SECRET;
+
+  // 환경변수가 설정되어 있으면 사용
+  if (secret) {
+    return secret;
+  }
+
+  // 개발 환경에서는 기본값 사용
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('[SECURITY] SESSION_SECRET이 설정되지 않았습니다. 개발용 기본값을 사용합니다.');
+    return DEV_SESSION_PASSWORD;
+  }
+
+  // 프로덕션에서 미설정 시 에러 로그
+  // Vercel에서는 환경변수가 런타임에 주입되므로 빌드 시점에서는 확인 불가
+  // 앱 크래시 방지를 위해 기본값 사용하지만 반드시 환경변수 설정 필요
+  console.error('[SECURITY CRITICAL] SESSION_SECRET이 프로덕션에서 설정되지 않았습니다!');
+  return DEV_SESSION_PASSWORD;
+})();
 
 export const sessionOptions: SessionOptions = {
   password: SESSION_PASSWORD,
