@@ -11,6 +11,8 @@ import { logger } from '@/lib/logger';
 
 export interface SearchResult {
   id: string;
+  chunkId: string;
+  documentId: string;
   content: string;
   score: number;
   metadata: Record<string, unknown>;
@@ -88,6 +90,7 @@ async function denseSearch(
     const results = await db.execute(sql`
       SELECT
         id,
+        document_id,
         content,
         metadata,
         1 - (embedding <=> ${embeddingStr}::vector) as score
@@ -101,11 +104,14 @@ async function denseSearch(
 
     return (results.rows as Array<{
       id: string;
+      document_id: string;
       content: string;
       metadata: Record<string, unknown>;
       score: number;
     }>).map((row) => ({
       id: row.id,
+      chunkId: row.id,
+      documentId: row.document_id,
       content: row.content,
       score: Number(row.score),
       metadata: row.metadata || {},
@@ -134,6 +140,7 @@ async function sparseSearch(
     const results = await db.execute(sql`
       SELECT
         id,
+        document_id,
         content,
         metadata,
         ts_rank_cd(content_tsv, plainto_tsquery('korean', ${query})) as score
@@ -148,11 +155,14 @@ async function sparseSearch(
 
     return (results.rows as Array<{
       id: string;
+      document_id: string;
       content: string;
       metadata: Record<string, unknown>;
       score: number;
     }>).map((row) => ({
       id: row.id,
+      chunkId: row.id,
+      documentId: row.document_id,
       content: row.content,
       score: Number(row.score),
       metadata: row.metadata || {},
@@ -249,6 +259,8 @@ export async function getChunksByDocument(
 
   return results.map((row) => ({
     id: row.id,
+    chunkId: row.id,
+    documentId: documentId,
     content: row.content,
     score: row.qualityScore || 0,
     metadata: (row.metadata as Record<string, unknown>) || {},

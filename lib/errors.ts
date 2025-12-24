@@ -243,3 +243,37 @@ export const Errors = {
   rateLimitExceeded: () => new AppError(ErrorCode.RATE_LIMIT_EXCEEDED),
   internalError: () => new AppError(ErrorCode.INTERNAL_ERROR),
 };
+
+/**
+ * Validation 에러 클래스
+ */
+export class ValidationError extends AppError {
+  public readonly validationErrors: Array<{ path: string; message: string }>;
+
+  constructor(
+    message: string,
+    errors: Array<{ path?: (string | number)[]; message: string }> = []
+  ) {
+    super(ErrorCode.VALIDATION_ERROR, message, {
+      errors: errors.map((e) => ({
+        path: e.path?.join('.') || '',
+        message: e.message,
+      })),
+    });
+    this.validationErrors = errors.map((e) => ({
+      path: e.path?.join('.') || '',
+      message: e.message,
+    }));
+  }
+}
+
+/**
+ * API Route에서 사용할 에러 핸들러
+ */
+export function handleApiError(error: unknown): Response {
+  const appError = normalizeError(error);
+
+  return Response.json(appError.toSafeResponse(), {
+    status: appError.statusCode,
+  });
+}

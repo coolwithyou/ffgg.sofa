@@ -197,3 +197,64 @@ export function rateLimitHeaders(result: RateLimitResult): HeadersInit {
     'X-RateLimit-Reset': result.reset.toString(),
   };
 }
+
+/**
+ * Rate Limit 설정 타입
+ */
+export interface RateLimitConfig {
+  requests: number;
+  window: WindowString;
+}
+
+/**
+ * 사전 정의된 Rate Limit 설정
+ */
+export const RATE_LIMIT_CONFIGS = {
+  chat: { requests: 100, window: '1d' as const },
+  chatPremium: { requests: 10000, window: '1d' as const },
+  api: { requests: 60, window: '1m' as const },
+  apiPremium: { requests: 1000, window: '1m' as const },
+  upload: { requests: 10, window: '1h' as const },
+  login: { requests: 5, window: '15m' as const },
+} as const;
+
+/**
+ * 간소화된 Rate Limit 체크 (config 기반)
+ */
+export async function checkRateLimitWithConfig(
+  identifier: string,
+  config: RateLimitConfig
+): Promise<{
+  allowed: boolean;
+  remaining: number;
+  retryAfter?: number;
+}> {
+  const limiter = getRateLimiter('custom', config.requests, config.window);
+
+  if (!limiter) {
+    // Redis 없으면 항상 허용 (개발 환경)
+    return { allowed: true, remaining: config.requests };
+  }
+
+  try {
+    const result = await limiter.limit(identifier);
+
+    if (!result.success) {
+      const retryAfter = Math.ceil((result.reset - Date.now()) / 1000);
+      return {
+        allowed: false,
+        remaining: 0,
+        retryAfter,
+      };
+    }
+
+    return {
+      allowed: true,
+      remaining: result.remaining,
+    };
+  } catch (error) {
+    logger.error('Rate limit check failed', error as Error, { identifier });
+    return { allowed: true, remaining: config.requests };
+  }
+}
+

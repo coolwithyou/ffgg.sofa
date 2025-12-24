@@ -215,3 +215,50 @@ export function withTenant<T extends NextResponse>(
     }
   };
 }
+
+/**
+ * 요청에서 테넌트 ID 추출
+ */
+export function getTenantId(request: NextRequest): string | null {
+  // 1. 헤더에서 추출
+  const headerTenantId = request.headers.get('x-tenant-id');
+  if (headerTenantId) {
+    return headerTenantId;
+  }
+
+  // 2. 쿼리 파라미터에서 추출
+  const url = new URL(request.url);
+  const queryTenantId = url.searchParams.get('tenantId');
+  if (queryTenantId) {
+    return queryTenantId;
+  }
+
+  return null;
+}
+
+/**
+ * 간소화된 테넌트 접근 검증 (세션 없이 헤더/파라미터만 확인)
+ */
+export async function validateTenantAccessSimple(
+  request: NextRequest
+): Promise<{ valid: boolean; tenantId?: string; error?: string }> {
+  const tenantId = getTenantId(request);
+
+  if (!tenantId) {
+    return { valid: false, error: '테넌트 ID가 필요합니다' };
+  }
+
+  // 테넌트 존재 및 활성 상태 확인
+  const tenant = await getTenantContext(tenantId);
+
+  if (!tenant) {
+    return { valid: false, error: '테넌트를 찾을 수 없습니다' };
+  }
+
+  if (!isTenantActive(tenant)) {
+    return { valid: false, error: '비활성화된 테넌트입니다' };
+  }
+
+  return { valid: true, tenantId };
+}
+
