@@ -4,11 +4,11 @@
  */
 
 import { serve } from 'inngest/next';
-import { inngest } from '@/inngest/client';
+import { inngestClient } from '@/inngest/client';
 import { processDocument, sendNotification } from '@/inngest/functions';
 
-// Inngest 함수들을 서빙
+// Inngest 함수들을 서빙 (실제 클라이언트 사용)
 export const { GET, POST, PUT } = serve({
-  client: inngest,
+  client: inngestClient,
   functions: [processDocument, sendNotification],
 });

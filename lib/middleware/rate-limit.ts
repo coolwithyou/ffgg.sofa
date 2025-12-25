@@ -11,16 +11,38 @@ import { logger } from '@/lib/logger';
 
 // Redis 클라이언트 (환경변수 필요)
 let redis: Redis | null = null;
+let redisCheckDone = false;
+
+/**
+ * Redis가 제대로 설정되어 있는지 확인
+ */
+function isRedisConfigured(): boolean {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  // 플레이스홀더 값 체크
+  const isPlaceholder = (value: string | undefined) =>
+    !value ||
+    value.startsWith('your-') ||
+    value.startsWith('https://your-') ||
+    value === 'your-upstash-token';
+
+  return !isPlaceholder(url) && !isPlaceholder(token);
+}
 
 function getRedis(): Redis | null {
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+  if (!isRedisConfigured()) {
+    if (!redisCheckDone) {
+      logger.info('[DEV] Rate limiting disabled (Upstash Redis not configured)');
+      redisCheckDone = true;
+    }
     return null;
   }
 
   if (!redis) {
     redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
     });
   }
 

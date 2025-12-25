@@ -128,7 +128,7 @@ export const chunks = pgTable(
       .notNull()
       .references(() => documents.id, { onDelete: 'cascade' }),
     content: text('content').notNull(),
-    embedding: vector('embedding', { dimensions: 1024 }), // BGE-m3-ko 1024차원
+    embedding: vector('embedding', { dimensions: 1536 }), // OpenAI text-embedding-3-small 1536차원
     contentTsv: text('content_tsv'), // Hybrid Retrieval용 tsvector (마이그레이션에서 generated column으로 설정)
     chunkIndex: integer('chunk_index'),
     qualityScore: real('quality_score'),
@@ -196,7 +196,7 @@ export const responseCache = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     queryHash: text('query_hash').notNull(),
-    queryEmbedding: vector('query_embedding', { dimensions: 1024 }), // BGE-m3-ko 1024차원
+    queryEmbedding: vector('query_embedding', { dimensions: 1536 }), // OpenAI text-embedding-3-small 1536차원
     response: text('response').notNull(),
     hitCount: integer('hit_count').default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),

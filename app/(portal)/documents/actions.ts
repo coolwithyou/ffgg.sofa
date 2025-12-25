@@ -99,6 +99,79 @@ export async function deleteDocument(documentId: string): Promise<{ success: boo
 }
 
 /**
+ * 문서 재처리
+ */
+export async function reprocessDocument(documentId: string): Promise<{ success: boolean; error?: string }> {
+  const session = await validateSession();
+
+  if (!session) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  try {
+    // 문서 소유권 확인
+    const doc = await db.query.documents.findFirst({
+      where: eq(documents.id, documentId),
+      columns: {
+        id: true,
+        tenantId: true,
+        filename: true,
+        fileType: true,
+        filePath: true,
+        status: true,
+      },
+    });
+
+    if (!doc || doc.tenantId !== session.tenantId) {
+      return { success: false, error: '문서를 찾을 수 없습니다.' };
+    }
+
+    // 재처리 가능한 상태 확인
+    if (!['uploaded', 'failed'].includes(doc.status || '')) {
+      return { success: false, error: '재처리할 수 없는 상태입니다.' };
+    }
+
+    // 문서 상태 리셋
+    await db
+      .update(documents)
+      .set({
+        status: 'uploaded',
+        progressStep: null,
+        progressPercent: 0,
+        errorMessage: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(documents.id, documentId));
+
+    // Inngest 이벤트 발송
+    const { inngest } = await import('@/inngest/client');
+    await inngest.send({
+      name: 'document/uploaded',
+      data: {
+        documentId: doc.id,
+        tenantId: doc.tenantId,
+        userId: session.userId,
+        filename: doc.filename,
+        fileType: doc.fileType || 'unknown',
+        filePath: doc.filePath,
+      },
+    });
+
+    revalidatePath('/documents');
+
+    logger.info('Document reprocess triggered', {
+      documentId,
+      tenantId: session.tenantId,
+      triggeredBy: session.userId,
+    });
+    return { success: true };
+  } catch (error) {
+    logger.error('Failed to reprocess document', error as Error, { documentId });
+    return { success: false, error: '재처리 요청 중 오류가 발생했습니다.' };
+  }
+}
+
+/**
  * 문서 상태 새로고침 (폴링용)
  */
 export async function refreshDocumentStatus(documentId: string): Promise<{

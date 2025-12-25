@@ -75,14 +75,25 @@ function SignupForm() {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
+    const agreedToTerms = formData.get('agreedToTerms') === 'on';
+    const agreedToPrivacy = formData.get('agreedToPrivacy') === 'on';
+
+    // 약관 동의 확인
+    if (!agreedToTerms || !agreedToPrivacy) {
+      setError('이용약관과 개인정보처리방침에 모두 동의해주세요.');
+      return;
+    }
+
     const data = {
       companyName: formData.get('companyName') as string,
       email: formData.get('email') as string,
       password: formData.get('password') as string,
       passwordConfirm: formData.get('passwordConfirm') as string,
-      name: formData.get('name') as string,
-      phone: formData.get('phone') as string,
+      contactName: formData.get('contactName') as string,
+      contactPhone: formData.get('contactPhone') as string,
       plan,
+      agreedToTerms,
+      agreedToPrivacy,
     };
 
     // 비밀번호 확인
@@ -260,12 +271,12 @@ function SignupForm() {
               </div>
 
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="contactName" className="block text-sm font-medium text-gray-700">
                   담당자 이름
                 </label>
                 <input
-                  id="name"
-                  name="name"
+                  id="contactName"
+                  name="contactName"
                   type="text"
                   required
                   autoComplete="name"
@@ -275,38 +286,50 @@ function SignupForm() {
               </div>
 
               <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="contactPhone" className="block text-sm font-medium text-gray-700">
                   연락처
                 </label>
                 <input
-                  id="phone"
-                  name="phone"
+                  id="contactPhone"
+                  name="contactPhone"
                   type="tel"
-                  required
                   autoComplete="tel"
                   className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
-                  placeholder="010-1234-5678"
+                  placeholder="010-1234-5678 (선택)"
                 />
               </div>
 
-              <div className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  id="terms"
-                  name="terms"
-                  required
-                  className="mt-1 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-                />
-                <label htmlFor="terms" className="text-sm text-gray-600">
-                  <Link href="/terms" className="text-orange-500 hover:underline">
-                    이용약관
-                  </Link>
-                  {' 및 '}
-                  <Link href="/privacy" className="text-orange-500 hover:underline">
-                    개인정보처리방침
-                  </Link>
-                  에 동의합니다
-                </label>
+              <div className="space-y-3 rounded-lg bg-gray-50 p-4">
+                <div className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    id="agreedToTerms"
+                    name="agreedToTerms"
+                    required
+                    className="mt-1 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                  />
+                  <label htmlFor="agreedToTerms" className="text-sm text-gray-600">
+                    <Link href="/terms" target="_blank" className="text-orange-500 hover:underline">
+                      이용약관
+                    </Link>
+                    에 동의합니다 (필수)
+                  </label>
+                </div>
+                <div className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    id="agreedToPrivacy"
+                    name="agreedToPrivacy"
+                    required
+                    className="mt-1 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                  />
+                  <label htmlFor="agreedToPrivacy" className="text-sm text-gray-600">
+                    <Link href="/privacy" target="_blank" className="text-orange-500 hover:underline">
+                      개인정보처리방침
+                    </Link>
+                    에 동의합니다 (필수)
+                  </label>
+                </div>
               </div>
 
               <div className="mt-6 flex gap-3">

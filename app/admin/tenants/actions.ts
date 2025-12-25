@@ -87,7 +87,7 @@ export async function getTenantList(): Promise<TenantListItem[]> {
       document_count: string;
       chunk_count: string;
       conversation_count: string;
-      created_at: Date;
+      created_at: Date | string;
     }>).map((row) => ({
       id: row.id,
       name: row.name || row.email.split('@')[0],
@@ -97,7 +97,9 @@ export async function getTenantList(): Promise<TenantListItem[]> {
       documentCount: parseInt(row.document_count) || 0,
       chunkCount: parseInt(row.chunk_count) || 0,
       conversationCount: parseInt(row.conversation_count) || 0,
-      createdAt: row.created_at?.toISOString() || new Date().toISOString(),
+      createdAt: row.created_at instanceof Date
+        ? row.created_at.toISOString()
+        : (row.created_at ? String(row.created_at) : new Date().toISOString()),
     }));
   } catch (error) {
     logger.error('Failed to fetch tenant list', error as Error);

@@ -3,7 +3,7 @@
  * 이메일 및 기타 알림 채널 처리
  */
 
-import { inngest } from '../client';
+import { inngestClient } from '../client';
 import { logger } from '@/lib/logger';
 
 /**
@@ -20,7 +20,7 @@ function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (char) => htmlEntities[char] || char);
 }
 
-export const sendNotification = inngest.createFunction(
+export const sendNotification = inngestClient.createFunction(
   {
     id: 'send-notification',
     retries: 2,

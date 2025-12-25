@@ -3,7 +3,7 @@
  * 업로드된 문서를 파싱 → 청킹 → 임베딩 → 저장
  */
 
-import { inngest } from '../client';
+import { inngestClient } from '../client';
 import { db, documents, chunks } from '@/lib/db';
 import { eq } from 'drizzle-orm';
 import { parseDocument, type SupportedFileType } from '@/lib/parsers';
@@ -12,7 +12,7 @@ import { embedTexts } from '@/lib/rag/embedding';
 import { logger } from '@/lib/logger';
 import { getFileFromStorage } from '@/lib/upload/storage';
 
-export const processDocument = inngest.createFunction(
+export const processDocument = inngestClient.createFunction(
   {
     id: 'process-document',
     retries: 3,

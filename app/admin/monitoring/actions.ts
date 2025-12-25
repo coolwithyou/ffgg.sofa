@@ -217,7 +217,7 @@ export async function getRecentActivities(): Promise<RecentActivity[]> {
     (recentDocs.rows as Array<{
       id: string;
       filename: string;
-      created_at: Date;
+      created_at: Date | string;
       tenant_id: string;
       tenant_name: string | null;
       tenant_email: string;
@@ -227,14 +227,16 @@ export async function getRecentActivities(): Promise<RecentActivity[]> {
         tenantId: row.tenant_id,
         tenantName: row.tenant_name || row.tenant_email.split('@')[0],
         description: `문서 업로드: ${row.filename}`,
-        createdAt: row.created_at?.toISOString() || new Date().toISOString(),
+        createdAt: row.created_at instanceof Date
+          ? row.created_at.toISOString()
+          : (row.created_at ? String(row.created_at) : new Date().toISOString()),
       });
     });
 
     (recentConvs.rows as Array<{
       id: string;
       session_id: string;
-      created_at: Date;
+      created_at: Date | string;
       tenant_id: string;
       tenant_name: string | null;
       tenant_email: string;
@@ -244,7 +246,9 @@ export async function getRecentActivities(): Promise<RecentActivity[]> {
         tenantId: row.tenant_id,
         tenantName: row.tenant_name || row.tenant_email.split('@')[0],
         description: `새 상담 시작`,
-        createdAt: row.created_at?.toISOString() || new Date().toISOString(),
+        createdAt: row.created_at instanceof Date
+          ? row.created_at.toISOString()
+          : (row.created_at ? String(row.created_at) : new Date().toISOString()),
       });
     });
 

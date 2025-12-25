@@ -77,12 +77,27 @@ pnpm install
 # 스키마를 데이터베이스에 푸시
 pnpm db:push
 
-# 또는 마이그레이션 생성 후 적용
-pnpm db:generate
-pnpm db:migrate
+# pgvector 확장 활성화
+pnpm db:enable-vector
 ```
 
-### 4. 개발 서버 실행
+### 4. 초기 어드민 생성
+
+```bash
+# 환경변수로 비밀번호 설정
+ADMIN_EMAIL=admin@your-domain.com \
+ADMIN_PASSWORD=YourSecurePassword123! \
+pnpm db:seed:admin
+```
+
+또는 `.env.local`에 추가:
+```bash
+ADMIN_EMAIL=admin@your-domain.com
+ADMIN_PASSWORD=YourSecurePassword123!
+ADMIN_COMPANY=Your Company Name
+```
+
+### 5. 개발 서버 실행
 
 ```bash
 pnpm dev
@@ -167,6 +182,8 @@ ffgg.sofa/
 | `pnpm db:generate` | 마이그레이션 생성 |
 | `pnpm db:migrate` | 마이그레이션 실행 |
 | `pnpm db:studio` | Drizzle Studio 실행 |
+| `pnpm db:seed:admin` | 초기 어드민 생성 |
+| `pnpm db:enable-vector` | pgvector 확장 활성화 |
 
 ## API 엔드포인트
 
