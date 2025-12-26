@@ -36,7 +36,7 @@ onFailure: async ({ event, error }) => {
 
       const originalData = failureEvent.data.event?.data;
       if (!originalData?.documentId || !originalData?.tenantId) {
-        logger.error('onFailure: Missing document data', { event: JSON.stringify(event) });
+        logger.error('onFailure: Missing document data', new Error(JSON.stringify(event)));
         return;
       }
 
