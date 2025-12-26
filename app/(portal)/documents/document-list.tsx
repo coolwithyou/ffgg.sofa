@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useTransition } from 'react';
 import { deleteDocument, reprocessDocument, refreshDocumentStatus, type DocumentItem } from './actions';
+import { DocumentProgressModal } from '@/components/document-progress-modal';
 
 interface DocumentListProps {
   documents: DocumentItem[];
@@ -17,6 +18,7 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
   const [isPending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [progressModalDocId, setProgressModalDocId] = useState<string | null>(null);
 
   // 처리 중인 문서 폴링
   useEffect(() => {
@@ -100,14 +102,15 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
   }
 
   return (
-    <div className="rounded-lg border bg-white">
-      <div className="border-b px-6 py-4">
-        <h2 className="text-lg font-semibold text-gray-900">
-          업로드된 문서 ({documents.length})
-        </h2>
-      </div>
+    <>
+      <div className="rounded-lg border bg-white">
+        <div className="border-b px-6 py-4">
+          <h2 className="text-lg font-semibold text-gray-900">
+            업로드된 문서 ({documents.length})
+          </h2>
+        </div>
 
-      <div className="divide-y">
+        <div className="divide-y">
         {documents.map((doc) => (
           <div
             key={doc.id}
@@ -130,6 +133,12 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
                 status={doc.status}
                 progressPercent={doc.progressPercent}
                 errorMessage={doc.errorMessage}
+                onClick={() => {
+                  // processing, uploaded, failed 상태에서 모달 열기
+                  if (['processing', 'uploaded', 'failed'].includes(doc.status)) {
+                    setProgressModalDocId(doc.id);
+                  }
+                }}
               />
 
               {/* 재처리 버튼 - uploaded 또는 failed 상태에서만 표시 */}
@@ -163,8 +172,19 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
             </div>
           </div>
         ))}
+        </div>
       </div>
-    </div>
+
+      {/* 처리 상태 모달 */}
+      {progressModalDocId && (
+        <DocumentProgressModal
+          documentId={progressModalDocId}
+          isOpen={true}
+          onClose={() => setProgressModalDocId(null)}
+          onReprocess={() => handleReprocess(progressModalDocId)}
+        />
+      )}
+    </>
   );
 }
 
@@ -173,11 +193,14 @@ function StatusBadge({
   status,
   progressPercent,
   errorMessage,
+  onClick,
 }: {
   status: string;
   progressPercent: number | null;
   errorMessage: string | null;
+  onClick?: () => void;
 }) {
+  const isClickable = ['processing', 'uploaded', 'failed'].includes(status);
   const config: Record<string, { label: string; className: string }> = {
     uploaded: { label: '업로드됨', className: 'bg-gray-100 text-gray-700' },
     processing: { label: '처리중', className: 'bg-blue-100 text-blue-700' },
@@ -193,10 +216,13 @@ function StatusBadge({
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <div
+      className={`flex items-center gap-2 ${isClickable ? 'cursor-pointer' : ''}`}
+      onClick={isClickable ? onClick : undefined}
+    >
       <span
-        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${className}`}
-        title={errorMessage || undefined}
+        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${className} ${isClickable ? 'hover:ring-2 hover:ring-offset-1 hover:ring-blue-300' : ''}`}
+        title={isClickable ? '클릭하여 처리 상태 보기' : (errorMessage || undefined)}
       >
         {label}
         {status === 'processing' && progressPercent !== null && (

@@ -1,9 +1,10 @@
 /**
  * PDF 파서
- * pdf-parse v2 라이브러리를 사용하여 PDF 문서에서 텍스트 추출
+ * unpdf 라이브러리를 사용하여 PDF 문서에서 텍스트 추출
+ * (pdf-parse v2는 Node.js 서버 환경에서 worker 로딩 문제가 있어 대체)
  */
 
-import { PDFParse } from 'pdf-parse';
+import { extractText, getMeta, getDocumentProxy } from 'unpdf';
 
 export interface PdfParseResult {
   text: string;
@@ -20,28 +21,41 @@ export interface PdfParseResult {
  */
 export async function parsePdf(buffer: Buffer): Promise<PdfParseResult> {
   try {
-    const parser = new PDFParse({ data: buffer });
-
-    // 문서 정보 추출
-    const info = await parser.getInfo();
+    // Buffer를 Uint8Array로 변환 (ArrayBuffer detached 문제 방지)
+    const uint8Array = new Uint8Array(buffer);
 
     // 텍스트 추출
-    const textResult = await parser.getText();
+    const { text, totalPages } = await extractText(uint8Array, { mergePages: true });
 
-    // 파서 정리
-    await parser.destroy();
+    // 메타데이터 추출
+    const pdf = await getDocumentProxy(new Uint8Array(buffer));
+    const metadata = await getMeta(pdf);
 
-    // 날짜 정보 추출
-    const dateNode = info.getDateNode();
-    const creationDate = dateNode.CreationDate || dateNode.XmpCreateDate;
+    // 날짜 파싱
+    let creationDate: Date | undefined;
+    if (metadata.info?.CreationDate && typeof metadata.info.CreationDate === 'string') {
+      // PDF 날짜 형식: D:YYYYMMDDHHmmSS
+      const dateStr = metadata.info.CreationDate.replace(/^D:/, '');
+      const match = dateStr.match(/^(\d{4})(\d{2})(\d{2})(\d{2})?(\d{2})?(\d{2})?/);
+      if (match) {
+        creationDate = new Date(
+          parseInt(match[1]),
+          parseInt(match[2]) - 1,
+          parseInt(match[3]),
+          parseInt(match[4] || '0'),
+          parseInt(match[5] || '0'),
+          parseInt(match[6] || '0')
+        );
+      }
+    }
 
     return {
-      text: cleanText(textResult.text),
+      text: cleanText(Array.isArray(text) ? text.join('\n') : text),
       metadata: {
-        pageCount: info.total,
-        title: (info.info?.Title as string) || undefined,
-        author: (info.info?.Author as string) || undefined,
-        creationDate: creationDate || undefined,
+        pageCount: totalPages,
+        title: (metadata.info?.Title as string) || undefined,
+        author: (metadata.info?.Author as string) || undefined,
+        creationDate,
       },
     };
   } catch (error) {

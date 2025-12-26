@@ -11,17 +11,51 @@ import { smartChunk } from '@/lib/rag/chunking';
 import { embedTexts } from '@/lib/rag/embedding';
 import { logger } from '@/lib/logger';
 import { getFileFromStorage } from '@/lib/upload/storage';
+import {
+  logDocumentProcessing,
+  clearDocumentLogs,
+} from '@/lib/document-log';
 
 export const processDocument = inngestClient.createFunction(
   {
     id: 'process-document',
     retries: 3,
 onFailure: async ({ event, error }) => {
-      const eventData = (event as unknown as { data: { documentId: string } }).data;
-      logger.error('Document processing failed permanently', undefined, {
-        documentId: eventData.documentId,
-        errorMessage: error.message,
-      });
+      // onFailure 이벤트에서 원본 이벤트 데이터는 event.data.event.data에 있음
+      const failureEvent = event as unknown as {
+        data: {
+          event: {
+            data: {
+              documentId: string;
+              tenantId: string;
+              filename: string;
+            };
+          };
+        };
+      };
+
+      const originalData = failureEvent.data.event?.data;
+      if (!originalData?.documentId || !originalData?.tenantId) {
+        logger.error('onFailure: Missing document data', { event: JSON.stringify(event) });
+        return;
+      }
+
+      const { documentId, tenantId } = originalData;
+
+      // 실패 로그 기록
+      try {
+        await logDocumentProcessing({
+          documentId,
+          tenantId,
+          step: 'failed',
+          status: 'failed',
+          message: '문서 처리 최종 실패',
+          errorMessage: error.message,
+          errorStack: error.stack,
+        });
+      } catch (logError) {
+        logger.error('Failed to log document failure', logError as Error);
+      }
 
       // 문서 상태를 실패로 업데이트
       await db
@@ -31,34 +65,40 @@ onFailure: async ({ event, error }) => {
           errorMessage: error.message,
           updatedAt: new Date(),
         })
-        .where(eq(documents.id, eventData.documentId));
+        .where(eq(documents.id, documentId));
     },
   },
   { event: 'document/uploaded' },
   async ({ event, step }) => {
     const { documentId, tenantId, filename, fileType, filePath } = event.data;
+    const processingStartTime = Date.now();
 
-    logger.info('Starting document processing', {
+    // 이전 로그 삭제 (재처리 시)
+    await clearDocumentLogs(documentId);
+
+    // 처리 시작 로그
+    await logDocumentProcessing({
       documentId,
       tenantId,
-      filename,
+      step: 'started',
+      status: 'started',
+      message: `문서 처리 시작: ${filename}`,
+      details: { filename, fileType },
     });
 
-    // Step 1: 문서 상태 업데이트 및 파일 다운로드
-    const fileBufferData = await step.run('download-file', async () => {
+    // Step 1: 문서 상태 업데이트
+    await step.run('initialize-processing', async () => {
       await updateDocumentProgress(documentId, 'parsing', 0);
-      // tenantId를 전달하여 테넌트 격리 검증
-      const buffer = await getFileFromStorage(filePath, tenantId);
-      // Inngest step serialization을 위해 배열로 변환
-      return Array.from(buffer);
+      return { initialized: true };
     });
 
-    // Step 2: 문서 파싱
+    // Step 2: 문서 파싱 (파일 다운로드 포함)
     const parseResult = await step.run('parse-document', async () => {
+      const stepStartTime = Date.now();
       await updateDocumentProgress(documentId, 'parsing', 30);
 
-      // 배열에서 Buffer로 복원
-      const fileBuffer = Buffer.from(fileBufferData);
+      // 파일 다운로드 - step 내에서 직접 수행 (직렬화 문제 회피)
+      const fileBuffer = await getFileFromStorage(filePath, tenantId);
       const result = await parseDocument(
         fileBuffer,
         fileType as SupportedFileType
@@ -66,9 +106,15 @@ onFailure: async ({ event, error }) => {
 
       await updateDocumentProgress(documentId, 'parsing', 100);
 
-      logger.info('Document parsed', {
+      // 파싱 완료 로그
+      await logDocumentProcessing({
         documentId,
-        textLength: result.text.length,
+        tenantId,
+        step: 'parsing',
+        status: 'completed',
+        message: '문서 파싱 완료',
+        details: { textLength: result.text.length },
+        durationMs: Date.now() - stepStartTime,
       });
 
       return result;
@@ -76,6 +122,7 @@ onFailure: async ({ event, error }) => {
 
     // Step 3: 스마트 청킹
     const chunkResults = await step.run('chunk-document', async () => {
+      const stepStartTime = Date.now();
       await updateDocumentProgress(documentId, 'chunking', 0);
 
       const chunksData = await smartChunk(parseResult.text, {
@@ -86,9 +133,15 @@ onFailure: async ({ event, error }) => {
 
       await updateDocumentProgress(documentId, 'chunking', 100);
 
-      logger.info('Document chunked', {
+      // 청킹 완료 로그
+      await logDocumentProcessing({
         documentId,
-        chunkCount: chunksData.length,
+        tenantId,
+        step: 'chunking',
+        status: 'completed',
+        message: '청크 분할 완료',
+        details: { chunkCount: chunksData.length },
+        durationMs: Date.now() - stepStartTime,
       });
 
       return chunksData;
@@ -96,6 +149,7 @@ onFailure: async ({ event, error }) => {
 
     // Step 4: 임베딩 생성 (배치 처리)
     const embeddings = await step.run('generate-embeddings', async () => {
+      const stepStartTime = Date.now();
       await updateDocumentProgress(documentId, 'embedding', 0);
 
       const texts = chunkResults.map((chunk) => chunk.content);
@@ -103,9 +157,15 @@ onFailure: async ({ event, error }) => {
 
       await updateDocumentProgress(documentId, 'embedding', 100);
 
-      logger.info('Embeddings generated', {
+      // 임베딩 완료 로그
+      await logDocumentProcessing({
         documentId,
-        count: embeddingVectors.length,
+        tenantId,
+        step: 'embedding',
+        status: 'completed',
+        message: '임베딩 생성 완료',
+        details: { embeddingCount: embeddingVectors.length },
+        durationMs: Date.now() - stepStartTime,
       });
 
       return embeddingVectors;
@@ -113,6 +173,7 @@ onFailure: async ({ event, error }) => {
 
     // Step 5: 청크 저장 (트랜잭션 사용)
     await step.run('save-chunks', async () => {
+      const stepStartTime = Date.now();
       await updateDocumentProgress(documentId, 'quality_check', 0);
 
       const chunkRecords = chunkResults.map((chunk, index) => ({
@@ -127,22 +188,34 @@ onFailure: async ({ event, error }) => {
         metadata: chunk.metadata,
       }));
 
-      // 트랜잭션으로 배치 삽입 (중간 실패 시 전체 롤백)
-      await db.transaction(async (tx) => {
-        const BATCH_SIZE = 100;
-        for (let i = 0; i < chunkRecords.length; i += BATCH_SIZE) {
-          const batch = chunkRecords.slice(i, i + BATCH_SIZE);
-          await tx.insert(chunks).values(batch);
-        }
-      });
+      // 배치 삽입 (neon-http는 트랜잭션 미지원)
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < chunkRecords.length; i += BATCH_SIZE) {
+        const batch = chunkRecords.slice(i, i + BATCH_SIZE);
+        await db.insert(chunks).values(batch);
+      }
 
       // 트랜잭션 완료 후 진행 상태 업데이트
       await updateDocumentProgress(documentId, 'quality_check', 100);
 
-      logger.info('Chunks saved', {
+      const autoApprovedCount = chunkRecords.filter((c) => c.autoApproved).length;
+      const avgQualityScore =
+        chunkResults.reduce((sum, c) => sum + c.qualityScore, 0) / chunkResults.length;
+
+      // 품질 검사 완료 로그
+      await logDocumentProcessing({
         documentId,
-        count: chunkRecords.length,
-        autoApproved: chunkRecords.filter((c) => c.autoApproved).length,
+        tenantId,
+        step: 'quality_check',
+        status: 'completed',
+        message: '품질 검사 및 저장 완료',
+        details: {
+          totalChunks: chunkRecords.length,
+          autoApproved: autoApprovedCount,
+          pendingReview: chunkRecords.length - autoApprovedCount,
+          avgQualityScore: Math.round(avgQualityScore * 10) / 10,
+        },
+        durationMs: Date.now() - stepStartTime,
       });
     });
 
@@ -162,11 +235,21 @@ onFailure: async ({ event, error }) => {
         })
         .where(eq(documents.id, documentId));
 
-      logger.info('Document processing completed', {
+      // 처리 완료 로그
+      const totalDurationMs = Date.now() - processingStartTime;
+      await logDocumentProcessing({
         documentId,
-        status,
-        totalChunks: chunkResults.length,
-        pendingChunks: pendingChunks.length,
+        tenantId,
+        step: 'completed',
+        status: 'completed',
+        message: `문서 처리 완료 (${status === 'approved' ? '자동 승인' : '검토 필요'})`,
+        details: {
+          finalStatus: status,
+          totalChunks: chunkResults.length,
+          pendingReview: pendingChunks.length,
+          totalDurationMs,
+        },
+        durationMs: totalDurationMs,
       });
     });
 

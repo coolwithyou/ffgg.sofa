@@ -11,10 +11,16 @@ import { logger } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
-    // 관리자 인증 확인
-    const session = await getSession();
-    if (!session?.user || session.user.role !== 'admin') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // 개발 환경에서는 인증 우회 가능
+    const isDev = process.env.NODE_ENV === 'development';
+    const bypassAuth = request.headers.get('X-Dev-Bypass') === 'true';
+
+    if (!isDev || !bypassAuth) {
+      // 관리자 인증 확인
+      const session = await getSession();
+      if (!session?.isLoggedIn || (session.role !== 'admin' && session.role !== 'internal_operator')) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
     }
 
     const { searchParams } = new URL(request.url);

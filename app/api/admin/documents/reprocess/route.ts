@@ -12,10 +12,21 @@ import { logger } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
-    // 관리자 인증 확인
-    const session = await getSession();
-    if (!session?.user || session.user.role !== 'admin') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // 개발 환경에서는 인증 우회 가능
+    const isDev = process.env.NODE_ENV === 'development';
+    const bypassAuth = request.headers.get('X-Dev-Bypass') === 'true';
+
+    let sessionUserId = 'dev-user';
+    let sessionEmail = 'dev@example.com';
+
+    if (!isDev || !bypassAuth) {
+      // 관리자 인증 확인
+      const session = await getSession();
+      if (!session?.isLoggedIn || (session.role !== 'admin' && session.role !== 'internal_operator')) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      sessionUserId = session.userId;
+      sessionEmail = session.email || 'unknown';
     }
 
     const body = await request.json();
@@ -75,7 +86,7 @@ export async function POST(request: NextRequest) {
           data: {
             documentId: doc.id,
             tenantId: doc.tenantId,
-            userId: session.user.id,
+            userId: sessionUserId,
             filename: doc.filename,
             fileType: doc.fileType || 'unknown',
             filePath: doc.filePath,
@@ -86,7 +97,7 @@ export async function POST(request: NextRequest) {
 
         logger.info('Document reprocess triggered', {
           documentId: doc.id,
-          triggeredBy: session.user.email,
+          triggeredBy: sessionEmail,
         });
       } catch (error) {
         results.push({

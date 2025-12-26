@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { DocumentProgressModal } from '@/components/document-progress-modal';
 
 interface Document {
   id: string;
@@ -58,6 +59,7 @@ export function DocumentsTable() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reprocessing, setReprocessing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [progressModalDocId, setProgressModalDocId] = useState<string | null>(null);
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -336,6 +338,11 @@ export function DocumentsTable() {
                       status={doc.status}
                       progressStep={doc.progressStep}
                       progressPercent={doc.progressPercent}
+                      onClick={() => {
+                        if (['processing', 'uploaded', 'failed'].includes(doc.status || '')) {
+                          setProgressModalDocId(doc.id);
+                        }
+                      }}
                     />
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-500">
@@ -367,6 +374,19 @@ export function DocumentsTable() {
           </tbody>
         </table>
       </div>
+
+      {/* 처리 상태 모달 */}
+      {progressModalDocId && (
+        <DocumentProgressModal
+          documentId={progressModalDocId}
+          isOpen={true}
+          onClose={() => setProgressModalDocId(null)}
+          onReprocess={() => {
+            handleReprocess([progressModalDocId]);
+            setProgressModalDocId(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -414,16 +434,23 @@ function StatusBadge({
   status,
   progressStep,
   progressPercent,
+  onClick,
 }: {
   status: string | null;
   progressStep: string | null;
   progressPercent: number | null;
+  onClick?: () => void;
 }) {
   const config = status ? STATUS_LABELS[status] : STATUS_LABELS.uploaded;
+  const isClickable = ['processing', 'uploaded', 'failed'].includes(status || '');
 
   return (
-    <div className="flex flex-col gap-1">
-      <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${config.color}`}>
+    <div
+      className={`flex flex-col gap-1 ${isClickable ? 'cursor-pointer' : ''}`}
+      onClick={isClickable ? onClick : undefined}
+      title={isClickable ? '클릭하여 처리 상태 보기' : undefined}
+    >
+      <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${config.color} ${isClickable ? 'hover:ring-2 hover:ring-offset-1 hover:ring-blue-300' : ''}`}>
         {config.label}
       </span>
       {status === 'processing' && progressStep && (

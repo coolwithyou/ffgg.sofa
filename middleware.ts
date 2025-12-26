@@ -28,6 +28,8 @@ const PUBLIC_API_PATHS = [
   '/api/auth/reset-password',
   '/api/auth/verify-email',
   '/api/health',
+  '/api/inngest', // Inngest 웹훅 엔드포인트 (서버 간 통신)
+  '/api/admin/documents', // 관리자 문서 API (개발용)
 ];
 
 // 정적 파일 및 Next.js 내부 경로

@@ -252,6 +252,35 @@ export const permissionAuditLog = pgTable(
 );
 
 // ============================================
+// 문서 처리 로그 (처리 상태 추적)
+// ============================================
+export const documentProcessingLogs = pgTable(
+  'document_processing_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    step: text('step').notNull(), // started, parsing, chunking, embedding, quality_check, completed, failed
+    status: text('status').notNull(), // started, completed, failed
+    message: text('message'),
+    details: jsonb('details').default({}),
+    errorMessage: text('error_message'),
+    errorStack: text('error_stack'),
+    durationMs: integer('duration_ms'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_doc_logs_document').on(table.documentId),
+    index('idx_doc_logs_tenant').on(table.tenantId),
+    index('idx_doc_logs_created').on(table.createdAt),
+  ]
+);
+
+// ============================================
 // 로그인 시도 기록 (계정 잠금용)
 // ============================================
 export const loginAttempts = pgTable(
@@ -287,3 +316,6 @@ export type NewConversation = typeof conversations.$inferInsert;
 
 export type AccessLog = typeof accessLogs.$inferSelect;
 export type NewAccessLog = typeof accessLogs.$inferInsert;
+
+export type DocumentProcessingLog = typeof documentProcessingLogs.$inferSelect;
+export type NewDocumentProcessingLog = typeof documentProcessingLogs.$inferInsert;
