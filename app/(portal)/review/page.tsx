@@ -12,8 +12,8 @@ export default function ReviewPage() {
       {/* 페이지 타이틀 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">청크 검토</h1>
-          <p className="text-gray-600">AI가 생성한 청크를 검토하고 승인하세요.</p>
+          <h1 className="text-2xl font-bold text-foreground">청크 검토</h1>
+          <p className="text-muted-foreground">AI가 생성한 청크를 검토하고 승인하세요.</p>
         </div>
       </div>
 
@@ -21,7 +21,7 @@ export default function ReviewPage() {
       <Suspense
         fallback={
           <div className="flex h-32 items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
           </div>
         }
       >

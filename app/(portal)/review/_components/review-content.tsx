@@ -216,11 +216,11 @@ export function ReviewContent() {
 
       {/* 페이지네이션 */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-3">
-          <p className="text-sm text-gray-700">
-            총 <span className="font-medium">{total}</span>개 중{' '}
-            <span className="font-medium">{(page - 1) * limit + 1}</span>-
-            <span className="font-medium">
+        <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
+          <p className="text-sm text-muted-foreground">
+            총 <span className="font-medium text-foreground">{total}</span>개 중{' '}
+            <span className="font-medium text-foreground">{(page - 1) * limit + 1}</span>-
+            <span className="font-medium text-foreground">
               {Math.min(page * limit, total)}
             </span>
             개 표시
@@ -229,14 +229,14 @@ export function ReviewContent() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="rounded-md border px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
             >
               이전
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={!hasMore}
-              className="rounded-md border px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
             >
               다음
             </button>

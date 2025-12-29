@@ -16,6 +16,10 @@ export interface ChunkReviewItem {
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  // Contextual Retrieval 관련 필드
+  contextPrefix?: string | null;
+  contextPrompt?: string | null;
+  hasContext?: boolean;
 }
 
 export interface ChunkListFilter {

@@ -127,19 +127,26 @@ export async function getChunkList(filter: ChunkListFilter): Promise<ChunkListRe
 
   const total = countResult[0]?.count ?? 0;
 
-  const items: ChunkReviewItem[] = chunkResults.map((row) => ({
-    id: row.id,
-    documentId: row.documentId,
-    documentName: row.documentName || 'Unknown',
-    content: row.content,
-    chunkIndex: row.chunkIndex ?? 0,
-    qualityScore: row.qualityScore,
-    status: (row.status || 'pending') as ChunkStatus,
-    autoApproved: row.autoApproved ?? false,
-    metadata: (row.metadata || {}) as Record<string, unknown>,
-    createdAt: row.createdAt?.toISOString() || '',
-    updatedAt: row.updatedAt?.toISOString() || '',
-  }));
+  const items: ChunkReviewItem[] = chunkResults.map((row) => {
+    const metadata = (row.metadata || {}) as Record<string, unknown>;
+    return {
+      id: row.id,
+      documentId: row.documentId,
+      documentName: row.documentName || 'Unknown',
+      content: row.content,
+      chunkIndex: row.chunkIndex ?? 0,
+      qualityScore: row.qualityScore,
+      status: (row.status || 'pending') as ChunkStatus,
+      autoApproved: row.autoApproved ?? false,
+      metadata,
+      createdAt: row.createdAt?.toISOString() || '',
+      updatedAt: row.updatedAt?.toISOString() || '',
+      // Contextual Retrieval 필드
+      contextPrefix: (metadata.contextPrefix as string) || null,
+      contextPrompt: (metadata.contextPrompt as string) || null,
+      hasContext: !!metadata.hasContext,
+    };
+  });
 
   return {
     chunks: items,
@@ -178,6 +185,7 @@ export async function getChunk(tenantId: string, chunkId: string): Promise<Chunk
   }
 
   const row = result[0];
+  const metadata = (row.metadata || {}) as Record<string, unknown>;
   return {
     id: row.id,
     documentId: row.documentId,
@@ -187,9 +195,13 @@ export async function getChunk(tenantId: string, chunkId: string): Promise<Chunk
     qualityScore: row.qualityScore,
     status: (row.status || 'pending') as ChunkStatus,
     autoApproved: row.autoApproved ?? false,
-    metadata: (row.metadata || {}) as Record<string, unknown>,
+    metadata,
     createdAt: row.createdAt?.toISOString() || '',
     updatedAt: row.updatedAt?.toISOString() || '',
+    // Contextual Retrieval 필드
+    contextPrefix: (metadata.contextPrefix as string) || null,
+    contextPrompt: (metadata.contextPrompt as string) || null,
+    hasContext: !!metadata.hasContext,
   };
 }
 
@@ -461,6 +473,7 @@ export async function getNextPendingChunk(
   }
 
   const row = result[0];
+  const metadata = (row.metadata || {}) as Record<string, unknown>;
   return {
     id: row.id,
     documentId: row.documentId,
@@ -470,8 +483,12 @@ export async function getNextPendingChunk(
     qualityScore: row.qualityScore,
     status: (row.status || 'pending') as ChunkStatus,
     autoApproved: row.autoApproved ?? false,
-    metadata: (row.metadata || {}) as Record<string, unknown>,
+    metadata,
     createdAt: row.createdAt?.toISOString() || '',
     updatedAt: row.updatedAt?.toISOString() || '',
+    // Contextual Retrieval 필드
+    contextPrefix: (metadata.contextPrefix as string) || null,
+    contextPrompt: (metadata.contextPrompt as string) || null,
+    hasContext: !!metadata.hasContext,
   };
 }

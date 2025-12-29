@@ -20,8 +20,8 @@ export function ReviewActions({
   isPending,
 }: ReviewActionsProps) {
   return (
-    <div className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-      <span className="text-sm font-medium text-blue-800">
+    <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/10 px-4 py-3">
+      <span className="text-sm font-medium text-primary">
         {selectedCount}개 선택됨
       </span>
       <div className="flex items-center gap-2">
@@ -36,14 +36,14 @@ export function ReviewActions({
         <button
           onClick={onReject}
           disabled={isPending}
-          className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
         >
           <XIcon className="h-4 w-4" />
           일괄 거부
         </button>
         <button
           onClick={onClear}
-          className="rounded-md px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100"
+          className="rounded-md px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20"
         >
           선택 해제
         </button>

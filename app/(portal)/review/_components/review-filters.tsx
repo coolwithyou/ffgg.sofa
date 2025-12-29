@@ -91,11 +91,11 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
     filters.search !== '';
 
   return (
-    <div className="rounded-lg border bg-white p-4">
+    <div className="rounded-lg border border-border bg-card p-4">
       <div className="flex flex-wrap items-center gap-4">
         {/* 상태 필터 */}
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-700">상태:</span>
+          <span className="text-sm font-medium text-foreground">상태:</span>
           <div className="flex gap-1">
             {STATUS_OPTIONS.map((option) => (
               <button
@@ -103,8 +103,8 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
                 onClick={() => handleStatusToggle(option.value)}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                   filters.status.includes(option.value)
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
                 {option.label}
@@ -115,7 +115,7 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
 
         {/* 품질 점수 범위 */}
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-700">품질:</span>
+          <span className="text-sm font-medium text-foreground">품질:</span>
           <input
             type="number"
             min="0"
@@ -123,9 +123,9 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
             placeholder="최소"
             value={filters.minQualityScore ?? ''}
             onChange={(e) => handleQualityChange('min', e.target.value)}
-            className="w-16 rounded border px-2 py-1 text-sm"
+            className="w-16 rounded border border-border bg-background px-2 py-1 text-sm text-foreground"
           />
-          <span className="text-gray-400">-</span>
+          <span className="text-muted-foreground">-</span>
           <input
             type="number"
             min="0"
@@ -133,7 +133,7 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
             placeholder="최대"
             value={filters.maxQualityScore ?? ''}
             onChange={(e) => handleQualityChange('max', e.target.value)}
-            className="w-16 rounded border px-2 py-1 text-sm"
+            className="w-16 rounded border border-border bg-background px-2 py-1 text-sm text-foreground"
           />
         </div>
 
@@ -144,11 +144,11 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
             placeholder="검색..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="w-48 rounded border px-3 py-1.5 text-sm"
+            className="w-48 rounded border border-border bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground"
           />
           <button
             type="submit"
-            className="rounded bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
+            className="rounded bg-muted px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted/80"
           >
             검색
           </button>
@@ -156,13 +156,13 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
 
         {/* 정렬 */}
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-700">정렬:</span>
+          <span className="text-sm font-medium text-foreground">정렬:</span>
           <select
             value={filters.sortBy}
             onChange={(e) =>
               handleSortChange(e.target.value as FilterState['sortBy'])
             }
-            className="rounded border px-2 py-1.5 text-sm"
+            className="rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground"
           >
             {SORT_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -177,7 +177,7 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
                 sortOrder: filters.sortOrder === 'asc' ? 'desc' : 'asc',
               })
             }
-            className="rounded border px-2 py-1.5 text-sm hover:bg-gray-50"
+            className="rounded border border-border px-2 py-1.5 text-sm text-foreground hover:bg-muted"
             title={filters.sortOrder === 'asc' ? '오름차순' : '내림차순'}
           >
             {filters.sortOrder === 'asc' ? '↑' : '↓'}
@@ -188,7 +188,7 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
         {hasActiveFilters && (
           <button
             onClick={clearFilters}
-            className="text-sm text-gray-500 hover:text-gray-700"
+            className="text-sm text-muted-foreground hover:text-foreground"
           >
             필터 초기화
           </button>
@@ -197,7 +197,7 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
         {/* 순차 리뷰 모드 링크 */}
         <Link
           href="/review/sequential"
-          className="ml-auto rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+          className="ml-auto rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           순차 리뷰
         </Link>

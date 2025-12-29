@@ -28,20 +28,20 @@ export function ReviewTable({
 }: ReviewTableProps) {
   if (isLoading) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-lg border bg-white">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+      <div className="flex h-64 items-center justify-center rounded-lg border border-border bg-card">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     );
   }
 
   if (chunks.length === 0) {
     return (
-      <div className="rounded-lg border bg-white p-12 text-center">
-        <EmptyIcon className="mx-auto h-12 w-12 text-gray-400" />
-        <h3 className="mt-4 text-lg font-medium text-gray-900">
+      <div className="rounded-lg border border-border bg-card p-12 text-center">
+        <EmptyIcon className="mx-auto h-12 w-12 text-muted-foreground" />
+        <h3 className="mt-4 text-lg font-medium text-foreground">
           검토할 청크가 없습니다
         </h3>
-        <p className="mt-2 text-gray-500">
+        <p className="mt-2 text-muted-foreground">
           필터 조건을 변경하거나 문서를 업로드하세요.
         </p>
       </div>
@@ -51,44 +51,47 @@ export function ReviewTable({
   const allSelected = selectedIds.size === chunks.length && chunks.length > 0;
 
   return (
-    <div className="overflow-hidden rounded-lg border bg-white">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <table className="min-w-full divide-y divide-border">
+        <thead className="bg-muted">
           <tr>
             <th className="w-12 px-4 py-3">
               <input
                 type="checkbox"
                 checked={allSelected}
                 onChange={onSelectAll}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="h-4 w-4 rounded border-border bg-background text-primary focus:ring-primary"
               />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
               문서
             </th>
-            <th className="w-20 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+            <th className="w-20 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
               #
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
               내용 미리보기
             </th>
-            <th className="w-24 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+            <th className="w-16 px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              컨텍스트
+            </th>
+            <th className="w-24 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
               품질
             </th>
-            <th className="w-28 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+            <th className="w-28 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
               상태
             </th>
-            <th className="w-32 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+            <th className="w-32 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
               액션
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200 bg-white">
+        <tbody className="divide-y divide-border bg-card">
           {chunks.map((chunk) => (
             <tr
               key={chunk.id}
-              className={`hover:bg-gray-50 ${
-                selectedIds.has(chunk.id) ? 'bg-blue-50' : ''
+              className={`hover:bg-muted ${
+                selectedIds.has(chunk.id) ? 'bg-primary/5' : ''
               }`}
             >
               <td className="px-4 py-3">
@@ -96,23 +99,26 @@ export function ReviewTable({
                   type="checkbox"
                   checked={selectedIds.has(chunk.id)}
                   onChange={() => onSelectToggle(chunk.id)}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="h-4 w-4 rounded border-border bg-background text-primary focus:ring-primary"
                 />
               </td>
               <td className="px-4 py-3">
-                <p className="max-w-[200px] truncate text-sm font-medium text-gray-900">
+                <p className="max-w-[200px] truncate text-sm font-medium text-foreground">
                   {chunk.documentName}
                 </p>
               </td>
               <td className="px-4 py-3">
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-muted-foreground">
                   #{chunk.chunkIndex + 1}
                 </span>
               </td>
               <td className="px-4 py-3">
-                <p className="max-w-md truncate text-sm text-gray-600">
+                <p className="max-w-md truncate text-sm text-muted-foreground">
                   {chunk.content.slice(0, 100)}...
                 </p>
+              </td>
+              <td className="px-4 py-3 text-center">
+                <ContextBadge hasContext={chunk.hasContext} />
               </td>
               <td className="px-4 py-3">
                 <QualityBadge score={chunk.qualityScore} />
@@ -124,7 +130,7 @@ export function ReviewTable({
                 <div className="flex items-center gap-1">
                   <Link
                     href={`/review/${chunk.id}`}
-                    className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                    className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                     title="상세 보기"
                   >
                     <ViewIcon className="h-4 w-4" />
@@ -134,7 +140,7 @@ export function ReviewTable({
                       <button
                         onClick={() => onStatusChange(chunk.id, 'approved')}
                         disabled={isPending}
-                        className="rounded p-1.5 text-green-600 hover:bg-green-50 disabled:opacity-50"
+                        className="rounded p-1.5 text-green-500 hover:bg-green-500/10 disabled:opacity-50"
                         title="승인"
                       >
                         <CheckIcon className="h-4 w-4" />
@@ -142,7 +148,7 @@ export function ReviewTable({
                       <button
                         onClick={() => onStatusChange(chunk.id, 'rejected')}
                         disabled={isPending}
-                        className="rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        className="rounded p-1.5 text-destructive hover:bg-destructive/10 disabled:opacity-50"
                         title="거부"
                       >
                         <XIcon className="h-4 w-4" />
@@ -159,21 +165,38 @@ export function ReviewTable({
   );
 }
 
+// 컨텍스트 배지
+function ContextBadge({ hasContext }: { hasContext?: boolean }) {
+  if (!hasContext) {
+    return <span className="text-muted-foreground/50">—</span>;
+  }
+
+  return (
+    <span
+      className="inline-flex items-center rounded-full bg-purple-500/10 px-2 py-0.5 text-xs font-medium text-purple-500"
+      title="컨텍스트 생성됨"
+    >
+      <SparklesIcon className="mr-0.5 h-3 w-3" />
+      AI
+    </span>
+  );
+}
+
 // 품질 점수 배지
 function QualityBadge({ score }: { score: number | null }) {
   if (score === null) {
-    return <span className="text-sm text-gray-400">-</span>;
+    return <span className="text-sm text-muted-foreground">-</span>;
   }
 
-  let colorClass = 'bg-gray-100 text-gray-700';
+  let colorClass = 'bg-muted text-muted-foreground';
   if (score >= 85) {
-    colorClass = 'bg-green-100 text-green-700';
+    colorClass = 'bg-green-500/10 text-green-500';
   } else if (score >= 70) {
-    colorClass = 'bg-yellow-100 text-yellow-700';
+    colorClass = 'bg-yellow-500/10 text-yellow-500';
   } else if (score >= 50) {
-    colorClass = 'bg-orange-100 text-orange-700';
+    colorClass = 'bg-orange-500/10 text-orange-500';
   } else {
-    colorClass = 'bg-red-100 text-red-700';
+    colorClass = 'bg-destructive/10 text-destructive';
   }
 
   return (
@@ -194,10 +217,10 @@ function StatusBadge({
   autoApproved: boolean;
 }) {
   const config: Record<ChunkStatus, { label: string; className: string }> = {
-    pending: { label: '대기', className: 'bg-gray-100 text-gray-700' },
-    approved: { label: '승인', className: 'bg-green-100 text-green-700' },
-    rejected: { label: '거부', className: 'bg-red-100 text-red-700' },
-    modified: { label: '수정됨', className: 'bg-blue-100 text-blue-700' },
+    pending: { label: '대기', className: 'bg-muted text-muted-foreground' },
+    approved: { label: '승인', className: 'bg-green-500/10 text-green-500' },
+    rejected: { label: '거부', className: 'bg-destructive/10 text-destructive' },
+    modified: { label: '수정됨', className: 'bg-primary/10 text-primary' },
   };
 
   const { label, className } = config[status];
@@ -267,6 +290,19 @@ function XIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M6 18L18 6M6 6l12 12"
+      />
+    </svg>
+  );
+}
+
+function SparklesIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
       />
     </svg>
   );
