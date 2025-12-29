@@ -17,6 +17,7 @@ export interface ChatRequest {
   message: string;
   sessionId?: string;
   channel?: 'web' | 'kakao';
+  chatbotId?: string;
 }
 
 export interface ChatResponse {
@@ -35,6 +36,7 @@ export interface ConversationContext {
   tenantId: string;
   sessionId: string;
   channel: 'web' | 'kakao';
+  chatbotId?: string;
   messages: ChatMessage[];
 }
 

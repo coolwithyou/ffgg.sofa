@@ -4,7 +4,8 @@
  */
 
 import { db, tenants } from '@/lib/db';
-import { eq, sql } from 'drizzle-orm';
+import { chatbots } from '@/drizzle/schema';
+import { eq, sql, and } from 'drizzle-orm';
 import { processChat } from '@/lib/chat';
 import { logger } from '@/lib/logger';
 import type { KakaoSkillRequest, TenantKakaoSettings } from './types';
@@ -26,13 +27,40 @@ class TimeoutError extends Error {
 }
 
 /**
- * 봇 ID로 테넌트 조회
+ * 봇 ID로 챗봇 및 테넌트 조회
+ * 새로운 chatbots 테이블에서 먼저 조회하고, 없으면 레거시 tenants.settings에서 조회
  */
 export async function getTenantByKakaoBot(
   botId: string
-): Promise<{ id: string; settings: TenantKakaoSettings } | null> {
+): Promise<{ id: string; chatbotId?: string; settings: TenantKakaoSettings } | null> {
   try {
-    // settings JSONB에서 kakao.botId로 조회
+    // 1. 먼저 chatbots 테이블에서 조회
+    const [chatbot] = await db
+      .select({
+        id: chatbots.id,
+        tenantId: chatbots.tenantId,
+        kakaoConfig: chatbots.kakaoConfig,
+      })
+      .from(chatbots)
+      .where(and(eq(chatbots.kakaoBotId, botId), eq(chatbots.kakaoEnabled, true)));
+
+    if (chatbot) {
+      const kakaoConfig = chatbot.kakaoConfig as Record<string, unknown> || {};
+      const kakaoSettings: TenantKakaoSettings = {
+        botId,
+        skillUrl: kakaoConfig.skillUrl as string | undefined,
+        maxResponseLength: (kakaoConfig.maxResponseLength as number) || DEFAULT_MAX_RESPONSE_LENGTH,
+        welcomeMessage: kakaoConfig.welcomeMessage as string | undefined,
+      };
+
+      return {
+        id: chatbot.tenantId,
+        chatbotId: chatbot.id,
+        settings: kakaoSettings,
+      };
+    }
+
+    // 2. 레거시: tenants.settings에서 조회 (하위 호환성)
     const result = await db.query.tenants.findFirst({
       where: sql`${tenants.settings}->>'kakaoBotId' = ${botId} AND ${tenants.status} = 'active'`,
       columns: {
@@ -119,6 +147,7 @@ export async function processKakaoSkill(
         message: utterance,
         sessionId: `kakao-${userId}`,
         channel: 'kakao',
+        chatbotId: tenant.chatbotId,
       }),
       KAKAO_TIMEOUT_MS
     );

@@ -4,7 +4,7 @@
  */
 
 import { logger } from '@/lib/logger';
-import { hybridSearch } from '@/lib/rag/retrieval';
+import { hybridSearch, hybridSearchMultiDataset } from '@/lib/rag/retrieval';
 import { generateResponse, type GenerateOptions } from '@/lib/rag/generator';
 import {
   getOrCreateConversation,
@@ -14,6 +14,7 @@ import {
   incrementConversationCount,
 } from './conversation';
 import { findCachedResponse, cacheResponse } from './cache';
+import { getChatbotDatasetIds, getDefaultChatbot, getChatbot } from './chatbot';
 import type { ChatMessage, ChatRequest, ChatResponse, ChatOptions } from './types';
 
 /**
@@ -36,11 +37,33 @@ export async function processChat(
   const channel = request.channel || 'web';
 
   try {
-    // 1. 대화 세션 조회/생성
+    // 1. 챗봇 조회 (chatbotId가 없으면 기본 챗봇 사용)
+    let chatbotId = request.chatbotId;
+    let chatbot = chatbotId
+      ? await getChatbot(chatbotId, tenantId)
+      : await getDefaultChatbot(tenantId);
+
+    if (!chatbot) {
+      logger.warn('No chatbot found, using default settings', { tenantId, chatbotId });
+    } else {
+      chatbotId = chatbot.id;
+      // 챗봇 설정에서 옵션 오버라이드
+      if (chatbot.llmConfig?.temperature !== undefined) {
+        options.temperature = options.temperature ?? chatbot.llmConfig.temperature;
+      }
+      if (chatbot.llmConfig?.maxTokens !== undefined) {
+        options.maxTokens = options.maxTokens ?? chatbot.llmConfig.maxTokens;
+      }
+      if (chatbot.searchConfig?.maxChunks !== undefined) {
+        options.maxChunks = options.maxChunks ?? chatbot.searchConfig.maxChunks;
+      }
+    }
+
+    // 2. 대화 세션 조회/생성
     const conversation = await getOrCreateConversation(tenantId, request.sessionId, channel);
     const isNewConversation = conversation.messages.length === 0;
 
-    // 2. 캐시 확인
+    // 3. 캐시 확인
     const cacheResult = await findCachedResponse(tenantId, request.message);
 
     if (cacheResult.hit && cacheResult.response) {
@@ -77,16 +100,28 @@ export async function processChat(
       };
     }
 
-    // 3. 대화 히스토리 조회
+    // 4. 대화 히스토리 조회
     let contextMessages: ChatMessage[] = [];
     if (includeHistory && conversation.messages.length > 0) {
       contextMessages = await getConversationHistory(tenantId, conversation.sessionId, historyLimit);
     }
 
-    // 4. Hybrid Search로 관련 청크 검색
-    const searchResults = await hybridSearch(tenantId, request.message, maxChunks);
+    // 5. Hybrid Search로 관련 청크 검색
+    // 챗봇이 있으면 연결된 데이터셋에서만 검색, 없으면 전체 검색
+    let searchResults;
+    if (chatbotId) {
+      const datasetIds = await getChatbotDatasetIds(chatbotId);
+      if (datasetIds.length > 0) {
+        searchResults = await hybridSearchMultiDataset(tenantId, datasetIds, request.message, maxChunks);
+      } else {
+        logger.warn('Chatbot has no linked datasets, falling back to tenant search', { chatbotId });
+        searchResults = await hybridSearch(tenantId, request.message, maxChunks);
+      }
+    } else {
+      searchResults = await hybridSearch(tenantId, request.message, maxChunks);
+    }
 
-    // 5. 히스토리 컨텍스트를 쿼리에 포함
+    // 6. 히스토리 컨텍스트를 쿼리에 포함
     let queryWithContext = request.message;
     if (contextMessages.length > 0) {
       const historyContext = contextMessages
@@ -95,7 +130,7 @@ export async function processChat(
       queryWithContext = `[이전 대화]\n${historyContext}\n\n[현재 질문]\n${request.message}`;
     }
 
-    // 6. LLM 응답 생성
+    // 7. LLM 응답 생성
     const generateOptions: GenerateOptions = {
       temperature,
       maxTokens: maxTokens || (channel === 'kakao' ? 300 : 1024),
@@ -104,7 +139,7 @@ export async function processChat(
 
     const responseText = await generateResponse(queryWithContext, searchResults, generateOptions);
 
-    // 7. 메시지 저장
+    // 8. 메시지 저장
     const userMessage: ChatMessage = {
       role: 'user',
       content: request.message,
@@ -123,7 +158,7 @@ export async function processChat(
     await addMessageToConversation(tenantId, conversation.sessionId, userMessage);
     await addMessageToConversation(tenantId, conversation.sessionId, assistantMessage);
 
-    // 8. 사용량 기록 (토큰 추정)
+    // 9. 사용량 기록 (토큰 추정)
     const estimatedTokens = Math.ceil(responseText.length / 4);
     await updateUsageLog(tenantId, estimatedTokens);
 
@@ -131,7 +166,7 @@ export async function processChat(
       await incrementConversationCount(tenantId);
     }
 
-    // 9. 응답 캐싱 (좋은 품질의 응답만)
+    // 10. 응답 캐싱 (좋은 품질의 응답만)
     if (searchResults.length > 0 && searchResults[0].score > 0.7) {
       await cacheResponse(tenantId, request.message, responseText);
     }
