@@ -3,18 +3,60 @@
 /**
  * 문서 업로드 컴포넌트
  * [Week 9] 드래그앤드롭 파일 업로드
+ * [Week 13] 업로드 전 미리보기 기능 추가
  */
 
 import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { PreviewModal } from './preview-modal';
 
-const ALLOWED_TYPES = ['application/pdf', 'text/plain'];
+const ALLOWED_TYPES = [
+  'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+const ALLOWED_EXTENSIONS = ['.pdf', '.txt', '.md', '.csv', '.docx'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 interface UploadState {
-  status: 'idle' | 'uploading' | 'success' | 'error';
+  status: 'idle' | 'previewing' | 'uploading' | 'success' | 'error';
   progress: number;
   message?: string;
+}
+
+interface PreviewData {
+  structure: {
+    hasQAPairs: boolean;
+    hasHeaders: boolean;
+    hasTables: boolean;
+    hasLists: boolean;
+  };
+  chunks: Array<{
+    index: number;
+    content: string;
+    contentPreview: string;
+    qualityScore: number;
+    metadata: {
+      isQAPair: boolean;
+      hasHeader: boolean;
+      isTable: boolean;
+      isList: boolean;
+    };
+    autoApproved: boolean;
+  }>;
+  summary: {
+    totalChunks: number;
+    avgQualityScore: number;
+    autoApprovedCount: number;
+    pendingCount: number;
+    warnings: Array<{
+      type: 'too_short' | 'too_long' | 'incomplete_qa' | 'low_quality';
+      count: number;
+      message: string;
+    }>;
+  };
 }
 
 export function DocumentUpload() {
@@ -26,9 +68,19 @@ export function DocumentUpload() {
     progress: 0,
   });
 
+  // 미리보기 관련 상태
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+
   const validateFile = (file: File): string | null => {
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return 'PDF 또는 TXT 파일만 업로드할 수 있습니다.';
+    // MIME 타입 또는 확장자로 검증
+    const extension = '.' + file.name.split('.').pop()?.toLowerCase();
+    const isValidType = ALLOWED_TYPES.includes(file.type);
+    const isValidExtension = ALLOWED_EXTENSIONS.includes(extension);
+
+    if (!isValidType && !isValidExtension) {
+      return 'PDF, TXT, MD, CSV, DOCX 파일만 업로드할 수 있습니다.';
     }
     if (file.size > MAX_FILE_SIZE) {
       return '파일 크기는 10MB를 초과할 수 없습니다.';
@@ -36,18 +88,55 @@ export function DocumentUpload() {
     return null;
   };
 
-  const uploadFile = useCallback(async (file: File) => {
+  // 미리보기 API 호출
+  const fetchPreview = useCallback(async (file: File) => {
     const validationError = validateFile(file);
     if (validationError) {
       setUploadState({ status: 'error', progress: 0, message: validationError });
       return;
     }
 
-    setUploadState({ status: 'uploading', progress: 0 });
+    setSelectedFile(file);
+    setUploadState({ status: 'previewing', progress: 0, message: '분석 중...' });
 
     try {
       const formData = new FormData();
       formData.append('file', file);
+
+      const response = await fetch('/api/documents/preview', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || '미리보기 생성에 실패했습니다.');
+      }
+
+      const data = await response.json();
+      setPreviewData(data.preview);
+      setShowPreview(true);
+      setUploadState({ status: 'idle', progress: 0 });
+    } catch (error) {
+      setUploadState({
+        status: 'error',
+        progress: 0,
+        message: error instanceof Error ? error.message : '미리보기 생성에 실패했습니다.',
+      });
+      setSelectedFile(null);
+    }
+  }, []);
+
+  // 실제 업로드 실행
+  const uploadFile = useCallback(async () => {
+    if (!selectedFile) return;
+
+    setShowPreview(false);
+    setUploadState({ status: 'uploading', progress: 0 });
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
 
       const response = await fetch('/api/documents/upload', {
         method: 'POST',
@@ -71,6 +160,8 @@ export function DocumentUpload() {
       // 3초 후 상태 초기화
       setTimeout(() => {
         setUploadState({ status: 'idle', progress: 0 });
+        setSelectedFile(null);
+        setPreviewData(null);
       }, 3000);
     } catch (error) {
       setUploadState({
@@ -79,7 +170,14 @@ export function DocumentUpload() {
         message: error instanceof Error ? error.message : '업로드에 실패했습니다.',
       });
     }
-  }, [router]);
+  }, [selectedFile, router]);
+
+  const handleClosePreview = useCallback(() => {
+    setShowPreview(false);
+    setSelectedFile(null);
+    setPreviewData(null);
+    setUploadState({ status: 'idle', progress: 0 });
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -91,101 +189,130 @@ export function DocumentUpload() {
     setIsDragging(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
 
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      uploadFile(files[0]);
-    }
-  }, [uploadFile]);
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length > 0) {
+        fetchPreview(files[0]);
+      }
+    },
+    [fetchPreview]
+  );
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      uploadFile(files[0]);
-    }
-    // 같은 파일 재선택 가능하도록 초기화
-    e.target.value = '';
-  }, [uploadFile]);
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (files && files.length > 0) {
+        fetchPreview(files[0]);
+      }
+      // 같은 파일 재선택 가능하도록 초기화
+      e.target.value = '';
+    },
+    [fetchPreview]
+  );
 
   const handleClick = () => {
     fileInputRef.current?.click();
   };
 
   return (
-    <div
-      onClick={handleClick}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      className={`
-        relative cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors
-        ${isDragging ? 'border-primary bg-primary/5' : 'border-border bg-card hover:border-muted-foreground'}
-        ${uploadState.status === 'uploading' ? 'pointer-events-none' : ''}
-      `}
-    >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf,.txt,application/pdf,text/plain"
-        onChange={handleFileSelect}
-        className="hidden"
+    <>
+      <div
+        onClick={handleClick}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`
+          relative cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors
+          ${isDragging ? 'border-primary bg-primary/5' : 'border-border bg-card hover:border-muted-foreground'}
+          ${uploadState.status === 'uploading' || uploadState.status === 'previewing' ? 'pointer-events-none' : ''}
+        `}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.txt,.md,.csv,.docx,application/pdf,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+
+        {uploadState.status === 'idle' && (
+          <>
+            <UploadIcon className="mx-auto h-12 w-12 text-muted-foreground" />
+            <p className="mt-4 text-lg font-medium text-foreground">
+              파일을 드래그하거나 클릭하여 업로드
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              PDF, TXT, MD, CSV, DOCX 파일 (최대 10MB)
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              업로드 전 품질 미리보기를 제공합니다
+            </p>
+          </>
+        )}
+
+        {uploadState.status === 'previewing' && (
+          <>
+            <AnalyzeIcon className="mx-auto h-12 w-12 text-primary" />
+            <p className="mt-4 text-lg font-medium text-foreground">문서 분석 중...</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              청킹 결과와 품질 점수를 계산하고 있습니다
+            </p>
+          </>
+        )}
+
+        {uploadState.status === 'uploading' && (
+          <>
+            <LoadingSpinner className="mx-auto h-12 w-12 text-primary" />
+            <p className="mt-4 text-lg font-medium text-foreground">업로드 중...</p>
+            <div className="mx-auto mt-4 h-2 w-64 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full bg-primary transition-all duration-300"
+                style={{ width: `${uploadState.progress}%` }}
+              />
+            </div>
+          </>
+        )}
+
+        {uploadState.status === 'success' && (
+          <>
+            <CheckIcon className="mx-auto h-12 w-12 text-green-500" />
+            <p className="mt-4 text-lg font-medium text-green-500">{uploadState.message}</p>
+          </>
+        )}
+
+        {uploadState.status === 'error' && (
+          <>
+            <ErrorIcon className="mx-auto h-12 w-12 text-destructive" />
+            <p className="mt-4 text-lg font-medium text-destructive">{uploadState.message}</p>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setUploadState({ status: 'idle', progress: 0 });
+                setSelectedFile(null);
+                setPreviewData(null);
+              }}
+              className="mt-4 text-sm text-primary hover:text-primary/80"
+            >
+              다시 시도
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* 미리보기 모달 */}
+      <PreviewModal
+        isOpen={showPreview}
+        onClose={handleClosePreview}
+        onConfirm={uploadFile}
+        previewData={previewData}
+        filename={selectedFile?.name || ''}
+        isUploading={uploadState.status === 'uploading'}
       />
-
-      {uploadState.status === 'idle' && (
-        <>
-          <UploadIcon className="mx-auto h-12 w-12 text-muted-foreground" />
-          <p className="mt-4 text-lg font-medium text-foreground">
-            파일을 드래그하거나 클릭하여 업로드
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            PDF, TXT 파일 (최대 10MB)
-          </p>
-        </>
-      )}
-
-      {uploadState.status === 'uploading' && (
-        <>
-          <LoadingSpinner className="mx-auto h-12 w-12 text-primary" />
-          <p className="mt-4 text-lg font-medium text-foreground">업로드 중...</p>
-          <div className="mx-auto mt-4 h-2 w-64 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full bg-primary transition-all duration-300"
-              style={{ width: `${uploadState.progress}%` }}
-            />
-          </div>
-        </>
-      )}
-
-      {uploadState.status === 'success' && (
-        <>
-          <CheckIcon className="mx-auto h-12 w-12 text-green-500" />
-          <p className="mt-4 text-lg font-medium text-green-500">
-            {uploadState.message}
-          </p>
-        </>
-      )}
-
-      {uploadState.status === 'error' && (
-        <>
-          <ErrorIcon className="mx-auto h-12 w-12 text-destructive" />
-          <p className="mt-4 text-lg font-medium text-destructive">
-            {uploadState.message}
-          </p>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setUploadState({ status: 'idle', progress: 0 });
-            }}
-            className="mt-4 text-sm text-primary hover:text-primary/80"
-          >
-            다시 시도
-          </button>
-        </>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -198,6 +325,19 @@ function UploadIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={1.5}
         d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+      />
+    </svg>
+  );
+}
+
+function AnalyzeIcon({ className }: { className?: string }) {
+  return (
+    <svg className={`animate-pulse ${className}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.5}
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
       />
     </svg>
   );
