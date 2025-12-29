@@ -12,6 +12,7 @@ import {
   index,
   unique,
   vector,
+  bigint,
 } from 'drizzle-orm/pg-core';
 
 // ============================================
@@ -90,6 +91,104 @@ export const sessions = pgTable(
 );
 
 // ============================================
+// 데이터셋 (문서 그룹)
+// ============================================
+export const datasets = pgTable(
+  'datasets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    documentCount: integer('document_count').default(0),
+    chunkCount: integer('chunk_count').default(0),
+    totalStorageBytes: bigint('total_storage_bytes', { mode: 'number' }).default(0),
+    status: text('status').default('active'), // active, archived
+    isDefault: boolean('is_default').default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_datasets_tenant').on(table.tenantId),
+    index('idx_datasets_default').on(table.tenantId, table.isDefault),
+  ]
+);
+
+// ============================================
+// 챗봇
+// ============================================
+export const chatbots = pgTable(
+  'chatbots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+
+    // 위젯 배포 설정
+    widgetEnabled: boolean('widget_enabled').default(false),
+    widgetApiKey: text('widget_api_key').unique(),
+    widgetConfig: jsonb('widget_config').default({}),
+
+    // 카카오 연동 설정
+    kakaoEnabled: boolean('kakao_enabled').default(false),
+    kakaoBotId: text('kakao_bot_id').unique(),
+    kakaoConfig: jsonb('kakao_config').default({}),
+
+    // LLM 설정
+    llmConfig: jsonb('llm_config').default({
+      temperature: 0.7,
+      maxTokens: 1024,
+      systemPrompt: null,
+    }),
+
+    // 검색 설정
+    searchConfig: jsonb('search_config').default({
+      maxChunks: 5,
+      minScore: 0.5,
+    }),
+
+    status: text('status').default('active'), // active, inactive
+    isDefault: boolean('is_default').default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_chatbots_tenant').on(table.tenantId),
+    index('idx_chatbots_widget_api_key').on(table.widgetApiKey),
+    index('idx_chatbots_kakao_bot_id').on(table.kakaoBotId),
+    index('idx_chatbots_default').on(table.tenantId, table.isDefault),
+  ]
+);
+
+// ============================================
+// 챗봇-데이터셋 연결 (N:M)
+// ============================================
+export const chatbotDatasets = pgTable(
+  'chatbot_datasets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    chatbotId: uuid('chatbot_id')
+      .notNull()
+      .references(() => chatbots.id, { onDelete: 'cascade' }),
+    datasetId: uuid('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    weight: real('weight').default(1.0), // 검색 가중치 (향후 확장)
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    unique('unique_chatbot_dataset').on(table.chatbotId, table.datasetId),
+    index('idx_chatbot_datasets_chatbot').on(table.chatbotId),
+    index('idx_chatbot_datasets_dataset').on(table.datasetId),
+  ]
+);
+
+// ============================================
 // 문서
 // ============================================
 export const documents = pgTable(
@@ -99,6 +198,9 @@ export const documents = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
+    datasetId: uuid('dataset_id').references(() => datasets.id, {
+      onDelete: 'cascade',
+    }), // nullable for migration, will be set to NOT NULL after migration
     filename: text('filename').notNull(),
     filePath: text('file_path').notNull(),
     fileSize: integer('file_size'),
@@ -111,7 +213,10 @@ export const documents = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
-  (table) => [index('idx_documents_tenant').on(table.tenantId)]
+  (table) => [
+    index('idx_documents_tenant').on(table.tenantId),
+    index('idx_documents_dataset').on(table.datasetId),
+  ]
 );
 
 // ============================================
@@ -127,6 +232,9 @@ export const chunks = pgTable(
     documentId: uuid('document_id')
       .notNull()
       .references(() => documents.id, { onDelete: 'cascade' }),
+    datasetId: uuid('dataset_id').references(() => datasets.id, {
+      onDelete: 'cascade',
+    }), // nullable for migration, denormalized for search performance
     content: text('content').notNull(),
     embedding: vector('embedding', { dimensions: 1536 }), // OpenAI text-embedding-3-small 1536차원
     contentTsv: text('content_tsv'), // Hybrid Retrieval용 tsvector (마이그레이션에서 generated column으로 설정)
@@ -143,6 +251,7 @@ export const chunks = pgTable(
   (table) => [
     index('idx_chunks_tenant').on(table.tenantId),
     index('idx_chunks_document').on(table.documentId),
+    index('idx_chunks_dataset').on(table.datasetId),
   ]
 );
 
@@ -156,6 +265,9 @@ export const conversations = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
+    chatbotId: uuid('chatbot_id').references(() => chatbots.id, {
+      onDelete: 'set null',
+    }), // nullable for backward compatibility
     sessionId: text('session_id').notNull(),
     channel: text('channel').default('web'), // web, kakao
     messages: jsonb('messages').default([]),
@@ -163,7 +275,10 @@ export const conversations = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
-  (table) => [index('idx_conversations_tenant').on(table.tenantId)]
+  (table) => [
+    index('idx_conversations_tenant').on(table.tenantId),
+    index('idx_conversations_chatbot').on(table.chatbotId),
+  ]
 );
 
 // ============================================
@@ -297,6 +412,25 @@ export const loginAttempts = pgTable(
 );
 
 // ============================================
+// FAQ 초안 (FAQ 빌더용)
+// ============================================
+export const faqDrafts = pgTable(
+  'faq_drafts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    name: text('name').notNull().default('새 FAQ'),
+    categories: jsonb('categories').default([]), // { id, name, order }[]
+    qaPairs: jsonb('qa_pairs').default([]), // { id, categoryId, question, answer, order }[]
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [index('idx_faq_drafts_tenant').on(table.tenantId)]
+);
+
+// ============================================
 // 타입 추론용 exports
 // ============================================
 export type Tenant = typeof tenants.$inferSelect;
@@ -319,3 +453,15 @@ export type NewAccessLog = typeof accessLogs.$inferInsert;
 
 export type DocumentProcessingLog = typeof documentProcessingLogs.$inferSelect;
 export type NewDocumentProcessingLog = typeof documentProcessingLogs.$inferInsert;
+
+export type FAQDraft = typeof faqDrafts.$inferSelect;
+export type NewFAQDraft = typeof faqDrafts.$inferInsert;
+
+export type Dataset = typeof datasets.$inferSelect;
+export type NewDataset = typeof datasets.$inferInsert;
+
+export type Chatbot = typeof chatbots.$inferSelect;
+export type NewChatbot = typeof chatbots.$inferInsert;
+
+export type ChatbotDataset = typeof chatbotDatasets.$inferSelect;
+export type NewChatbotDataset = typeof chatbotDatasets.$inferInsert;

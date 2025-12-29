@@ -15,6 +15,20 @@
       "when": 1766662970405,
       "tag": "0001_amazing_jocasta",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1766994209800,
+      "tag": "0002_first_bloodstrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1735466400000,
+      "tag": "0003_multi_chatbot_dataset",
+      "breakpoints": true
     }
   ]
 }
