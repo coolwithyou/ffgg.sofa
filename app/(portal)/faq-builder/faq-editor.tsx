@@ -1,0 +1,393 @@
+'use client';
+
+/**
+ * FAQ 에디터 메인 컴포넌트
+ * 카테고리, Q&A 편집 및 실시간 미리보기
+ */
+
+import { useState, useCallback, useEffect, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { saveFAQDraft, deleteFAQDraft, type FAQDraft } from './actions';
+import { type Category, type QAPair } from './utils';
+import { CategoryList } from './category-list';
+import { QAList } from './qa-list';
+import { FAQPreview } from './faq-preview';
+import { ExportModal } from './export-modal';
+
+interface FAQEditorProps {
+  initialDrafts: FAQDraft[];
+}
+
+export function FAQEditor({ initialDrafts }: FAQEditorProps) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  // 현재 편집 중인 초안
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(
+    initialDrafts[0]?.id || null
+  );
+  const [draftName, setDraftName] = useState(initialDrafts[0]?.name || '새 FAQ');
+  const [categories, setCategories] = useState<Category[]>(
+    initialDrafts[0]?.categories || []
+  );
+  const [qaPairs, setQAPairs] = useState<QAPair[]>(
+    initialDrafts[0]?.qaPairs || []
+  );
+
+  // 선택된 카테고리
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
+    categories[0]?.id || null
+  );
+
+  // UI 상태
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showDraftList, setShowDraftList] = useState(false);
+
+  // 자동 저장 (2초 디바운스)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (draftName && (categories.length > 0 || qaPairs.length > 0)) {
+        handleSave();
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [draftName, categories, qaPairs]);
+
+  // 저장
+  const handleSave = useCallback(async () => {
+    setIsSaving(true);
+    try {
+      const result = await saveFAQDraft({
+        id: currentDraftId || undefined,
+        name: draftName,
+        categories,
+        qaPairs,
+      });
+      if (!currentDraftId) {
+        setCurrentDraftId(result.id);
+      }
+      setLastSaved(new Date());
+    } catch (error) {
+      console.error('저장 실패:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [currentDraftId, draftName, categories, qaPairs]);
+
+  // 새 초안 생성
+  const handleNewDraft = useCallback(() => {
+    setCurrentDraftId(null);
+    setDraftName('새 FAQ');
+    setCategories([]);
+    setQAPairs([]);
+    setSelectedCategoryId(null);
+    setLastSaved(null);
+    setShowDraftList(false);
+  }, []);
+
+  // 초안 불러오기
+  const handleLoadDraft = useCallback((draft: FAQDraft) => {
+    setCurrentDraftId(draft.id);
+    setDraftName(draft.name);
+    setCategories(draft.categories);
+    setQAPairs(draft.qaPairs);
+    setSelectedCategoryId(draft.categories[0]?.id || null);
+    setLastSaved(draft.updatedAt);
+    setShowDraftList(false);
+  }, []);
+
+  // 초안 삭제
+  const handleDeleteDraft = useCallback(
+    async (id: string) => {
+      if (!confirm('이 FAQ 초안을 삭제하시겠습니까?')) return;
+
+      startTransition(async () => {
+        await deleteFAQDraft(id);
+        if (currentDraftId === id) {
+          handleNewDraft();
+        }
+        router.refresh();
+      });
+    },
+    [currentDraftId, handleNewDraft, router]
+  );
+
+  // 카테고리 추가
+  const handleAddCategory = useCallback(() => {
+    const newCategory: Category = {
+      id: crypto.randomUUID(),
+      name: '새 카테고리',
+      order: categories.length,
+    };
+    setCategories([...categories, newCategory]);
+    setSelectedCategoryId(newCategory.id);
+  }, [categories]);
+
+  // 카테고리 수정
+  const handleUpdateCategory = useCallback(
+    (id: string, name: string) => {
+      setCategories(
+        categories.map((cat) => (cat.id === id ? { ...cat, name } : cat))
+      );
+    },
+    [categories]
+  );
+
+  // 카테고리 삭제
+  const handleDeleteCategory = useCallback(
+    (id: string) => {
+      setCategories(categories.filter((cat) => cat.id !== id));
+      setQAPairs(qaPairs.filter((qa) => qa.categoryId !== id));
+      if (selectedCategoryId === id) {
+        setSelectedCategoryId(categories.find((c) => c.id !== id)?.id || null);
+      }
+    },
+    [categories, qaPairs, selectedCategoryId]
+  );
+
+  // Q&A 추가
+  const handleAddQA = useCallback(() => {
+    if (!selectedCategoryId) {
+      // 카테고리가 없으면 먼저 생성
+      const newCategory: Category = {
+        id: crypto.randomUUID(),
+        name: '일반',
+        order: 0,
+      };
+      setCategories([newCategory]);
+      setSelectedCategoryId(newCategory.id);
+
+      const newQA: QAPair = {
+        id: crypto.randomUUID(),
+        categoryId: newCategory.id,
+        question: '',
+        answer: '',
+        order: 0,
+      };
+      setQAPairs([newQA]);
+      return;
+    }
+
+    const categoryQAs = qaPairs.filter(
+      (qa) => qa.categoryId === selectedCategoryId
+    );
+    const newQA: QAPair = {
+      id: crypto.randomUUID(),
+      categoryId: selectedCategoryId,
+      question: '',
+      answer: '',
+      order: categoryQAs.length,
+    };
+    setQAPairs([...qaPairs, newQA]);
+  }, [selectedCategoryId, qaPairs]);
+
+  // Q&A 수정
+  const handleUpdateQA = useCallback(
+    (id: string, field: 'question' | 'answer', value: string) => {
+      setQAPairs(
+        qaPairs.map((qa) => (qa.id === id ? { ...qa, [field]: value } : qa))
+      );
+    },
+    [qaPairs]
+  );
+
+  // Q&A 삭제
+  const handleDeleteQA = useCallback(
+    (id: string) => {
+      setQAPairs(qaPairs.filter((qa) => qa.id !== id));
+    },
+    [qaPairs]
+  );
+
+  // 선택된 카테고리의 Q&A 필터링
+  const filteredQAPairs = selectedCategoryId
+    ? qaPairs.filter((qa) => qa.categoryId === selectedCategoryId)
+    : qaPairs;
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between border-b border-border bg-background px-6 py-4">
+        <div className="flex items-center gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                className="border-none bg-transparent text-xl font-bold text-foreground outline-none focus:ring-0"
+                placeholder="FAQ 이름"
+              />
+              <button
+                onClick={() => setShowDraftList(!showDraftList)}
+                className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <ChevronDownIcon />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {isSaving
+                ? '저장 중...'
+                : lastSaved
+                  ? `마지막 저장: ${lastSaved.toLocaleTimeString()}`
+                  : '자동 저장됨'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleNewDraft}
+            className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
+          >
+            새 FAQ
+          </button>
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <ExportIcon />
+            내보내기
+          </button>
+        </div>
+      </div>
+
+      {/* 초안 목록 드롭다운 */}
+      {showDraftList && (
+        <div className="absolute left-6 top-20 z-20 w-72 rounded-lg border border-border bg-card shadow-lg">
+          <div className="border-b border-border px-4 py-2">
+            <p className="text-sm font-medium text-foreground">저장된 FAQ</p>
+          </div>
+          <div className="max-h-60 overflow-y-auto p-2">
+            {initialDrafts.length === 0 ? (
+              <p className="px-2 py-4 text-center text-sm text-muted-foreground">
+                저장된 FAQ가 없습니다
+              </p>
+            ) : (
+              initialDrafts.map((draft) => (
+                <div
+                  key={draft.id}
+                  className={`flex items-center justify-between rounded-md px-3 py-2 ${
+                    currentDraftId === draft.id
+                      ? 'bg-primary/10'
+                      : 'hover:bg-muted'
+                  }`}
+                >
+                  <button
+                    onClick={() => handleLoadDraft(draft)}
+                    className="flex-1 text-left"
+                  >
+                    <p className="text-sm font-medium text-foreground">
+                      {draft.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {draft.qaPairs.length}개 Q&A · 수정:{' '}
+                      {new Date(draft.updatedAt).toLocaleDateString()}
+                    </p>
+                  </button>
+                  <button
+                    onClick={() => handleDeleteDraft(draft.id)}
+                    className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 클릭 아웃사이드 오버레이 */}
+      {showDraftList && (
+        <div
+          className="fixed inset-0 z-10"
+          onClick={() => setShowDraftList(false)}
+        />
+      )}
+
+      {/* 메인 컨텐츠 */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* 좌측: 에디터 */}
+        <div className="flex w-1/2 flex-col border-r border-border">
+          {/* 카테고리 목록 */}
+          <CategoryList
+            categories={categories}
+            selectedCategoryId={selectedCategoryId}
+            onSelect={setSelectedCategoryId}
+            onAdd={handleAddCategory}
+            onUpdate={handleUpdateCategory}
+            onDelete={handleDeleteCategory}
+          />
+
+          {/* Q&A 목록 */}
+          <QAList
+            qaPairs={filteredQAPairs}
+            onAdd={handleAddQA}
+            onUpdate={handleUpdateQA}
+            onDelete={handleDeleteQA}
+          />
+        </div>
+
+        {/* 우측: 미리보기 */}
+        <div className="w-1/2 overflow-y-auto bg-muted/30">
+          <FAQPreview categories={categories} qaPairs={qaPairs} />
+        </div>
+      </div>
+
+      {/* 내보내기 모달 */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        draftId={currentDraftId}
+        draftName={draftName}
+        categories={categories}
+        qaPairs={qaPairs}
+        onSave={handleSave}
+      />
+    </div>
+  );
+}
+
+// 아이콘 컴포넌트들
+function ChevronDownIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M19 9l-7 7-7-7"
+      />
+    </svg>
+  );
+}
+
+function ExportIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+      />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+      />
+    </svg>
+  );
+}
