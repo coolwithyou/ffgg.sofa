@@ -30,11 +30,11 @@ interface LoadingOverlayProps {
 
 export function LoadingOverlay({ message = '로딩 중...' }: LoadingOverlayProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
-      <div className="rounded-lg bg-white p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/50">
+      <div className="rounded-lg border border-border bg-card p-6 shadow-xl">
         <div className="flex items-center gap-3">
-          <Spinner size="lg" className="text-orange-500" />
-          <span className="text-gray-700">{message}</span>
+          <Spinner size="lg" className="text-primary" />
+          <span className="text-foreground">{message}</span>
         </div>
       </div>
     </div>
@@ -49,8 +49,8 @@ export function PageLoading({ message = '페이지를 불러오는 중...' }: Pa
   return (
     <div className="flex min-h-[400px] items-center justify-center">
       <div className="text-center">
-        <Spinner size="lg" className="mx-auto text-orange-500" />
-        <p className="mt-4 text-gray-600">{message}</p>
+        <Spinner size="lg" className="mx-auto text-primary" />
+        <p className="mt-4 text-muted-foreground">{message}</p>
       </div>
     </div>
   );

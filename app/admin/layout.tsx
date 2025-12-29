@@ -26,7 +26,7 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
   }
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-background">
       {/* 사이드바 */}
       <AdminSidebar operatorEmail={session.email} />
 

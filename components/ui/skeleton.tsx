@@ -10,7 +10,7 @@ interface SkeletonProps {
 export function Skeleton({ className = '' }: SkeletonProps) {
   return (
     <div
-      className={`animate-pulse rounded bg-gray-200 ${className}`}
+      className={`animate-pulse rounded bg-muted ${className}`}
       aria-hidden="true"
     />
   );
@@ -22,7 +22,7 @@ export function SkeletonText({ className = '' }: SkeletonProps) {
 
 export function SkeletonCard() {
   return (
-    <div className="rounded-lg border bg-white p-6">
+    <div className="rounded-lg border border-border bg-card p-6">
       <Skeleton className="mb-4 h-5 w-1/3" />
       <Skeleton className="mb-2 h-4 w-full" />
       <Skeleton className="mb-2 h-4 w-4/5" />
@@ -33,9 +33,9 @@ export function SkeletonCard() {
 
 export function SkeletonTable({ rows = 5 }: { rows?: number }) {
   return (
-    <div className="rounded-lg border bg-white">
+    <div className="rounded-lg border border-border bg-card">
       {/* 헤더 */}
-      <div className="border-b bg-gray-50 p-4">
+      <div className="border-b border-border bg-muted/50 p-4">
         <div className="flex gap-4">
           {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-4 flex-1" />
@@ -44,7 +44,7 @@ export function SkeletonTable({ rows = 5 }: { rows?: number }) {
       </div>
       {/* 행 */}
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="border-b p-4 last:border-b-0">
+        <div key={i} className="border-b border-border p-4 last:border-b-0">
           <div className="flex gap-4">
             {[1, 2, 3, 4].map((j) => (
               <Skeleton key={j} className="h-4 flex-1" />
@@ -62,7 +62,7 @@ export function SkeletonDashboard() {
       {/* 통계 카드 */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="rounded-lg border bg-white p-6">
+          <div key={i} className="rounded-lg border border-border bg-card p-6">
             <Skeleton className="mb-2 h-4 w-24" />
             <Skeleton className="h-8 w-16" />
           </div>
@@ -81,7 +81,7 @@ export function SkeletonDocumentList() {
   return (
     <div className="space-y-4">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="flex items-center gap-4 rounded-lg border bg-white p-4">
+        <div key={i} className="flex items-center gap-4 rounded-lg border border-border bg-card p-4">
           <Skeleton className="h-10 w-10 rounded" />
           <div className="flex-1">
             <Skeleton className="mb-2 h-4 w-1/3" />

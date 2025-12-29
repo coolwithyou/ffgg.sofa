@@ -12,7 +12,7 @@ export default async function AdminDashboardPage() {
   if (!data) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-gray-500">데이터를 불러올 수 없습니다.</p>
+        <p className="text-muted-foreground">데이터를 불러올 수 없습니다.</p>
       </div>
     );
   }
@@ -21,8 +21,8 @@ export default async function AdminDashboardPage() {
     <div className="space-y-6">
       {/* 페이지 타이틀 */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">운영 대시보드</h1>
-        <p className="text-gray-600">전체 시스템 현황을 확인하세요.</p>
+        <h1 className="text-2xl font-semibold text-foreground">운영 대시보드</h1>
+        <p className="text-muted-foreground">전체 시스템 현황을 확인하세요.</p>
       </div>
 
       {/* 주요 통계 */}
@@ -31,47 +31,43 @@ export default async function AdminDashboardPage() {
           title="전체 테넌트"
           value={data.stats.totalTenants}
           subValue={`활성 ${data.stats.activeTenants}`}
-          color="blue"
         />
         <StatCard
           title="전체 문서"
           value={data.stats.totalDocuments}
-          color="purple"
         />
         <StatCard
           title="승인된 청크"
           value={data.stats.approvedChunks}
           subValue={`전체 ${data.stats.totalChunks}`}
-          color="green"
         />
         <StatCard
           title="오늘 상담"
           value={data.stats.todayConversations}
           subValue={`주간 ${data.stats.weeklyConversations}`}
-          color="orange"
         />
       </div>
 
       {/* 상세 통계 */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* 상위 테넌트 */}
-        <div className="rounded-lg border bg-white p-6">
+        <div className="rounded-lg border border-border bg-card p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">상위 테넌트 (사용량 기준)</h2>
+            <h2 className="text-lg font-semibold text-foreground">상위 테넌트 (사용량 기준)</h2>
             <Link
               href="/admin/tenants"
-              className="text-sm text-orange-600 hover:text-orange-700"
+              className="text-sm text-primary hover:text-primary/80"
             >
               전체 보기
             </Link>
           </div>
           {data.topTenants.length === 0 ? (
-            <p className="text-sm text-gray-500">등록된 테넌트가 없습니다.</p>
+            <p className="text-sm text-muted-foreground">등록된 테넌트가 없습니다.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-gray-500">
+                  <tr className="border-b border-border text-left text-muted-foreground">
                     <th className="pb-2 font-medium">테넌트</th>
                     <th className="pb-2 text-right font-medium">문서</th>
                     <th className="pb-2 text-right font-medium">청크</th>
@@ -79,22 +75,22 @@ export default async function AdminDashboardPage() {
                     <th className="pb-2 text-right font-medium">상태</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
+                <tbody className="divide-y divide-border">
                   {data.topTenants.map((tenant) => (
-                    <tr key={tenant.id} className="hover:bg-gray-50">
+                    <tr key={tenant.id} className="hover:bg-muted/50">
                       <td className="py-3">
                         <div>
-                          <p className="font-medium text-gray-900">{tenant.name}</p>
-                          <p className="text-xs text-gray-500">{tenant.email}</p>
+                          <p className="font-medium text-foreground">{tenant.name}</p>
+                          <p className="text-xs text-muted-foreground">{tenant.email}</p>
                         </div>
                       </td>
-                      <td className="py-3 text-right text-gray-600">
+                      <td className="py-3 text-right text-muted-foreground">
                         {tenant.documentCount.toLocaleString()}
                       </td>
-                      <td className="py-3 text-right text-gray-600">
+                      <td className="py-3 text-right text-muted-foreground">
                         {tenant.chunkCount.toLocaleString()}
                       </td>
-                      <td className="py-3 text-right text-gray-600">
+                      <td className="py-3 text-right text-muted-foreground">
                         {tenant.conversationCount.toLocaleString()}
                       </td>
                       <td className="py-3 text-right">
@@ -109,8 +105,8 @@ export default async function AdminDashboardPage() {
         </div>
 
         {/* 시스템 상태 */}
-        <div className="rounded-lg border bg-white p-6">
-          <h2 className="mb-4 text-lg font-semibold text-gray-900">시스템 상태</h2>
+        <div className="rounded-lg border border-border bg-card p-6">
+          <h2 className="mb-4 text-lg font-semibold text-foreground">시스템 상태</h2>
           <div className="space-y-4">
             <SystemStatusItem
               name="데이터베이스"
@@ -135,7 +131,7 @@ export default async function AdminDashboardPage() {
           </div>
           <Link
             href="/admin/monitoring"
-            className="mt-4 block text-center text-sm text-orange-600 hover:text-orange-700"
+            className="mt-4 block text-center text-sm text-primary hover:text-primary/80"
           >
             상세 모니터링 보기
           </Link>
@@ -143,8 +139,8 @@ export default async function AdminDashboardPage() {
       </div>
 
       {/* 빠른 작업 */}
-      <div className="rounded-lg border bg-white p-6">
-        <h2 className="mb-4 text-lg font-semibold text-gray-900">빠른 작업</h2>
+      <div className="rounded-lg border border-border bg-card p-6">
+        <h2 className="mb-4 text-lg font-semibold text-foreground">빠른 작업</h2>
         <div className="grid gap-4 sm:grid-cols-3">
           <QuickAction
             href="/admin/tenants"
@@ -175,29 +171,14 @@ interface StatCardProps {
   title: string;
   value: number;
   subValue?: string;
-  color: 'blue' | 'purple' | 'green' | 'orange';
 }
 
-function StatCard({ title, value, subValue, color }: StatCardProps) {
-  const colorClasses = {
-    blue: 'bg-blue-50 text-blue-600',
-    purple: 'bg-purple-50 text-purple-600',
-    green: 'bg-green-50 text-green-600',
-    orange: 'bg-orange-50 text-orange-600',
-  };
-
+function StatCard({ title, value, subValue }: StatCardProps) {
   return (
-    <div className="rounded-lg border bg-white p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="mt-1 text-3xl font-bold text-gray-900">{value.toLocaleString()}</p>
-          {subValue && <p className="mt-1 text-sm text-gray-500">{subValue}</p>}
-        </div>
-        <div className={`rounded-full p-3 ${colorClasses[color]}`}>
-          <div className="h-6 w-6" />
-        </div>
-      </div>
+    <div className="rounded-lg border border-border bg-card p-6">
+      <p className="text-sm font-medium text-muted-foreground">{title}</p>
+      <p className="mt-2 text-3xl font-bold text-foreground">{value.toLocaleString()}</p>
+      {subValue && <p className="mt-1 text-sm text-muted-foreground">{subValue}</p>}
     </div>
   );
 }
@@ -205,15 +186,15 @@ function StatCard({ title, value, subValue, color }: StatCardProps) {
 // 상태 배지
 function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { label: string; className: string }> = {
-    active: { label: '활성', className: 'bg-green-100 text-green-700' },
-    inactive: { label: '비활성', className: 'bg-gray-100 text-gray-700' },
-    suspended: { label: '정지', className: 'bg-red-100 text-red-700' },
+    active: { label: '활성', className: 'text-green-500' },
+    inactive: { label: '비활성', className: 'text-muted-foreground' },
+    suspended: { label: '정지', className: 'text-red-500' },
   };
 
   const { label, className } = config[status] || config.active;
 
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>
+    <span className={`text-xs font-medium ${className}`}>
       {label}
     </span>
   );
@@ -228,23 +209,23 @@ interface SystemStatusItemProps {
 
 function SystemStatusItem({ name, status, description }: SystemStatusItemProps) {
   const statusConfig = {
-    healthy: { color: 'bg-green-500', label: '정상' },
-    degraded: { color: 'bg-yellow-500', label: '저하' },
-    down: { color: 'bg-red-500', label: '장애' },
+    healthy: { color: 'bg-green-500', label: '정상', textColor: 'text-green-500' },
+    degraded: { color: 'bg-yellow-500', label: '저하', textColor: 'text-yellow-500' },
+    down: { color: 'bg-red-500', label: '장애', textColor: 'text-red-500' },
   };
 
-  const { color, label } = statusConfig[status];
+  const { color, label, textColor } = statusConfig[status];
 
   return (
-    <div className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3">
+    <div className="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-3">
       <div className="flex items-center gap-3">
-        <div className={`h-3 w-3 rounded-full ${color}`} />
+        <div className={`h-2 w-2 rounded-full ${color}`} />
         <div>
-          <p className="font-medium text-gray-900">{name}</p>
-          <p className="text-xs text-gray-500">{description}</p>
+          <p className="font-medium text-foreground">{name}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
         </div>
       </div>
-      <span className="text-xs font-medium text-gray-600">{label}</span>
+      <span className={`text-xs font-medium ${textColor}`}>{label}</span>
     </div>
   );
 }
@@ -261,14 +242,14 @@ function QuickAction({ href, title, description, icon: Icon }: QuickActionProps)
   return (
     <Link
       href={href}
-      className="flex items-start gap-4 rounded-lg border p-4 transition-colors hover:bg-gray-50"
+      className="flex items-start gap-4 rounded-lg border border-border p-4 transition-colors hover:bg-muted"
     >
-      <div className="rounded-lg bg-orange-100 p-2">
-        <Icon className="h-5 w-5 text-orange-600" />
+      <div className="rounded-lg bg-muted p-2">
+        <Icon className="h-5 w-5 text-muted-foreground" />
       </div>
       <div>
-        <h3 className="font-medium text-gray-900">{title}</h3>
-        <p className="text-sm text-gray-500">{description}</p>
+        <h3 className="font-medium text-foreground">{title}</h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
       </div>
     </Link>
   );

@@ -7,6 +7,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 interface AdminHeaderProps {
   operatorName: string;
@@ -28,49 +29,45 @@ export function AdminHeader({ operatorName }: AdminHeaderProps) {
         router.refresh();
       } catch (error) {
         console.error('Logout failed:', error);
-        // 로그아웃 실패 시에도 클라이언트 측 상태는 초기화
         setIsMenuOpen(false);
-        // 사용자에게 에러 표시 (alert 대신 향후 토스트 컴포넌트로 교체 가능)
         alert('로그아웃 중 오류가 발생했습니다. 다시 시도해주세요.');
       }
     });
   };
 
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-white px-6">
+    <header className="flex h-14 items-center justify-between border-b border-border bg-background px-6">
       {/* 좌측: 페이지 타이틀 */}
       <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-500">운영 콘솔</span>
+        <span className="text-sm text-muted-foreground">Admin Console</span>
       </div>
 
-      {/* 우측: 시스템 상태 + 사용자 메뉴 */}
+      {/* 우측: 시스템 상태 + 테마 토글 + 사용자 메뉴 */}
       <div className="flex items-center gap-4">
         {/* 시스템 상태 표시 */}
-        <div className="flex items-center gap-2 rounded-full bg-green-100 px-3 py-1">
-          <div className="h-2 w-2 rounded-full bg-green-500" />
-          <span className="text-xs font-medium text-green-700">시스템 정상</span>
-        </div>
+        <span className="text-sm text-muted-foreground">All systems operational</span>
+
+        {/* 테마 토글 */}
+        <ThemeToggle />
 
         {/* 사용자 메뉴 */}
         <div className="relative">
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100"
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100">
-              <span className="text-sm font-medium text-orange-600">
-                {operatorName.charAt(0).toUpperCase()}
-              </span>
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+              {operatorName.charAt(0).toUpperCase()}
             </div>
-            <span className="text-sm font-medium text-gray-700">{operatorName}</span>
+            <span className="text-sm text-foreground">{operatorName}</span>
           </button>
 
           {isMenuOpen && (
-            <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border bg-white py-1 shadow-lg">
+            <div className="absolute right-0 top-full mt-1 w-48 rounded-md border border-border bg-card py-1">
               <button
                 onClick={handleLogout}
                 disabled={isLoggingOut}
-                className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-foreground hover:bg-muted disabled:opacity-50"
               >
                 <LogoutIcon className="h-4 w-4" />
                 {isLoggingOut ? '로그아웃 중...' : '로그아웃'}

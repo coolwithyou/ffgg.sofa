@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 interface PortalHeaderProps {
   userName: string;
@@ -28,22 +29,24 @@ export function PortalHeader({ userName }: PortalHeaderProps) {
   };
 
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-white px-6">
+    <header className="flex h-14 items-center justify-between border-b border-border bg-background px-6">
       {/* 좌측: 페이지 타이틀 영역 (필요시 확장) */}
       <div />
 
-      {/* 우측: 사용자 메뉴 */}
-      <div className="relative">
+      {/* 우측: 테마 토글 + 사용자 메뉴 */}
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
+        <div className="relative">
         <button
           onClick={() => setShowDropdown(!showDropdown)}
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
         >
           {/* 아바타 */}
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-medium text-white">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
             {userName.charAt(0).toUpperCase()}
           </div>
-          <span>{userName}</span>
-          <ChevronDownIcon className="h-4 w-4" />
+          <span className="text-sm text-foreground">{userName}</span>
+          <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
         </button>
 
         {/* 드롭다운 메뉴 */}
@@ -55,11 +58,11 @@ export function PortalHeader({ userName }: PortalHeaderProps) {
               onClick={() => setShowDropdown(false)}
             />
             {/* 메뉴 */}
-            <div className="absolute right-0 z-20 mt-2 w-48 rounded-lg border bg-white py-1 shadow-lg">
+            <div className="absolute right-0 z-20 mt-2 w-48 rounded-md border border-border bg-card py-1">
               <button
                 onClick={handleLogout}
                 disabled={isLoggingOut}
-                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted disabled:opacity-50"
               >
                 <LogoutIcon className="h-4 w-4" />
                 {isLoggingOut ? '로그아웃 중...' : '로그아웃'}
@@ -67,6 +70,7 @@ export function PortalHeader({ userName }: PortalHeaderProps) {
             </div>
           </>
         )}
+        </div>
       </div>
     </header>
   );

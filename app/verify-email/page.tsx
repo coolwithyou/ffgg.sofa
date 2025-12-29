@@ -49,43 +49,43 @@ function VerifyEmailContent() {
   }, [token]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md text-center">
         {/* 로고 */}
         <div className="mb-8">
           <Link href="/" className="inline-flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500">
-              <span className="text-xl font-bold text-white">S</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+              <span className="text-xl font-bold text-primary-foreground">S</span>
             </div>
-            <span className="text-2xl font-bold text-gray-900">SOFA</span>
+            <span className="text-2xl font-bold text-foreground">SOFA</span>
           </Link>
         </div>
 
-        <div className="rounded-xl bg-white p-8 shadow-sm">
+        <div className="rounded-xl border border-border bg-card p-8">
           {status === 'loading' && (
             <>
               <div className="mb-4 flex justify-center">
-                <div className="h-12 w-12 animate-spin rounded-full border-4 border-orange-500 border-t-transparent" />
+                <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
               </div>
-              <h1 className="text-xl font-bold text-gray-900">이메일 인증 중...</h1>
-              <p className="mt-2 text-gray-600">잠시만 기다려주세요.</p>
+              <h1 className="text-xl font-bold text-foreground">이메일 인증 중...</h1>
+              <p className="mt-2 text-muted-foreground">잠시만 기다려주세요.</p>
             </>
           )}
 
           {status === 'success' && (
             <>
               <div className="mb-4 flex justify-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-500/10">
                   <svg className="h-6 w-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
               </div>
-              <h1 className="text-xl font-bold text-gray-900">인증 완료</h1>
-              <p className="mt-2 text-gray-600">{message}</p>
+              <h1 className="text-xl font-bold text-foreground">인증 완료</h1>
+              <p className="mt-2 text-muted-foreground">{message}</p>
               <Link
                 href="/login"
-                className="mt-6 inline-block rounded-lg bg-orange-500 px-6 py-3 font-medium text-white hover:bg-orange-600"
+                className="mt-6 inline-block rounded-lg bg-primary px-6 py-3 font-medium text-primary-foreground hover:bg-primary/90"
               >
                 로그인하기
               </Link>
@@ -95,15 +95,15 @@ function VerifyEmailContent() {
           {status === 'error' && (
             <>
               <div className="mb-4 flex justify-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-                  <svg className="h-6 w-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+                  <svg className="h-6 w-6 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </div>
               </div>
-              <h1 className="text-xl font-bold text-gray-900">인증 실패</h1>
-              <p className="mt-2 text-gray-600">{message}</p>
-              <p className="mt-4 text-sm text-gray-500">
+              <h1 className="text-xl font-bold text-foreground">인증 실패</h1>
+              <p className="mt-2 text-muted-foreground">{message}</p>
+              <p className="mt-4 text-sm text-muted-foreground">
                 링크가 만료되었거나 이미 인증이 완료된 경우일 수 있습니다.
               </p>
             </>
@@ -112,7 +112,7 @@ function VerifyEmailContent() {
 
         {/* 홈으로 */}
         <div className="mt-8">
-          <Link href="/" className="text-sm text-gray-500 hover:text-gray-700">
+          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
             ← 홈으로 돌아가기
           </Link>
         </div>
@@ -124,8 +124,8 @@ function VerifyEmailContent() {
 export default function VerifyEmailPage() {
   return (
     <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-gray-500">로딩 중...</div>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-muted-foreground">로딩 중...</div>
       </div>
     }>
       <VerifyEmailContent />

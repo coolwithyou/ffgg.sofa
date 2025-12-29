@@ -122,7 +122,7 @@ export function DocumentUpload() {
       onDrop={handleDrop}
       className={`
         relative cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors
-        ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-white hover:border-gray-400'}
+        ${isDragging ? 'border-primary bg-primary/5' : 'border-border bg-card hover:border-muted-foreground'}
         ${uploadState.status === 'uploading' ? 'pointer-events-none' : ''}
       `}
     >
@@ -136,11 +136,11 @@ export function DocumentUpload() {
 
       {uploadState.status === 'idle' && (
         <>
-          <UploadIcon className="mx-auto h-12 w-12 text-gray-400" />
-          <p className="mt-4 text-lg font-medium text-gray-900">
+          <UploadIcon className="mx-auto h-12 w-12 text-muted-foreground" />
+          <p className="mt-4 text-lg font-medium text-foreground">
             파일을 드래그하거나 클릭하여 업로드
           </p>
-          <p className="mt-2 text-sm text-gray-500">
+          <p className="mt-2 text-sm text-muted-foreground">
             PDF, TXT 파일 (최대 10MB)
           </p>
         </>
@@ -148,11 +148,11 @@ export function DocumentUpload() {
 
       {uploadState.status === 'uploading' && (
         <>
-          <LoadingSpinner className="mx-auto h-12 w-12 text-blue-500" />
-          <p className="mt-4 text-lg font-medium text-gray-900">업로드 중...</p>
-          <div className="mx-auto mt-4 h-2 w-64 overflow-hidden rounded-full bg-gray-200">
+          <LoadingSpinner className="mx-auto h-12 w-12 text-primary" />
+          <p className="mt-4 text-lg font-medium text-foreground">업로드 중...</p>
+          <div className="mx-auto mt-4 h-2 w-64 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full bg-blue-500 transition-all duration-300"
+              className="h-full bg-primary transition-all duration-300"
               style={{ width: `${uploadState.progress}%` }}
             />
           </div>
@@ -162,7 +162,7 @@ export function DocumentUpload() {
       {uploadState.status === 'success' && (
         <>
           <CheckIcon className="mx-auto h-12 w-12 text-green-500" />
-          <p className="mt-4 text-lg font-medium text-green-700">
+          <p className="mt-4 text-lg font-medium text-green-500">
             {uploadState.message}
           </p>
         </>
@@ -170,8 +170,8 @@ export function DocumentUpload() {
 
       {uploadState.status === 'error' && (
         <>
-          <ErrorIcon className="mx-auto h-12 w-12 text-red-500" />
-          <p className="mt-4 text-lg font-medium text-red-700">
+          <ErrorIcon className="mx-auto h-12 w-12 text-destructive" />
+          <p className="mt-4 text-lg font-medium text-destructive">
             {uploadState.message}
           </p>
           <button
@@ -179,7 +179,7 @@ export function DocumentUpload() {
               e.stopPropagation();
               setUploadState({ status: 'idle', progress: 0 });
             }}
-            className="mt-4 text-sm text-blue-600 hover:text-blue-700"
+            className="mt-4 text-sm text-primary hover:text-primary/80"
           >
             다시 시도
           </button>

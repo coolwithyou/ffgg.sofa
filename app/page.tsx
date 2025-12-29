@@ -12,37 +12,37 @@ export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-background">
       {/* 네비게이션 */}
-      <nav className="fixed top-0 z-50 w-full border-b bg-white/80 backdrop-blur-sm">
+      <nav className="fixed top-0 z-50 w-full border-b border-border bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500">
-              <span className="text-lg font-bold text-white">S</span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+              <span className="text-lg font-bold text-primary-foreground">S</span>
             </div>
-            <span className="text-xl font-bold text-gray-900">SOFA</span>
+            <span className="text-xl font-bold text-foreground">SOFA</span>
           </div>
 
           {/* 데스크톱 메뉴 */}
           <div className="hidden items-center gap-6 md:flex">
-            <a href="#features" className="text-gray-600 hover:text-gray-900">
+            <a href="#features" className="text-muted-foreground hover:text-foreground">
               기능
             </a>
-            <a href="#pricing" className="text-gray-600 hover:text-gray-900">
+            <a href="#pricing" className="text-muted-foreground hover:text-foreground">
               요금
             </a>
-            <a href="#faq" className="text-gray-600 hover:text-gray-900">
+            <a href="#faq" className="text-muted-foreground hover:text-foreground">
               FAQ
             </a>
             <Link
               href="/login"
-              className="text-gray-600 hover:text-gray-900"
+              className="text-muted-foreground hover:text-foreground"
             >
               로그인
             </Link>
             <Link
               href="/signup"
-              className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
               무료로 시작하기
             </Link>
@@ -55,7 +55,7 @@ export default function LandingPage() {
             aria-label="메뉴 열기"
           >
             <svg
-              className="h-6 w-6 text-gray-600"
+              className="h-6 w-6 text-muted-foreground"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -81,38 +81,38 @@ export default function LandingPage() {
 
         {/* 모바일 메뉴 */}
         {mobileMenuOpen && (
-          <div className="border-t bg-white md:hidden">
+          <div className="border-t border-border bg-background md:hidden">
             <div className="space-y-1 px-4 py-3">
               <a
                 href="#features"
-                className="block py-2 text-gray-600 hover:text-gray-900"
+                className="block py-2 text-muted-foreground hover:text-foreground"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 기능
               </a>
               <a
                 href="#pricing"
-                className="block py-2 text-gray-600 hover:text-gray-900"
+                className="block py-2 text-muted-foreground hover:text-foreground"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 요금
               </a>
               <a
                 href="#faq"
-                className="block py-2 text-gray-600 hover:text-gray-900"
+                className="block py-2 text-muted-foreground hover:text-foreground"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 FAQ
               </a>
               <Link
                 href="/login"
-                className="block py-2 text-gray-600 hover:text-gray-900"
+                className="block py-2 text-muted-foreground hover:text-foreground"
               >
                 로그인
               </Link>
               <Link
                 href="/signup"
-                className="mt-2 block rounded-lg bg-orange-500 py-2 text-center text-sm font-medium text-white hover:bg-orange-600"
+                className="mt-2 block rounded-lg bg-primary py-2 text-center text-sm font-medium text-primary-foreground hover:bg-primary/90"
               >
                 무료로 시작하기
               </Link>
@@ -125,12 +125,12 @@ export default function LandingPage() {
       <section className="relative overflow-hidden pt-16">
         <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 sm:py-32 lg:px-8">
           <div className="text-center">
-            <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl lg:text-6xl">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
               기업 문서를 이해하는
               <br />
-              <span className="text-orange-500">AI 고객상담 챗봇</span>
+              <span className="text-primary">AI 고객상담 챗봇</span>
             </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600">
+            <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
               PDF, Word, Excel 문서를 업로드하면 AI가 자동으로 학습합니다.
               <br />
               카카오톡, 웹 위젯으로 24시간 고객 상담을 제공하세요.
@@ -138,18 +138,18 @@ export default function LandingPage() {
             <div className="mt-10 flex items-center justify-center gap-4">
               <Link
                 href="/signup"
-                className="rounded-lg bg-orange-500 px-6 py-3 text-lg font-semibold text-white shadow-lg hover:bg-orange-600"
+                className="rounded-lg bg-primary px-6 py-3 text-lg font-semibold text-primary-foreground shadow-lg hover:bg-primary/90"
               >
                 14일 무료 체험
               </Link>
               <a
                 href="#demo"
-                className="rounded-lg border border-gray-300 px-6 py-3 text-lg font-semibold text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-border px-6 py-3 text-lg font-semibold text-foreground hover:bg-muted"
               >
                 데모 보기
               </a>
             </div>
-            <p className="mt-4 text-sm text-gray-500">
+            <p className="mt-4 text-sm text-muted-foreground">
               신용카드 불필요 · 언제든 취소 가능
             </p>
           </div>
@@ -157,14 +157,14 @@ export default function LandingPage() {
 
         {/* 데모 이미지 영역 */}
         <div className="mx-auto max-w-5xl px-4 pb-24 sm:px-6 lg:px-8">
-          <div className="overflow-hidden rounded-2xl border bg-gray-100 shadow-2xl">
-            <div className="flex items-center gap-2 border-b bg-gray-200 px-4 py-3">
-              <div className="h-3 w-3 rounded-full bg-red-400"></div>
-              <div className="h-3 w-3 rounded-full bg-yellow-400"></div>
-              <div className="h-3 w-3 rounded-full bg-green-400"></div>
+          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+            <div className="flex items-center gap-2 border-b border-border bg-muted px-4 py-3">
+              <div className="h-3 w-3 rounded-full bg-muted-foreground/30"></div>
+              <div className="h-3 w-3 rounded-full bg-muted-foreground/30"></div>
+              <div className="h-3 w-3 rounded-full bg-muted-foreground/30"></div>
             </div>
-            <div className="aspect-video bg-gradient-to-br from-orange-50 to-orange-100 p-8">
-              <div className="flex h-full items-center justify-center text-gray-500">
+            <div className="aspect-video bg-muted/50 p-8">
+              <div className="flex h-full items-center justify-center text-muted-foreground">
                 <span className="text-lg">대시보드 스크린샷</span>
               </div>
             </div>
@@ -173,97 +173,97 @@ export default function LandingPage() {
       </section>
 
       {/* 기능 섹션 */}
-      <section id="features" className="bg-gray-50 py-24">
+      <section id="features" className="bg-muted/30 py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-900 sm:text-4xl">
+            <h2 className="text-3xl font-bold text-foreground sm:text-4xl">
               비즈니스에 최적화된 AI 챗봇
             </h2>
-            <p className="mt-4 text-lg text-gray-600">
+            <p className="mt-4 text-lg text-muted-foreground">
               복잡한 설정 없이 바로 시작하세요
             </p>
           </div>
 
           <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {/* 기능 1 */}
-            <div className="rounded-xl bg-white p-8 shadow-sm">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-orange-100">
-                <DocumentIcon className="h-6 w-6 text-orange-600" />
+            <div className="rounded-xl border border-border bg-card p-8">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                <DocumentIcon className="h-6 w-6 text-muted-foreground" />
               </div>
-              <h3 className="mt-6 text-xl font-semibold text-gray-900">
+              <h3 className="mt-6 text-xl font-semibold text-foreground">
                 문서 자동 학습
               </h3>
-              <p className="mt-2 text-gray-600">
+              <p className="mt-2 text-muted-foreground">
                 PDF, Word, Excel 파일을 업로드하면 AI가 자동으로 내용을 분석하고
                 학습합니다.
               </p>
             </div>
 
             {/* 기능 2 */}
-            <div className="rounded-xl bg-white p-8 shadow-sm">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100">
-                <ChatIcon className="h-6 w-6 text-blue-600" />
+            <div className="rounded-xl border border-border bg-card p-8">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                <ChatIcon className="h-6 w-6 text-muted-foreground" />
               </div>
-              <h3 className="mt-6 text-xl font-semibold text-gray-900">
+              <h3 className="mt-6 text-xl font-semibold text-foreground">
                 카카오톡 연동
               </h3>
-              <p className="mt-2 text-gray-600">
+              <p className="mt-2 text-muted-foreground">
                 카카오톡 채널과 연동하여 고객이 익숙한 플랫폼에서 상담을 받을 수
                 있습니다.
               </p>
             </div>
 
             {/* 기능 3 */}
-            <div className="rounded-xl bg-white p-8 shadow-sm">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-green-100">
-                <WidgetIcon className="h-6 w-6 text-green-600" />
+            <div className="rounded-xl border border-border bg-card p-8">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                <WidgetIcon className="h-6 w-6 text-muted-foreground" />
               </div>
-              <h3 className="mt-6 text-xl font-semibold text-gray-900">
+              <h3 className="mt-6 text-xl font-semibold text-foreground">
                 웹 위젯 임베드
               </h3>
-              <p className="mt-2 text-gray-600">
+              <p className="mt-2 text-muted-foreground">
                 간단한 코드 삽입으로 웹사이트에 챗봇을 추가하세요. 브랜드에 맞게
                 커스터마이징 가능합니다.
               </p>
             </div>
 
             {/* 기능 4 */}
-            <div className="rounded-xl bg-white p-8 shadow-sm">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-purple-100">
-                <ShieldIcon className="h-6 w-6 text-purple-600" />
+            <div className="rounded-xl border border-border bg-card p-8">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                <ShieldIcon className="h-6 w-6 text-muted-foreground" />
               </div>
-              <h3 className="mt-6 text-xl font-semibold text-gray-900">
+              <h3 className="mt-6 text-xl font-semibold text-foreground">
                 데이터 보안
               </h3>
-              <p className="mt-2 text-gray-600">
+              <p className="mt-2 text-muted-foreground">
                 기업별 데이터 격리, 암호화 저장으로 민감한 정보를 안전하게
                 보호합니다.
               </p>
             </div>
 
             {/* 기능 5 */}
-            <div className="rounded-xl bg-white p-8 shadow-sm">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-yellow-100">
-                <ChartIcon className="h-6 w-6 text-yellow-600" />
+            <div className="rounded-xl border border-border bg-card p-8">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                <ChartIcon className="h-6 w-6 text-muted-foreground" />
               </div>
-              <h3 className="mt-6 text-xl font-semibold text-gray-900">
+              <h3 className="mt-6 text-xl font-semibold text-foreground">
                 상담 분석
               </h3>
-              <p className="mt-2 text-gray-600">
+              <p className="mt-2 text-muted-foreground">
                 고객 질문 패턴, 응답 만족도를 분석하여 서비스 개선에
                 활용하세요.
               </p>
             </div>
 
             {/* 기능 6 */}
-            <div className="rounded-xl bg-white p-8 shadow-sm">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-red-100">
-                <SupportIcon className="h-6 w-6 text-red-600" />
+            <div className="rounded-xl border border-border bg-card p-8">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                <SupportIcon className="h-6 w-6 text-muted-foreground" />
               </div>
-              <h3 className="mt-6 text-xl font-semibold text-gray-900">
+              <h3 className="mt-6 text-xl font-semibold text-foreground">
                 전담 지원
               </h3>
-              <p className="mt-2 text-gray-600">
+              <p className="mt-2 text-muted-foreground">
                 문서 검토, 챗봇 최적화까지 전담 매니저가 함께합니다. 기술 지원도
                 물론 포함.
               </p>
@@ -276,22 +276,22 @@ export default function LandingPage() {
       <section id="pricing" className="py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-900 sm:text-4xl">
+            <h2 className="text-3xl font-bold text-foreground sm:text-4xl">
               합리적인 요금제
             </h2>
-            <p className="mt-4 text-lg text-gray-600">
+            <p className="mt-4 text-lg text-muted-foreground">
               사용량에 맞게 선택하세요
             </p>
           </div>
 
           <div className="mt-16 grid gap-8 lg:grid-cols-3">
             {/* 스타터 플랜 */}
-            <div className="rounded-2xl border bg-white p-8">
-              <h3 className="text-lg font-semibold text-gray-900">스타터</h3>
-              <p className="mt-2 text-sm text-gray-600">소규모 비즈니스</p>
+            <div className="rounded-2xl border border-border bg-card p-8">
+              <h3 className="text-lg font-semibold text-foreground">스타터</h3>
+              <p className="mt-2 text-sm text-muted-foreground">소규모 비즈니스</p>
               <p className="mt-6">
-                <span className="text-4xl font-bold text-gray-900">₩49,000</span>
-                <span className="text-gray-600">/월</span>
+                <span className="text-4xl font-bold text-foreground">₩49,000</span>
+                <span className="text-muted-foreground">/월</span>
               </p>
               <ul className="mt-8 space-y-4">
                 <PricingFeature>월 1,000건 대화</PricingFeature>
@@ -301,22 +301,22 @@ export default function LandingPage() {
               </ul>
               <Link
                 href="/signup?plan=starter"
-                className="mt-8 block w-full rounded-lg border border-orange-500 py-3 text-center font-medium text-orange-500 hover:bg-orange-50"
+                className="mt-8 block w-full rounded-lg border border-primary py-3 text-center font-medium text-primary hover:bg-primary/10"
               >
                 시작하기
               </Link>
             </div>
 
             {/* 프로 플랜 */}
-            <div className="relative rounded-2xl border-2 border-orange-500 bg-white p-8">
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-orange-500 px-4 py-1 text-sm font-medium text-white">
+            <div className="relative rounded-2xl border-2 border-primary bg-card p-8">
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-primary px-4 py-1 text-sm font-medium text-primary-foreground">
                 인기
               </div>
-              <h3 className="text-lg font-semibold text-gray-900">프로</h3>
-              <p className="mt-2 text-sm text-gray-600">성장하는 기업</p>
+              <h3 className="text-lg font-semibold text-foreground">프로</h3>
+              <p className="mt-2 text-sm text-muted-foreground">성장하는 기업</p>
               <p className="mt-6">
-                <span className="text-4xl font-bold text-gray-900">₩149,000</span>
-                <span className="text-gray-600">/월</span>
+                <span className="text-4xl font-bold text-foreground">₩149,000</span>
+                <span className="text-muted-foreground">/월</span>
               </p>
               <ul className="mt-8 space-y-4">
                 <PricingFeature>월 5,000건 대화</PricingFeature>
@@ -327,18 +327,18 @@ export default function LandingPage() {
               </ul>
               <Link
                 href="/signup?plan=pro"
-                className="mt-8 block w-full rounded-lg bg-orange-500 py-3 text-center font-medium text-white hover:bg-orange-600"
+                className="mt-8 block w-full rounded-lg bg-primary py-3 text-center font-medium text-primary-foreground hover:bg-primary/90"
               >
                 시작하기
               </Link>
             </div>
 
             {/* 엔터프라이즈 플랜 */}
-            <div className="rounded-2xl border bg-white p-8">
-              <h3 className="text-lg font-semibold text-gray-900">엔터프라이즈</h3>
-              <p className="mt-2 text-sm text-gray-600">대기업/맞춤 솔루션</p>
+            <div className="rounded-2xl border border-border bg-card p-8">
+              <h3 className="text-lg font-semibold text-foreground">엔터프라이즈</h3>
+              <p className="mt-2 text-sm text-muted-foreground">대기업/맞춤 솔루션</p>
               <p className="mt-6">
-                <span className="text-4xl font-bold text-gray-900">문의</span>
+                <span className="text-4xl font-bold text-foreground">문의</span>
               </p>
               <ul className="mt-8 space-y-4">
                 <PricingFeature>무제한 대화</PricingFeature>
@@ -350,7 +350,7 @@ export default function LandingPage() {
               </ul>
               <a
                 href="mailto:contact@sofa.ai"
-                className="mt-8 block w-full rounded-lg border border-gray-300 py-3 text-center font-medium text-gray-700 hover:bg-gray-50"
+                className="mt-8 block w-full rounded-lg border border-border py-3 text-center font-medium text-foreground hover:bg-muted"
               >
                 문의하기
               </a>
@@ -360,10 +360,10 @@ export default function LandingPage() {
       </section>
 
       {/* FAQ 섹션 */}
-      <section id="faq" className="bg-gray-50 py-24">
+      <section id="faq" className="bg-muted/30 py-24">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-900 sm:text-4xl">
+            <h2 className="text-3xl font-bold text-foreground sm:text-4xl">
               자주 묻는 질문
             </h2>
           </div>
@@ -396,17 +396,17 @@ export default function LandingPage() {
       </section>
 
       {/* CTA 섹션 */}
-      <section className="bg-orange-500 py-16">
+      <section className="bg-primary py-16">
         <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-white sm:text-4xl">
+          <h2 className="text-3xl font-bold text-primary-foreground sm:text-4xl">
             지금 바로 시작하세요
           </h2>
-          <p className="mt-4 text-lg text-orange-100">
+          <p className="mt-4 text-lg text-primary-foreground/80">
             14일 무료 체험으로 SOFA의 가치를 직접 확인하세요
           </p>
           <Link
             href="/signup"
-            className="mt-8 inline-block rounded-lg bg-white px-8 py-3 text-lg font-semibold text-orange-500 hover:bg-gray-100"
+            className="mt-8 inline-block rounded-lg bg-background px-8 py-3 text-lg font-semibold text-foreground hover:bg-muted"
           >
             무료로 시작하기
           </Link>
@@ -414,27 +414,27 @@ export default function LandingPage() {
       </section>
 
       {/* 푸터 */}
-      <footer className="border-t bg-white py-12">
+      <footer className="border-t border-border bg-background py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500">
-                <span className="text-lg font-bold text-white">S</span>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+                <span className="text-lg font-bold text-primary-foreground">S</span>
               </div>
-              <span className="text-xl font-bold text-gray-900">SOFA</span>
+              <span className="text-xl font-bold text-foreground">SOFA</span>
             </div>
-            <div className="flex gap-6 text-sm text-gray-600">
-              <a href="/privacy" className="hover:text-gray-900">
+            <div className="flex gap-6 text-sm text-muted-foreground">
+              <a href="/privacy" className="hover:text-foreground">
                 개인정보처리방침
               </a>
-              <a href="/terms" className="hover:text-gray-900">
+              <a href="/terms" className="hover:text-foreground">
                 이용약관
               </a>
-              <a href="mailto:contact@sofa.ai" className="hover:text-gray-900">
+              <a href="mailto:contact@sofa.ai" className="hover:text-foreground">
                 문의하기
               </a>
             </div>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-muted-foreground">
               © 2024 SOFA. All rights reserved.
             </p>
           </div>
@@ -449,7 +449,7 @@ function PricingFeature({ children }: { children: React.ReactNode }) {
   return (
     <li className="flex items-center gap-3">
       <svg
-        className="h-5 w-5 text-orange-500"
+        className="h-5 w-5 text-primary"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -461,7 +461,7 @@ function PricingFeature({ children }: { children: React.ReactNode }) {
           d="M5 13l4 4L19 7"
         />
       </svg>
-      <span className="text-gray-600">{children}</span>
+      <span className="text-muted-foreground">{children}</span>
     </li>
   );
 }
@@ -477,14 +477,14 @@ function FAQItem({
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="rounded-lg border bg-white">
+    <div className="rounded-lg border border-border bg-card">
       <button
         className="flex w-full items-center justify-between px-6 py-4 text-left"
         onClick={() => setIsOpen(!isOpen)}
       >
-        <span className="font-medium text-gray-900">{question}</span>
+        <span className="font-medium text-foreground">{question}</span>
         <svg
-          className={`h-5 w-5 text-gray-500 transition-transform ${
+          className={`h-5 w-5 text-muted-foreground transition-transform ${
             isOpen ? 'rotate-180' : ''
           }`}
           fill="none"
@@ -500,8 +500,8 @@ function FAQItem({
         </svg>
       </button>
       {isOpen && (
-        <div className="border-t px-6 py-4">
-          <p className="text-gray-600">{children}</p>
+        <div className="border-t border-border px-6 py-4">
+          <p className="text-muted-foreground">{children}</p>
         </div>
       )}
     </div>

@@ -51,31 +51,31 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
         {/* 로고 */}
         <div className="mb-8 text-center">
           <Link href="/" className="inline-flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500">
-              <span className="text-xl font-bold text-white">S</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+              <span className="text-xl font-bold text-primary-foreground">S</span>
             </div>
-            <span className="text-2xl font-bold text-gray-900">SOFA</span>
+            <span className="text-2xl font-bold text-foreground">SOFA</span>
           </Link>
-          <h1 className="mt-6 text-2xl font-bold text-gray-900">로그인</h1>
-          <p className="mt-2 text-gray-600">계정에 로그인하세요</p>
+          <h1 className="mt-6 text-2xl font-bold text-foreground">로그인</h1>
+          <p className="mt-2 text-muted-foreground">계정에 로그인하세요</p>
         </div>
 
         {/* 로그인 폼 */}
-        <form onSubmit={handleSubmit} className="rounded-xl bg-white p-8 shadow-sm">
+        <form onSubmit={handleSubmit} className="rounded-xl border border-border bg-card p-8">
           {error && (
-            <div role="alert" className="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-600">
+            <div role="alert" className="mb-4 rounded-lg bg-destructive/10 p-4 text-sm text-destructive">
               {error}
             </div>
           )}
 
           <div className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="email" className="block text-sm font-medium text-foreground">
                 이메일
               </label>
               <input
@@ -84,13 +84,13 @@ export default function LoginPage() {
                 type="email"
                 required
                 autoComplete="email"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                className="mt-1 block w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 placeholder="email@example.com"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="block text-sm font-medium text-foreground">
                 비밀번호
               </label>
               <input
@@ -99,7 +99,7 @@ export default function LoginPage() {
                 type="password"
                 required
                 autoComplete="current-password"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                className="mt-1 block w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 placeholder="••••••••"
               />
             </div>
@@ -109,13 +109,13 @@ export default function LoginPage() {
                 <input
                   type="checkbox"
                   name="remember"
-                  className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                 />
-                <span className="text-sm text-gray-600">로그인 유지</span>
+                <span className="text-sm text-muted-foreground">로그인 유지</span>
               </label>
               <Link
                 href="/forgot-password"
-                className="text-sm text-orange-500 hover:text-orange-600"
+                className="text-sm text-primary hover:text-primary/80"
               >
                 비밀번호 찾기
               </Link>
@@ -125,23 +125,23 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isPending}
-            className="mt-6 w-full rounded-lg bg-orange-500 py-3 font-medium text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-6 w-full rounded-lg bg-primary py-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPending ? '로그인 중...' : '로그인'}
           </button>
         </form>
 
         {/* 회원가입 링크 */}
-        <p className="mt-6 text-center text-gray-600">
+        <p className="mt-6 text-center text-muted-foreground">
           계정이 없으신가요?{' '}
-          <Link href="/signup" className="font-medium text-orange-500 hover:text-orange-600">
+          <Link href="/signup" className="font-medium text-primary hover:text-primary/80">
             회원가입
           </Link>
         </p>
 
         {/* 홈으로 */}
         <div className="mt-8 text-center">
-          <Link href="/" className="text-sm text-gray-500 hover:text-gray-700">
+          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
             ← 홈으로 돌아가기
           </Link>
         </div>

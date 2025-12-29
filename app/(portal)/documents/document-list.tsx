@@ -91,10 +91,10 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
 
   if (documents.length === 0) {
     return (
-      <div className="rounded-lg border bg-white p-12 text-center">
-        <DocumentIcon className="mx-auto h-12 w-12 text-gray-400" />
-        <h3 className="mt-4 text-lg font-medium text-gray-900">문서가 없습니다</h3>
-        <p className="mt-2 text-gray-500">
+      <div className="rounded-lg border border-border bg-card p-12 text-center">
+        <DocumentIcon className="mx-auto h-12 w-12 text-muted-foreground" />
+        <h3 className="mt-4 text-lg font-medium text-foreground">문서가 없습니다</h3>
+        <p className="mt-2 text-muted-foreground">
           위의 업로드 영역에 파일을 드래그하거나 클릭하여 문서를 추가하세요.
         </p>
       </div>
@@ -103,24 +103,24 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
 
   return (
     <>
-      <div className="rounded-lg border bg-white">
-        <div className="border-b px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">
+      <div className="rounded-lg border border-border bg-card">
+        <div className="border-b border-border px-6 py-4">
+          <h2 className="text-lg font-semibold text-foreground">
             업로드된 문서 ({documents.length})
           </h2>
         </div>
 
-        <div className="divide-y">
+        <div className="divide-y divide-border">
         {documents.map((doc) => (
           <div
             key={doc.id}
-            className="flex items-center justify-between px-6 py-4 hover:bg-gray-50"
+            className="flex items-center justify-between px-6 py-4 hover:bg-muted/50"
           >
             <div className="flex items-center gap-4">
               <FileTypeIcon fileType={doc.fileType} />
               <div>
-                <p className="font-medium text-gray-900">{doc.filename}</p>
-                <div className="mt-1 flex items-center gap-3 text-sm text-gray-500">
+                <p className="font-medium text-foreground">{doc.filename}</p>
+                <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
                   <span>{formatFileSize(doc.fileSize)}</span>
                   <span>•</span>
                   <span>{formatDate(doc.createdAt)}</span>
@@ -146,7 +146,7 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
                 <button
                   onClick={() => handleReprocess(doc.id)}
                   disabled={isPending || reprocessingId === doc.id}
-                  className="rounded p-2 text-gray-400 hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50"
+                  className="rounded p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50"
                   title="재처리"
                 >
                   {reprocessingId === doc.id ? (
@@ -160,7 +160,7 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
               <button
                 onClick={() => handleDelete(doc.id)}
                 disabled={isPending || deletingId === doc.id}
-                className="rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-red-600 disabled:opacity-50"
+                className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
                 title="삭제"
               >
                 {deletingId === doc.id ? (
@@ -202,17 +202,17 @@ function StatusBadge({
 }) {
   const isClickable = ['processing', 'uploaded', 'failed'].includes(status);
   const config: Record<string, { label: string; className: string }> = {
-    uploaded: { label: '업로드됨', className: 'bg-gray-100 text-gray-700' },
-    processing: { label: '처리중', className: 'bg-blue-100 text-blue-700' },
-    chunked: { label: '청킹완료', className: 'bg-purple-100 text-purple-700' },
-    reviewing: { label: '검토중', className: 'bg-yellow-100 text-yellow-700' },
-    approved: { label: '승인됨', className: 'bg-green-100 text-green-700' },
-    failed: { label: '실패', className: 'bg-red-100 text-red-700' },
+    uploaded: { label: '업로드됨', className: 'bg-muted text-muted-foreground' },
+    processing: { label: '처리중', className: 'bg-primary/10 text-primary' },
+    chunked: { label: '청킹완료', className: 'bg-purple-500/10 text-purple-500' },
+    reviewing: { label: '검토중', className: 'bg-yellow-500/10 text-yellow-500' },
+    approved: { label: '승인됨', className: 'bg-green-500/10 text-green-500' },
+    failed: { label: '실패', className: 'bg-destructive/10 text-destructive' },
   };
 
   const { label, className } = config[status] || {
     label: status,
-    className: 'bg-gray-100 text-gray-700',
+    className: 'bg-muted text-muted-foreground',
   };
 
   return (
@@ -221,7 +221,7 @@ function StatusBadge({
       onClick={isClickable ? onClick : undefined}
     >
       <span
-        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${className} ${isClickable ? 'hover:ring-2 hover:ring-offset-1 hover:ring-blue-300' : ''}`}
+        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${className} ${isClickable ? 'hover:ring-2 hover:ring-offset-1 hover:ring-primary/30' : ''}`}
         title={isClickable ? '클릭하여 처리 상태 보기' : (errorMessage || undefined)}
       >
         {label}
@@ -230,7 +230,7 @@ function StatusBadge({
         )}
       </span>
       {status === 'failed' && errorMessage && (
-        <span className="text-xs text-red-600" title={errorMessage}>
+        <span className="text-xs text-destructive" title={errorMessage}>
           ⚠️
         </span>
       )}
@@ -245,13 +245,13 @@ function FileTypeIcon({ fileType }: { fileType: string | null }) {
   return (
     <div
       className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-        isPdf ? 'bg-red-100' : 'bg-blue-100'
+        isPdf ? 'bg-red-500/10' : 'bg-primary/10'
       }`}
     >
       {isPdf ? (
-        <span className="text-xs font-bold text-red-600">PDF</span>
+        <span className="text-xs font-bold text-red-500">PDF</span>
       ) : (
-        <span className="text-xs font-bold text-blue-600">TXT</span>
+        <span className="text-xs font-bold text-primary">TXT</span>
       )}
     </div>
   );

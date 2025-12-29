@@ -78,23 +78,23 @@ function ResetPasswordForm() {
   // 토큰이 없는 경우
   if (!token) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="w-full max-w-md text-center">
-          <div className="rounded-xl bg-white p-8 shadow-sm">
+          <div className="rounded-xl border border-border bg-card p-8">
             <div className="mb-4 flex justify-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-                <svg className="h-6 w-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+                <svg className="h-6 w-6 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </div>
             </div>
-            <h1 className="text-xl font-bold text-gray-900">잘못된 접근</h1>
-            <p className="mt-2 text-gray-600">
+            <h1 className="text-xl font-bold text-foreground">잘못된 접근</h1>
+            <p className="mt-2 text-muted-foreground">
               유효하지 않은 비밀번호 재설정 링크입니다.
             </p>
           </div>
           <div className="mt-6">
-            <Link href="/forgot-password" className="text-sm text-orange-500 hover:text-orange-600">
+            <Link href="/forgot-password" className="text-sm text-primary hover:text-primary/80">
               비밀번호 찾기로 돌아가기
             </Link>
           </div>
@@ -106,25 +106,25 @@ function ResetPasswordForm() {
   // 성공 화면
   if (success) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="w-full max-w-md text-center">
-          <div className="rounded-xl bg-white p-8 shadow-sm">
+          <div className="rounded-xl border border-border bg-card p-8">
             <div className="mb-4 flex justify-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-500/10">
                 <svg className="h-6 w-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
             </div>
-            <h1 className="text-xl font-bold text-gray-900">비밀번호가 변경되었습니다</h1>
-            <p className="mt-2 text-gray-600">
+            <h1 className="text-xl font-bold text-foreground">비밀번호가 변경되었습니다</h1>
+            <p className="mt-2 text-muted-foreground">
               새 비밀번호로 로그인할 수 있습니다.
             </p>
           </div>
           <div className="mt-6">
             <Link
               href="/login"
-              className="inline-block rounded-lg bg-orange-500 px-6 py-3 font-medium text-white hover:bg-orange-600"
+              className="inline-block rounded-lg bg-primary px-6 py-3 font-medium text-primary-foreground hover:bg-primary/90"
             >
               로그인하기
             </Link>
@@ -135,33 +135,33 @@ function ResetPasswordForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
         {/* 로고 */}
         <div className="mb-8 text-center">
           <Link href="/" className="inline-flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500">
-              <span className="text-xl font-bold text-white">S</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+              <span className="text-xl font-bold text-primary-foreground">S</span>
             </div>
-            <span className="text-2xl font-bold text-gray-900">SOFA</span>
+            <span className="text-2xl font-bold text-foreground">SOFA</span>
           </Link>
-          <h1 className="mt-6 text-2xl font-bold text-gray-900">새 비밀번호 설정</h1>
-          <p className="mt-2 text-gray-600">
+          <h1 className="mt-6 text-2xl font-bold text-foreground">새 비밀번호 설정</h1>
+          <p className="mt-2 text-muted-foreground">
             새로운 비밀번호를 입력하세요
           </p>
         </div>
 
         {/* 폼 */}
-        <form onSubmit={handleSubmit} className="rounded-xl bg-white p-8 shadow-sm">
+        <form onSubmit={handleSubmit} className="rounded-xl border border-border bg-card p-8">
           {error && (
-            <div role="alert" className="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-600">
+            <div role="alert" className="mb-4 rounded-lg bg-destructive/10 p-4 text-sm text-destructive">
               {error}
             </div>
           )}
 
           <div className="space-y-4">
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="block text-sm font-medium text-foreground">
                 새 비밀번호
               </label>
               <input
@@ -170,16 +170,16 @@ function ResetPasswordForm() {
                 type="password"
                 required
                 autoComplete="new-password"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                className="mt-1 block w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 placeholder="8자 이상 입력"
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-muted-foreground">
                 영문, 숫자, 특수문자 조합 8자 이상
               </p>
             </div>
 
             <div>
-              <label htmlFor="passwordConfirm" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="passwordConfirm" className="block text-sm font-medium text-foreground">
                 비밀번호 확인
               </label>
               <input
@@ -188,7 +188,7 @@ function ResetPasswordForm() {
                 type="password"
                 required
                 autoComplete="new-password"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                className="mt-1 block w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 placeholder="비밀번호 재입력"
               />
             </div>
@@ -197,7 +197,7 @@ function ResetPasswordForm() {
           <button
             type="submit"
             disabled={isPending}
-            className="mt-6 w-full rounded-lg bg-orange-500 py-3 font-medium text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-6 w-full rounded-lg bg-primary py-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPending ? '변경 중...' : '비밀번호 변경'}
           </button>
@@ -205,7 +205,7 @@ function ResetPasswordForm() {
 
         {/* 홈으로 */}
         <div className="mt-8 text-center">
-          <Link href="/" className="text-sm text-gray-500 hover:text-gray-700">
+          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
             ← 홈으로 돌아가기
           </Link>
         </div>
@@ -217,8 +217,8 @@ function ResetPasswordForm() {
 export default function ResetPasswordPage() {
   return (
     <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-gray-500">로딩 중...</div>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-muted-foreground">로딩 중...</div>
       </div>
     }>
       <ResetPasswordForm />

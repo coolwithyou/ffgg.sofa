@@ -134,20 +134,20 @@ function SignupForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
       <div className="w-full max-w-md">
         {/* 로고 */}
         <div className="mb-8 text-center">
           <Link href="/" className="inline-flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500">
-              <span className="text-xl font-bold text-white">S</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+              <span className="text-xl font-bold text-primary-foreground">S</span>
             </div>
-            <span className="text-2xl font-bold text-gray-900">SOFA</span>
+            <span className="text-2xl font-bold text-foreground">SOFA</span>
           </Link>
-          <h1 className="mt-6 text-2xl font-bold text-gray-900">
+          <h1 className="mt-6 text-2xl font-bold text-foreground">
             14일 무료 체험 시작하기
           </h1>
-          <p className="mt-2 text-gray-600">
+          <p className="mt-2 text-muted-foreground">
             {plan === 'pro' ? '프로 플랜' : '스타터 플랜'}으로 시작합니다
           </p>
         </div>
@@ -158,37 +158,37 @@ function SignupForm() {
             <div
               className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
                 step >= 1
-                  ? 'bg-orange-500 text-white'
-                  : 'bg-gray-200 text-gray-600'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground'
               }`}
             >
               1
             </div>
             <div
               className={`h-1 w-12 rounded ${
-                step >= 2 ? 'bg-orange-500' : 'bg-gray-200'
+                step >= 2 ? 'bg-primary' : 'bg-muted'
               }`}
             />
             <div
               className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
                 step >= 2
-                  ? 'bg-orange-500 text-white'
-                  : 'bg-gray-200 text-gray-600'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground'
               }`}
             >
               2
             </div>
           </div>
-          <div className="mt-2 flex justify-center gap-16 text-sm text-gray-600">
+          <div className="mt-2 flex justify-center gap-16 text-sm text-muted-foreground">
             <span>계정 정보</span>
             <span>회사 정보</span>
           </div>
         </div>
 
         {/* 회원가입 폼 */}
-        <form onSubmit={handleSubmit} className="rounded-xl bg-white p-8 shadow-sm">
+        <form onSubmit={handleSubmit} className="rounded-xl border border-border bg-card p-8">
           {error && (
-            <div role="alert" className="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-600">
+            <div role="alert" className="mb-4 rounded-lg bg-destructive/10 p-4 text-sm text-destructive">
               {error}
             </div>
           )}
@@ -196,7 +196,7 @@ function SignupForm() {
           {step === 1 && (
             <div className="space-y-4">
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="email" className="block text-sm font-medium text-foreground">
                   이메일
                 </label>
                 <input
@@ -205,13 +205,13 @@ function SignupForm() {
                   type="email"
                   required
                   autoComplete="email"
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                  className="mt-1 block w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   placeholder="email@example.com"
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="password" className="block text-sm font-medium text-foreground">
                   비밀번호
                 </label>
                 <input
@@ -221,16 +221,16 @@ function SignupForm() {
                   required
                   autoComplete="new-password"
                   minLength={8}
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                  className="mt-1 block w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   placeholder="8자 이상 입력"
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-muted-foreground">
                   영문, 숫자, 특수문자 조합 8자 이상
                 </p>
               </div>
 
               <div>
-                <label htmlFor="passwordConfirm" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="passwordConfirm" className="block text-sm font-medium text-foreground">
                   비밀번호 확인
                 </label>
                 <input
@@ -239,7 +239,7 @@ function SignupForm() {
                   type="password"
                   required
                   autoComplete="new-password"
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                  className="mt-1 block w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   placeholder="비밀번호 재입력"
                 />
               </div>
@@ -247,7 +247,7 @@ function SignupForm() {
               <button
                 type="button"
                 onClick={handleNextStep}
-                className="mt-6 w-full rounded-lg bg-orange-500 py-3 font-medium text-white hover:bg-orange-600"
+                className="mt-6 w-full rounded-lg bg-primary py-3 font-medium text-primary-foreground hover:bg-primary/90"
               >
                 다음
               </button>
@@ -257,7 +257,7 @@ function SignupForm() {
           {step === 2 && (
             <div className="space-y-4">
               <div>
-                <label htmlFor="companyName" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="companyName" className="block text-sm font-medium text-foreground">
                   회사/서비스명
                 </label>
                 <input
@@ -265,13 +265,13 @@ function SignupForm() {
                   name="companyName"
                   type="text"
                   required
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                  className="mt-1 block w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   placeholder="SOFA 주식회사"
                 />
               </div>
 
               <div>
-                <label htmlFor="contactName" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="contactName" className="block text-sm font-medium text-foreground">
                   담당자 이름
                 </label>
                 <input
@@ -280,13 +280,13 @@ function SignupForm() {
                   type="text"
                   required
                   autoComplete="name"
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                  className="mt-1 block w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   placeholder="홍길동"
                 />
               </div>
 
               <div>
-                <label htmlFor="contactPhone" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="contactPhone" className="block text-sm font-medium text-foreground">
                   연락처
                 </label>
                 <input
@@ -294,22 +294,22 @@ function SignupForm() {
                   name="contactPhone"
                   type="tel"
                   autoComplete="tel"
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                  className="mt-1 block w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   placeholder="010-1234-5678 (선택)"
                 />
               </div>
 
-              <div className="space-y-3 rounded-lg bg-gray-50 p-4">
+              <div className="space-y-3 rounded-lg bg-muted p-4">
                 <div className="flex items-start gap-2">
                   <input
                     type="checkbox"
                     id="agreedToTerms"
                     name="agreedToTerms"
                     required
-                    className="mt-1 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                    className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
                   />
-                  <label htmlFor="agreedToTerms" className="text-sm text-gray-600">
-                    <Link href="/terms" target="_blank" className="text-orange-500 hover:underline">
+                  <label htmlFor="agreedToTerms" className="text-sm text-muted-foreground">
+                    <Link href="/terms" target="_blank" className="text-primary hover:underline">
                       이용약관
                     </Link>
                     에 동의합니다 (필수)
@@ -321,10 +321,10 @@ function SignupForm() {
                     id="agreedToPrivacy"
                     name="agreedToPrivacy"
                     required
-                    className="mt-1 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                    className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
                   />
-                  <label htmlFor="agreedToPrivacy" className="text-sm text-gray-600">
-                    <Link href="/privacy" target="_blank" className="text-orange-500 hover:underline">
+                  <label htmlFor="agreedToPrivacy" className="text-sm text-muted-foreground">
+                    <Link href="/privacy" target="_blank" className="text-primary hover:underline">
                       개인정보처리방침
                     </Link>
                     에 동의합니다 (필수)
@@ -336,14 +336,14 @@ function SignupForm() {
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="flex-1 rounded-lg border border-gray-300 py-3 font-medium text-gray-700 hover:bg-gray-50"
+                  className="flex-1 rounded-lg border border-border py-3 font-medium text-foreground hover:bg-muted"
                 >
                   이전
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="flex-1 rounded-lg bg-orange-500 py-3 font-medium text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-primary py-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isPending ? '가입 중...' : '가입하기'}
                 </button>
@@ -353,22 +353,22 @@ function SignupForm() {
         </form>
 
         {/* 로그인 링크 */}
-        <p className="mt-6 text-center text-gray-600">
+        <p className="mt-6 text-center text-muted-foreground">
           이미 계정이 있으신가요?{' '}
-          <Link href="/login" className="font-medium text-orange-500 hover:text-orange-600">
+          <Link href="/login" className="font-medium text-primary hover:text-primary/80">
             로그인
           </Link>
         </p>
 
         {/* 홈으로 */}
         <div className="mt-8 text-center">
-          <Link href="/" className="text-sm text-gray-500 hover:text-gray-700">
+          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
             ← 홈으로 돌아가기
           </Link>
         </div>
 
         {/* 신뢰 배지 */}
-        <div className="mt-8 text-center text-sm text-gray-500">
+        <div className="mt-8 text-center text-sm text-muted-foreground">
           <p>신용카드 불필요 · 14일 무료 체험 · 언제든 취소</p>
         </div>
       </div>
@@ -379,8 +379,8 @@ function SignupForm() {
 export default function SignupPage() {
   return (
     <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-gray-500">로딩 중...</div>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-muted-foreground">로딩 중...</div>
       </div>
     }>
       <SignupForm />

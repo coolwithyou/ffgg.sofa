@@ -16,8 +16,8 @@ export default async function DocumentsPage() {
       {/* 페이지 타이틀 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">문서 관리</h1>
-          <p className="text-gray-600">PDF, TXT 파일을 업로드하고 관리하세요.</p>
+          <h1 className="text-2xl font-bold text-foreground">문서 관리</h1>
+          <p className="text-muted-foreground">PDF, TXT 파일을 업로드하고 관리하세요.</p>
         </div>
       </div>
 
@@ -28,7 +28,7 @@ export default async function DocumentsPage() {
       <Suspense
         fallback={
           <div className="flex h-32 items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
           </div>
         }
       >

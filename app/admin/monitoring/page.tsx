@@ -18,8 +18,8 @@ export default async function MonitoringPage() {
       {/* 페이지 타이틀 + 새로고침 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">시스템 모니터링</h1>
-          <p className="text-gray-600">실시간 시스템 상태를 확인하세요.</p>
+          <h1 className="text-2xl font-semibold text-foreground">시스템 모니터링</h1>
+          <p className="text-muted-foreground">실시간 시스템 상태를 확인하세요.</p>
         </div>
         <MonitoringRefresh />
       </div>
@@ -61,17 +61,17 @@ export default async function MonitoringPage() {
       {/* 사용량 차트 */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* 일별 통계 */}
-        <div className="rounded-lg border bg-white p-6">
-          <h2 className="mb-4 text-lg font-semibold text-gray-900">일별 사용량 (최근 7일)</h2>
+        <div className="rounded-lg border border-border bg-card p-6">
+          <h2 className="mb-4 text-lg font-semibold text-foreground">일별 사용량 (최근 7일)</h2>
           {metrics?.daily && metrics.daily.length > 0 ? (
             <div className="space-y-3">
               {metrics.daily.slice().reverse().map((day) => (
                 <div key={day.date} className="flex items-center gap-4">
-                  <span className="w-24 text-sm text-gray-600">{formatDateShort(day.date)}</span>
+                  <span className="w-24 text-sm text-muted-foreground">{formatDateShort(day.date)}</span>
                   <div className="flex-1">
                     <div className="flex gap-1">
                       <div
-                        className="h-6 rounded bg-orange-500"
+                        className="h-6 rounded bg-primary"
                         style={{
                           width: `${Math.min((day.conversations / 100) * 100, 100)}%`,
                           minWidth: day.conversations > 0 ? '8px' : '0',
@@ -79,7 +79,7 @@ export default async function MonitoringPage() {
                         title={`상담 ${day.conversations}건`}
                       />
                       <div
-                        className="h-6 rounded bg-blue-500"
+                        className="h-6 rounded bg-primary/50"
                         style={{
                           width: `${Math.min((day.documents / 20) * 100, 100)}%`,
                           minWidth: day.documents > 0 ? '8px' : '0',
@@ -88,40 +88,40 @@ export default async function MonitoringPage() {
                       />
                     </div>
                   </div>
-                  <span className="w-20 text-right text-sm text-gray-600">
+                  <span className="w-20 text-right text-sm text-muted-foreground">
                     {day.conversations}건
                   </span>
                 </div>
               ))}
-              <div className="mt-4 flex gap-4 text-xs text-gray-500">
+              <div className="mt-4 flex gap-4 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
-                  <div className="h-3 w-3 rounded bg-orange-500" />
+                  <div className="h-3 w-3 rounded bg-primary" />
                   상담
                 </span>
                 <span className="flex items-center gap-1">
-                  <div className="h-3 w-3 rounded bg-blue-500" />
+                  <div className="h-3 w-3 rounded bg-primary/50" />
                   문서
                 </span>
               </div>
             </div>
           ) : (
-            <p className="text-sm text-gray-500">데이터가 없습니다.</p>
+            <p className="text-sm text-muted-foreground">데이터가 없습니다.</p>
           )}
         </div>
 
         {/* 최근 활동 */}
-        <div className="rounded-lg border bg-white p-6">
-          <h2 className="mb-4 text-lg font-semibold text-gray-900">최근 활동</h2>
+        <div className="rounded-lg border border-border bg-card p-6">
+          <h2 className="mb-4 text-lg font-semibold text-foreground">최근 활동</h2>
           {activities.length === 0 ? (
-            <p className="text-sm text-gray-500">최근 활동이 없습니다.</p>
+            <p className="text-sm text-muted-foreground">최근 활동이 없습니다.</p>
           ) : (
             <div className="space-y-3">
               {activities.slice(0, 10).map((activity, idx) => (
                 <div key={idx} className="flex items-start gap-3">
                   <ActivityIcon type={activity.type} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900 truncate">{activity.description}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-sm text-foreground truncate">{activity.description}</p>
+                    <p className="text-xs text-muted-foreground">
                       {activity.tenantName} • {formatTimeAgo(activity.createdAt)}
                     </p>
                   </div>
@@ -144,27 +144,27 @@ interface HealthCardProps {
 
 function HealthCard({ title, status, metrics }: HealthCardProps) {
   const statusConfig = {
-    healthy: { color: 'bg-green-500', label: '정상', bgColor: 'bg-green-50' },
-    degraded: { color: 'bg-yellow-500', label: '저하', bgColor: 'bg-yellow-50' },
-    down: { color: 'bg-red-500', label: '장애', bgColor: 'bg-red-50' },
+    healthy: { color: 'bg-green-500', label: '정상', textColor: 'text-green-500' },
+    degraded: { color: 'bg-yellow-500', label: '저하', textColor: 'text-yellow-500' },
+    down: { color: 'bg-red-500', label: '장애', textColor: 'text-red-500' },
   };
 
   const config = statusConfig[status];
 
   return (
-    <div className={`rounded-lg border p-6 ${config.bgColor}`}>
+    <div className="rounded-lg border border-border bg-card p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="font-semibold text-gray-900">{title}</h3>
+        <h3 className="font-semibold text-foreground">{title}</h3>
         <div className="flex items-center gap-2">
-          <div className={`h-3 w-3 rounded-full ${config.color}`} />
-          <span className="text-sm font-medium text-gray-700">{config.label}</span>
+          <div className={`h-2 w-2 rounded-full ${config.color}`} />
+          <span className={`text-sm font-medium ${config.textColor}`}>{config.label}</span>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         {metrics.map((metric) => (
           <div key={metric.label}>
-            <p className="text-xs text-gray-500">{metric.label}</p>
-            <p className="text-lg font-semibold text-gray-900">{metric.value}</p>
+            <p className="text-xs text-muted-foreground">{metric.label}</p>
+            <p className="text-lg font-semibold text-foreground">{metric.value}</p>
           </div>
         ))}
       </div>
@@ -174,19 +174,11 @@ function HealthCard({ title, status, metrics }: HealthCardProps) {
 
 // 활동 아이콘
 function ActivityIcon({ type }: { type: 'document' | 'conversation' | 'chunk' }) {
-  const config = {
-    document: { bg: 'bg-blue-100', color: 'text-blue-600' },
-    conversation: { bg: 'bg-orange-100', color: 'text-orange-600' },
-    chunk: { bg: 'bg-purple-100', color: 'text-purple-600' },
-  };
-
-  const { bg, color } = config[type];
-
   return (
-    <div className={`flex h-8 w-8 items-center justify-center rounded-full ${bg}`}>
-      {type === 'document' && <DocumentIcon className={`h-4 w-4 ${color}`} />}
-      {type === 'conversation' && <ChatIcon className={`h-4 w-4 ${color}`} />}
-      {type === 'chunk' && <ChunkIcon className={`h-4 w-4 ${color}`} />}
+    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+      {type === 'document' && <DocumentIcon className="h-4 w-4 text-muted-foreground" />}
+      {type === 'conversation' && <ChatIcon className="h-4 w-4 text-muted-foreground" />}
+      {type === 'chunk' && <ChunkIcon className="h-4 w-4 text-muted-foreground" />}
     </div>
   );
 }

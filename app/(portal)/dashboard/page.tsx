@@ -12,7 +12,7 @@ export default async function DashboardPage() {
   if (!data) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-gray-500">데이터를 불러올 수 없습니다.</p>
+        <p className="text-muted-foreground">데이터를 불러올 수 없습니다.</p>
       </div>
     );
   }
@@ -21,8 +21,8 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       {/* 페이지 타이틀 */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">대시보드</h1>
-        <p className="text-gray-600">서비스 현황을 한눈에 확인하세요.</p>
+        <h1 className="text-2xl font-semibold text-foreground">대시보드</h1>
+        <p className="text-muted-foreground">서비스 현황을 한눈에 확인하세요.</p>
       </div>
 
       {/* 통계 카드 */}
@@ -57,18 +57,18 @@ export default async function DashboardPage() {
       {/* 최근 활동 */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* 최근 문서 */}
-        <div className="rounded-lg border bg-white p-6">
+        <div className="rounded-lg border border-border bg-card p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">최근 문서</h2>
+            <h2 className="text-lg font-semibold text-foreground">최근 문서</h2>
             <Link
               href="/documents"
-              className="text-sm text-blue-600 hover:text-blue-700"
+              className="text-sm text-primary hover:text-primary/80"
             >
               전체 보기
             </Link>
           </div>
           {data.recentDocuments.length === 0 ? (
-            <p className="text-sm text-gray-500">아직 업로드된 문서가 없습니다.</p>
+            <p className="text-sm text-muted-foreground">아직 업로드된 문서가 없습니다.</p>
           ) : (
             <ul className="space-y-3">
               {data.recentDocuments.map((doc) => (
@@ -76,7 +76,7 @@ export default async function DashboardPage() {
                   key={doc.id}
                   className="flex items-center justify-between text-sm"
                 >
-                  <span className="truncate font-medium text-gray-900">
+                  <span className="truncate font-medium text-foreground">
                     {doc.title}
                   </span>
                   <StatusBadge status={doc.status} />
@@ -87,27 +87,27 @@ export default async function DashboardPage() {
         </div>
 
         {/* 최근 상담 */}
-        <div className="rounded-lg border bg-white p-6">
+        <div className="rounded-lg border border-border bg-card p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">최근 상담</h2>
+            <h2 className="text-lg font-semibold text-foreground">최근 상담</h2>
             <Link
               href="/chatbot"
-              className="text-sm text-blue-600 hover:text-blue-700"
+              className="text-sm text-primary hover:text-primary/80"
             >
               테스트하기
             </Link>
           </div>
           {data.recentConversations.length === 0 ? (
-            <p className="text-sm text-gray-500">아직 상담 기록이 없습니다.</p>
+            <p className="text-sm text-muted-foreground">아직 상담 기록이 없습니다.</p>
           ) : (
             <ul className="space-y-3">
               {data.recentConversations.map((conv) => (
                 <li key={conv.id} className="text-sm">
                   <div className="flex items-center gap-2">
                     <ChannelBadge channel={conv.channel} />
-                    <span className="truncate text-gray-900">세션: {conv.sessionId}</span>
+                    <span className="truncate text-foreground">세션: {conv.sessionId}</span>
                   </div>
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     {formatDate(conv.createdAt)}
                   </p>
                 </li>
@@ -118,8 +118,8 @@ export default async function DashboardPage() {
       </div>
 
       {/* 빠른 시작 */}
-      <div className="rounded-lg border bg-white p-6">
-        <h2 className="mb-4 text-lg font-semibold text-gray-900">빠른 시작</h2>
+      <div className="rounded-lg border border-border bg-card p-6">
+        <h2 className="mb-4 text-lg font-semibold text-foreground">빠른 시작</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <QuickAction
             href="/documents"
@@ -155,24 +155,17 @@ interface StatCardProps {
   href?: string;
 }
 
-function StatCard({ title, value, subValue, icon: Icon, color = 'default', href }: StatCardProps) {
-  const colors = {
-    default: 'bg-gray-100 text-gray-600',
-    green: 'bg-green-100 text-green-600',
-    yellow: 'bg-yellow-100 text-yellow-600',
-    blue: 'bg-blue-100 text-blue-600',
-  };
-
+function StatCard({ title, value, subValue, icon: Icon, href }: StatCardProps) {
   const content = (
-    <div className="rounded-lg border bg-white p-6">
+    <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="mt-1 text-3xl font-bold text-gray-900">{value.toLocaleString()}</p>
-          {subValue && <p className="mt-1 text-sm text-gray-500">{subValue}</p>}
+          <p className="text-sm text-muted-foreground">{title}</p>
+          <p className="mt-2 text-3xl font-semibold text-foreground">{value.toLocaleString()}</p>
+          {subValue && <p className="mt-1 text-sm text-muted-foreground">{subValue}</p>}
         </div>
-        <div className={`rounded-full p-3 ${colors[color]}`}>
-          <Icon className="h-6 w-6" />
+        <div className="rounded-md bg-muted p-3">
+          <Icon className="h-5 w-5 text-muted-foreground" />
         </div>
       </div>
     </div>
@@ -180,7 +173,7 @@ function StatCard({ title, value, subValue, icon: Icon, color = 'default', href 
 
   if (href) {
     return (
-      <Link href={href} className="block transition-shadow hover:shadow-md">
+      <Link href={href} className="block transition-colors hover:border-primary/50">
         {content}
       </Link>
     );
@@ -192,18 +185,18 @@ function StatCard({ title, value, subValue, icon: Icon, color = 'default', href 
 // 상태 배지 컴포넌트
 function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { label: string; className: string }> = {
-    uploaded: { label: '업로드됨', className: 'bg-gray-100 text-gray-700' },
-    processing: { label: '처리중', className: 'bg-blue-100 text-blue-700' },
-    chunked: { label: '청킹완료', className: 'bg-purple-100 text-purple-700' },
-    reviewing: { label: '검토중', className: 'bg-yellow-100 text-yellow-700' },
-    approved: { label: '승인됨', className: 'bg-green-100 text-green-700' },
-    failed: { label: '실패', className: 'bg-red-100 text-red-700' },
+    uploaded: { label: '업로드됨', className: 'text-muted-foreground' },
+    processing: { label: '처리중', className: 'text-primary' },
+    chunked: { label: '청킹완료', className: 'text-primary' },
+    reviewing: { label: '검토중', className: 'text-muted-foreground' },
+    approved: { label: '승인됨', className: 'text-foreground' },
+    failed: { label: '실패', className: 'text-destructive' },
   };
 
-  const { label, className } = config[status] || { label: status, className: 'bg-gray-100 text-gray-700' };
+  const { label, className } = config[status] || { label: status, className: 'text-muted-foreground' };
 
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>
+    <span className={`text-sm ${className}`}>
       {label}
     </span>
   );
@@ -212,15 +205,15 @@ function StatusBadge({ status }: { status: string }) {
 // 채널 배지 컴포넌트
 function ChannelBadge({ channel }: { channel: string }) {
   const config: Record<string, { label: string; className: string }> = {
-    web: { label: '웹', className: 'bg-blue-100 text-blue-700' },
-    kakao: { label: '카카오', className: 'bg-yellow-100 text-yellow-700' },
-    api: { label: 'API', className: 'bg-gray-100 text-gray-700' },
+    web: { label: '웹', className: 'bg-muted text-muted-foreground' },
+    kakao: { label: '카카오', className: 'bg-muted text-muted-foreground' },
+    api: { label: 'API', className: 'bg-muted text-muted-foreground' },
   };
 
-  const { label, className } = config[channel] || { label: channel, className: 'bg-gray-100 text-gray-700' };
+  const { label, className } = config[channel] || { label: channel, className: 'bg-muted text-muted-foreground' };
 
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>
+    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${className}`}>
       {label}
     </span>
   );
@@ -238,14 +231,14 @@ function QuickAction({ href, icon: Icon, title, description }: QuickActionProps)
   return (
     <Link
       href={href}
-      className="flex items-start gap-4 rounded-lg border p-4 transition-colors hover:bg-gray-50"
+      className="flex items-start gap-4 rounded-lg border border-border p-4 transition-colors hover:bg-muted"
     >
-      <div className="rounded-lg bg-blue-100 p-2">
-        <Icon className="h-5 w-5 text-blue-600" />
+      <div className="rounded-md bg-muted p-2">
+        <Icon className="h-5 w-5 text-muted-foreground" />
       </div>
       <div>
-        <h3 className="font-medium text-gray-900">{title}</h3>
-        <p className="text-sm text-gray-500">{description}</p>
+        <h3 className="font-medium text-foreground">{title}</h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
       </div>
     </Link>
   );

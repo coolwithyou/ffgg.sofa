@@ -5,6 +5,7 @@
  * [Week 9] 고객 포털 네비게이션
  */
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -44,16 +45,16 @@ export function PortalSidebar({ tenantName }: PortalSidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-64 flex-col bg-gray-900">
+    <aside className="flex w-64 flex-col border-r border-border bg-background">
       {/* 로고 */}
-      <div className="flex h-16 items-center px-6">
-        <span className="text-xl font-bold text-white">SOFA</span>
+      <div className="flex h-14 items-center border-b border-border px-6">
+        <span className="text-lg font-semibold text-foreground">SOFA</span>
       </div>
 
       {/* 테넌트 정보 */}
-      <div className="border-b border-gray-700 px-6 py-3">
-        <p className="text-sm text-gray-400">테넌트</p>
-        <p className="truncate font-medium text-white">{tenantName}</p>
+      <div className="border-b border-border px-6 py-3">
+        <p className="text-xs text-muted-foreground">테넌트</p>
+        <p className="truncate text-sm font-medium text-foreground">{tenantName}</p>
       </div>
 
       {/* 메뉴 */}
@@ -66,10 +67,10 @@ export function PortalSidebar({ tenantName }: PortalSidebarProps) {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+              className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
               }`}
             >
               <Icon className="h-5 w-5" />
@@ -80,8 +81,9 @@ export function PortalSidebar({ tenantName }: PortalSidebarProps) {
       </nav>
 
       {/* 하단 */}
-      <div className="border-t border-gray-700 p-4">
-        <p className="text-xs text-gray-500">Powered by SOFA</p>
+      <div className="border-t border-border p-4">
+        <ContextualChunkingStatus />
+        <p className="mt-2 text-xs text-muted-foreground">Powered by SOFA</p>
       </div>
     </aside>
   );
@@ -156,5 +158,62 @@ function ReviewIcon({ className }: { className?: string }) {
         d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
       />
     </svg>
+  );
+}
+
+function SparklesIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+      />
+    </svg>
+  );
+}
+
+// Contextual Chunking 상태 표시
+function ContextualChunkingStatus() {
+  const [isEnabled, setIsEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch('/api/status')
+      .then((res) => res.json())
+      .then((data) => setIsEnabled(data.contextualChunking))
+      .catch(() => setIsEnabled(false));
+  }, []);
+
+  // 로딩 중
+  if (isEnabled === null) {
+    return (
+      <div className="flex items-center gap-2 rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
+        <SparklesIcon className="h-3.5 w-3.5" />
+        <span>Contextual Chunking</span>
+        <span className="ml-auto text-[10px] font-medium">...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs ${
+        isEnabled
+          ? 'bg-primary/10 text-primary'
+          : 'bg-muted text-muted-foreground'
+      }`}
+      title={
+        isEnabled
+          ? 'Anthropic API로 청크 컨텍스트 생성 활성화됨'
+          : 'ANTHROPIC_API_KEY 미설정 - 기본 청킹 사용'
+      }
+    >
+      <SparklesIcon className="h-3.5 w-3.5" />
+      <span>Contextual Chunking</span>
+      <span className="ml-auto text-[10px] font-medium">
+        {isEnabled ? 'ON' : 'OFF'}
+      </span>
+    </div>
   );
 }

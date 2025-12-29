@@ -6,6 +6,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { sendWidgetMessage } from './actions';
 import type { WidgetConfig, WidgetMessage, WidgetState } from '@/lib/widget/types';
 
@@ -207,7 +208,13 @@ function MessageBubble({
         }`}
         style={isUser ? { backgroundColor: primaryColor } : undefined}
       >
-        <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+        {isUser ? (
+          <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+        ) : (
+          <div className="prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0">
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+          </div>
+        )}
         {message.sources && message.sources.length > 0 && (
           <div className="mt-2 border-t border-gray-200 pt-2">
             <p className="text-xs text-gray-500">

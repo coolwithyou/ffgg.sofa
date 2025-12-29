@@ -39,13 +39,10 @@ export function AdminSidebar({ operatorEmail }: AdminSidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-64 flex-col border-r bg-gray-900">
+    <aside className="flex w-64 flex-col border-r border-border bg-background">
       {/* 로고 */}
-      <div className="flex h-16 items-center gap-2 border-b border-gray-800 px-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500">
-          <span className="text-sm font-bold text-white">OP</span>
-        </div>
-        <span className="font-semibold text-white">운영 콘솔</span>
+      <div className="flex h-14 items-center gap-2 border-b border-border px-6">
+        <span className="text-lg font-semibold text-foreground">Admin</span>
       </div>
 
       {/* 네비게이션 */}
@@ -58,14 +55,11 @@ export function AdminSidebar({ operatorEmail }: AdminSidebarProps) {
             <Link
               key={item.href}
               href={item.href}
-              className={`
-                flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors
-                ${
-                  isActive
-                    ? 'bg-orange-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                }
-              `}
+              className={`flex items-center gap-3 rounded-md px-4 py-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
             >
               <Icon className="h-5 w-5" />
               {item.name}
@@ -75,18 +69,16 @@ export function AdminSidebar({ operatorEmail }: AdminSidebarProps) {
       </nav>
 
       {/* 운영자 정보 */}
-      <div className="border-t border-gray-800 p-4">
+      <div className="border-t border-border p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-700">
-            <span className="text-sm font-medium text-white">
-              {operatorEmail.charAt(0).toUpperCase()}
-            </span>
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground">
+            {operatorEmail.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 overflow-hidden">
-            <p className="truncate text-sm font-medium text-white">
+            <p className="truncate text-sm font-medium text-foreground">
               {operatorEmail.split('@')[0]}
             </p>
-            <p className="text-xs text-gray-400">운영자</p>
+            <p className="text-xs text-muted-foreground">Operator</p>
           </div>
         </div>
       </div>

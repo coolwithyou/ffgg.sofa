@@ -6,6 +6,7 @@
  */
 
 import { useState, useRef, useEffect, useTransition } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { sendTestMessage, type ChatMessage } from './actions';
 
 export function ChatInterface() {
@@ -75,15 +76,15 @@ export function ChatInterface() {
   return (
     <div className="flex h-full flex-col">
       {/* 헤더 */}
-      <div className="flex items-center justify-between border-b px-4 py-3">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-green-500" />
-          <span className="text-sm font-medium text-gray-700">챗봇 테스트 모드</span>
+          <span className="text-sm font-medium text-foreground">챗봇 테스트 모드</span>
         </div>
         {messages.length > 0 && (
           <button
             onClick={handleClearChat}
-            className="text-sm text-gray-500 hover:text-gray-700"
+            className="text-sm text-muted-foreground hover:text-foreground"
           >
             대화 초기화
           </button>
@@ -94,11 +95,11 @@ export function ChatInterface() {
       <div className="flex-1 overflow-y-auto p-4">
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <ChatIcon className="h-16 w-16 text-gray-300" />
-            <h3 className="mt-4 text-lg font-medium text-gray-900">
+            <ChatIcon className="h-16 w-16 text-muted-foreground/50" />
+            <h3 className="mt-4 text-lg font-medium text-foreground">
               테스트 대화를 시작하세요
             </h3>
-            <p className="mt-2 max-w-sm text-gray-500">
+            <p className="mt-2 max-w-sm text-muted-foreground">
               업로드한 문서를 기반으로 챗봇이 응답합니다.
               질문을 입력하여 테스트해보세요.
             </p>
@@ -107,7 +108,7 @@ export function ChatInterface() {
                 <button
                   key={suggestion}
                   onClick={() => setInput(suggestion)}
-                  className="rounded-full border px-4 py-2 text-sm text-gray-600 hover:border-blue-500 hover:text-blue-600"
+                  className="rounded-full border border-border px-4 py-2 text-sm text-muted-foreground hover:border-primary hover:text-primary"
                 >
                   {suggestion}
                 </button>
@@ -121,18 +122,18 @@ export function ChatInterface() {
             ))}
             {isPending && (
               <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100">
-                  <BotIcon className="h-5 w-5 text-blue-600" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                  <BotIcon className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <div className="rounded-lg bg-gray-100 px-4 py-3">
+                <div className="rounded-lg bg-muted px-4 py-3">
                   <div className="flex items-center gap-1">
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400" />
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
                     <div
-                      className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                      className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground"
                       style={{ animationDelay: '0.1s' }}
                     />
                     <div
-                      className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                      className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground"
                       style={{ animationDelay: '0.2s' }}
                     />
                   </div>
@@ -145,7 +146,7 @@ export function ChatInterface() {
       </div>
 
       {/* 입력 영역 */}
-      <form onSubmit={handleSubmit} className="border-t p-4">
+      <form onSubmit={handleSubmit} className="border-t border-border p-4">
         <div className="flex items-end gap-2">
           <textarea
             ref={inputRef}
@@ -155,13 +156,13 @@ export function ChatInterface() {
             placeholder="메시지를 입력하세요..."
             disabled={isPending}
             rows={1}
-            className="flex-1 resize-none rounded-lg border px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
+            className="flex-1 resize-none rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-muted"
             style={{ maxHeight: '120px' }}
           />
           <button
             type="submit"
             disabled={!input.trim() || isPending}
-            className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:bg-gray-300"
+            className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
           >
             <SendIcon className="h-5 w-5" />
           </button>
@@ -179,36 +180,42 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
       <div
         className={`flex h-8 w-8 items-center justify-center rounded-full ${
-          isUser ? 'bg-gray-200' : 'bg-blue-100'
+          isUser ? 'bg-muted' : 'bg-primary/10'
         }`}
       >
         {isUser ? (
-          <UserIcon className="h-5 w-5 text-gray-600" />
+          <UserIcon className="h-5 w-5 text-muted-foreground" />
         ) : (
-          <BotIcon className="h-5 w-5 text-blue-600" />
+          <BotIcon className="h-5 w-5 text-primary" />
         )}
       </div>
 
       <div className={`max-w-[70%] ${isUser ? 'text-right' : ''}`}>
         <div
           className={`rounded-lg px-4 py-3 ${
-            isUser ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'
+            isUser ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
           }`}
         >
-          <p className="whitespace-pre-wrap">{message.content}</p>
+          {isUser ? (
+            <p className="whitespace-pre-wrap">{message.content}</p>
+          ) : (
+            <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0">
+              <ReactMarkdown>{message.content}</ReactMarkdown>
+            </div>
+          )}
         </div>
 
         {/* 출처 표시 */}
         {message.sources && message.sources.length > 0 && (
           <div className="mt-2 space-y-1">
-            <p className="text-xs font-medium text-gray-500">참고 문서:</p>
+            <p className="text-xs font-medium text-muted-foreground">참고 문서:</p>
             {message.sources.slice(0, 3).map((source, idx) => (
               <div
                 key={idx}
-                className="rounded border bg-gray-50 p-2 text-left text-xs text-gray-600"
+                className="rounded border border-border bg-card p-2 text-left text-xs text-muted-foreground"
               >
                 <p className="line-clamp-2">{source.content}</p>
-                <p className="mt-1 text-gray-400">
+                <p className="mt-1 text-muted-foreground/60">
                   유사도: {(source.score * 100).toFixed(1)}%
                 </p>
               </div>
@@ -216,7 +223,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           </div>
         )}
 
-        <p className={`mt-1 text-xs text-gray-400 ${isUser ? 'text-right' : ''}`}>
+        <p className={`mt-1 text-xs text-muted-foreground/60 ${isUser ? 'text-right' : ''}`}>
           {formatTime(message.createdAt)}
         </p>
       </div>

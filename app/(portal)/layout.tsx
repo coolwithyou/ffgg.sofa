@@ -21,7 +21,7 @@ export default async function PortalLayout({ children }: PortalLayoutProps) {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-background">
       {/* 사이드바 */}
       <PortalSidebar tenantName={session.email.split('@')[0] || '테넌트'} />
 
