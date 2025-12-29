@@ -104,7 +104,7 @@ export const documents = pgTable(
     fileSize: integer('file_size'),
     fileType: text('file_type'),
     status: text('status').default('uploaded'), // uploaded, processing, chunked, reviewing, approved, failed
-    progressStep: text('progress_step'), // parsing, chunking, embedding, quality_check
+    progressStep: text('progress_step'), // parsing, chunking, context_generation, embedding, quality_check
     progressPercent: integer('progress_percent').default(0),
     errorMessage: text('error_message'),
     metadata: jsonb('metadata').default({}),

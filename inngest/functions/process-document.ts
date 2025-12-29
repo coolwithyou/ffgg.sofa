@@ -9,6 +9,12 @@ import { eq } from 'drizzle-orm';
 import { parseDocument, type SupportedFileType } from '@/lib/parsers';
 import { smartChunk } from '@/lib/rag/chunking';
 import { embedTexts } from '@/lib/rag/embedding';
+import {
+  isContextGenerationEnabled,
+  generateContextsBatch,
+  buildContextualContent,
+  type ContextResult,
+} from '@/lib/rag/context';
 import { logger } from '@/lib/logger';
 import { getFileFromStorage } from '@/lib/upload/storage';
 import {
@@ -147,12 +153,71 @@ onFailure: async ({ event, error }) => {
       return chunksData;
     });
 
-    // Step 4: 임베딩 생성 (배치 처리)
+    // Step 3.5: Contextual Retrieval - 컨텍스트 생성
+    const contextResults = await step.run('generate-contexts', async () => {
+      // Anthropic API 키가 없으면 스킵
+      if (!isContextGenerationEnabled()) {
+        logger.info('Context generation skipped (ANTHROPIC_API_KEY not configured)');
+        await logDocumentProcessing({
+          documentId,
+          tenantId,
+          step: 'context_generation',
+          status: 'completed',
+          message: '컨텍스트 생성 스킵됨 (API 키 미설정)',
+          details: { skipped: true },
+        });
+        return null;
+      }
+
+      const stepStartTime = Date.now();
+      await updateDocumentProgress(documentId, 'context_generation', 0);
+
+      const results = await generateContextsBatch(
+        parseResult.text,
+        chunkResults.map((c) => ({ index: c.index, content: c.content })),
+        { savePrompt: true }, // 리뷰 UI에서 확인하기 위해 프롬프트 저장
+        async (current, total) => {
+          const progress = Math.round((current / total) * 100);
+          await updateDocumentProgress(documentId, 'context_generation', progress);
+        }
+      );
+
+      await updateDocumentProgress(documentId, 'context_generation', 100);
+
+      const successCount = results.filter((r) => r.contextPrefix.length > 0).length;
+      const avgLength = results.length > 0
+        ? Math.round(results.reduce((sum, r) => sum + r.contextPrefix.length, 0) / results.length)
+        : 0;
+
+      // 컨텍스트 생성 완료 로그
+      await logDocumentProcessing({
+        documentId,
+        tenantId,
+        step: 'context_generation',
+        status: 'completed',
+        message: '컨텍스트 생성 완료',
+        details: {
+          totalChunks: chunkResults.length,
+          successCount,
+          failureCount: chunkResults.length - successCount,
+          avgContextLength: avgLength,
+        },
+        durationMs: Date.now() - stepStartTime,
+      });
+
+      return results;
+    });
+
+    // Step 4: 임베딩 생성 (배치 처리) - 컨텍스트 포함
     const embeddings = await step.run('generate-embeddings', async () => {
       const stepStartTime = Date.now();
       await updateDocumentProgress(documentId, 'embedding', 0);
 
-      const texts = chunkResults.map((chunk) => chunk.content);
+      // 컨텍스트가 있으면 포함하여 임베딩
+      const texts = chunkResults.map((chunk) => {
+        const context = contextResults?.find((c: ContextResult) => c.chunkIndex === chunk.index);
+        return buildContextualContent(chunk.content, context?.contextPrefix);
+      });
       const embeddingVectors = await embedTexts(texts);
 
       await updateDocumentProgress(documentId, 'embedding', 100);
@@ -176,17 +241,28 @@ onFailure: async ({ event, error }) => {
       const stepStartTime = Date.now();
       await updateDocumentProgress(documentId, 'quality_check', 0);
 
-      const chunkRecords = chunkResults.map((chunk, index) => ({
-        tenantId,
-        documentId,
-        content: chunk.content,
-        embedding: embeddings[index],
-        chunkIndex: chunk.index,
-        qualityScore: chunk.qualityScore,
-        status: chunk.qualityScore >= 85 ? 'approved' : 'pending',
-        autoApproved: chunk.qualityScore >= 85,
-        metadata: chunk.metadata,
-      }));
+      const chunkRecords = chunkResults.map((chunk, index) => {
+        // 해당 청크의 컨텍스트 찾기
+        const context = contextResults?.find((c: ContextResult) => c.chunkIndex === chunk.index);
+
+        return {
+          tenantId,
+          documentId,
+          content: chunk.content,
+          embedding: embeddings[index],
+          chunkIndex: chunk.index,
+          qualityScore: chunk.qualityScore,
+          status: chunk.qualityScore >= 85 ? 'approved' : 'pending',
+          autoApproved: chunk.qualityScore >= 85,
+          metadata: {
+            ...chunk.metadata,
+            // Contextual Retrieval 관련 필드 추가
+            contextPrefix: context?.contextPrefix || null,
+            contextPrompt: context?.prompt || null,
+            hasContext: !!(context?.contextPrefix && context.contextPrefix.length > 0),
+          },
+        };
+      });
 
       // 배치 삽입 (neon-http는 트랜잭션 미지원)
       const BATCH_SIZE = 100;
@@ -282,7 +358,7 @@ onFailure: async ({ event, error }) => {
  */
 async function updateDocumentProgress(
   documentId: string,
-  step: 'parsing' | 'chunking' | 'embedding' | 'quality_check',
+  step: 'parsing' | 'chunking' | 'context_generation' | 'embedding' | 'quality_check',
   progress: number
 ) {
   await db

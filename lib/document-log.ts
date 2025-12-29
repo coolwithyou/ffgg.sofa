@@ -11,6 +11,7 @@ export type ProcessingStep =
   | 'started'
   | 'parsing'
   | 'chunking'
+  | 'context_generation'
   | 'embedding'
   | 'quality_check'
   | 'completed'
