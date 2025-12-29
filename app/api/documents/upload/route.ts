@@ -7,11 +7,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantIsolation } from '@/lib/middleware/tenant';
 import { withRateLimit } from '@/lib/middleware/rate-limit';
 import { validateFile, uploadFile, type AllowedMimeType } from '@/lib/upload';
-import { db, documents } from '@/lib/db';
+import { db, documents, datasets } from '@/lib/db';
 import { createAuditLogFromRequest, AuditAction, TargetType } from '@/lib/audit';
 import { AppError, ErrorCode } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { inngest } from '@/inngest/client';
+import { eq, and } from 'drizzle-orm';
 
 // 문서 업로드에 허용된 타입
 const DOCUMENT_ALLOWED_TYPES: AllowedMimeType[] = [
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
     // 3. FormData 파싱
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
+    let datasetId = formData.get('datasetId') as string | null;
 
     if (!file) {
       return NextResponse.json(
@@ -52,7 +54,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. 파일 검증 (확장자 + Magic Number)
+    // 4. 데이터셋 확인 (없으면 기본 데이터셋 사용)
+    if (datasetId) {
+      // 제공된 datasetId가 현재 테넌트의 것인지 확인
+      const [dataset] = await db
+        .select({ id: datasets.id })
+        .from(datasets)
+        .where(and(eq(datasets.id, datasetId), eq(datasets.tenantId, tenant.tenantId)));
+
+      if (!dataset) {
+        return NextResponse.json(
+          new AppError(ErrorCode.VALIDATION_ERROR, '유효하지 않은 데이터셋입니다.').toSafeResponse(),
+          { status: 400 }
+        );
+      }
+    } else {
+      // 기본 데이터셋 찾기
+      const [defaultDataset] = await db
+        .select({ id: datasets.id })
+        .from(datasets)
+        .where(and(eq(datasets.tenantId, tenant.tenantId), eq(datasets.isDefault, true)));
+
+      if (!defaultDataset) {
+        return NextResponse.json(
+          new AppError(ErrorCode.VALIDATION_ERROR, '기본 데이터셋이 없습니다. 먼저 데이터셋을 생성하세요.').toSafeResponse(),
+          { status: 400 }
+        );
+      }
+      datasetId = defaultDataset.id;
+    }
+
+    // 5. 파일 검증 (확장자 + Magic Number)
     const validationResult = await validateFile(file, {
       allowedTypes: DOCUMENT_ALLOWED_TYPES,
     });
@@ -71,7 +103,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 5. 파일 업로드
+    // 6. 파일 업로드
     const fileBuffer = await file.arrayBuffer();
     const uploadResult = await uploadFile(Buffer.from(fileBuffer), {
       tenantId: tenant.tenantId,
@@ -96,11 +128,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 6. DB에 문서 레코드 생성
+    // 7. DB에 문서 레코드 생성
     const [document] = await db
       .insert(documents)
       .values({
         tenantId: tenant.tenantId,
+        datasetId: datasetId!,
         filename: validationResult.sanitizedFilename!,
         filePath: uploadResult.key!,
         fileSize: file.size,
@@ -114,7 +147,7 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
-    // 7. 감사 로그 기록
+    // 8. 감사 로그 기록
     await createAuditLogFromRequest(request, {
       userId: session.userId,
       tenantId: tenant.tenantId,
@@ -126,15 +159,17 @@ export async function POST(request: NextRequest) {
         filename: validationResult.sanitizedFilename,
         fileSize: file.size,
         fileType: validationResult.detectedMimeType,
+        datasetId: datasetId,
       },
     });
 
-    // 8. Inngest 이벤트 발송 (문서 처리 시작)
+    // 9. Inngest 이벤트 발송 (문서 처리 시작)
     await inngest.send({
       name: 'document/uploaded',
       data: {
         documentId: document.id,
         tenantId: tenant.tenantId,
+        datasetId: datasetId!,
         userId: session.userId,
         filename: validationResult.sanitizedFilename!,
         fileType: validationResult.detectedMimeType!,
@@ -146,6 +181,7 @@ export async function POST(request: NextRequest) {
       documentId: document.id,
       filename: validationResult.sanitizedFilename,
       tenantId: tenant.tenantId,
+      datasetId: datasetId,
       userId: session.userId,
     });
 
@@ -153,6 +189,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         id: document.id,
+        datasetId: datasetId,
         filename: document.filename,
         fileSize: document.fileSize,
         fileType: document.fileType,

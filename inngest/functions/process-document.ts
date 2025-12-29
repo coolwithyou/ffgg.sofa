@@ -4,8 +4,8 @@
  */
 
 import { inngestClient } from '../client';
-import { db, documents, chunks } from '@/lib/db';
-import { eq } from 'drizzle-orm';
+import { db, documents, chunks, datasets } from '@/lib/db';
+import { eq, sql } from 'drizzle-orm';
 import { parseDocument, type SupportedFileType } from '@/lib/parsers';
 import { smartChunk } from '@/lib/rag/chunking';
 import { embedTexts } from '@/lib/rag/embedding';
@@ -76,7 +76,7 @@ onFailure: async ({ event, error }) => {
   },
   { event: 'document/uploaded' },
   async ({ event, step }) => {
-    const { documentId, tenantId, filename, fileType, filePath } = event.data;
+    const { documentId, tenantId, datasetId, filename, fileType, filePath } = event.data;
     const processingStartTime = Date.now();
 
     // 이전 로그 삭제 (재처리 시)
@@ -247,6 +247,7 @@ onFailure: async ({ event, error }) => {
 
         return {
           tenantId,
+          datasetId,
           documentId,
           content: chunk.content,
           embedding: embeddings[index],
@@ -329,7 +330,12 @@ onFailure: async ({ event, error }) => {
       });
     });
 
-    // Step 7: 관리자 알림 (검토 필요 시)
+    // Step 7: 데이터셋 통계 업데이트
+    await step.run('update-dataset-stats', async () => {
+      await updateDatasetStats(datasetId);
+    });
+
+    // Step 8: 관리자 알림 (검토 필요 시)
     const pendingCount = chunkResults.filter((c) => c.qualityScore < 85).length;
     if (pendingCount > 0) {
       await step.sendEvent('notify-admin', {
@@ -370,4 +376,35 @@ async function updateDocumentProgress(
       updatedAt: new Date(),
     })
     .where(eq(documents.id, documentId));
+}
+
+/**
+ * 데이터셋 통계 업데이트 (문서 수, 청크 수)
+ */
+async function updateDatasetStats(datasetId: string) {
+  // 데이터셋의 문서 수 계산
+  const [docStats] = await db
+    .select({
+      count: sql<number>`count(*)::int`,
+    })
+    .from(documents)
+    .where(eq(documents.datasetId, datasetId));
+
+  // 데이터셋의 청크 수 계산
+  const [chunkStats] = await db
+    .select({
+      count: sql<number>`count(*)::int`,
+    })
+    .from(chunks)
+    .where(eq(chunks.datasetId, datasetId));
+
+  // 데이터셋 통계 업데이트
+  await db
+    .update(datasets)
+    .set({
+      documentCount: docStats?.count || 0,
+      chunkCount: chunkStats?.count || 0,
+      updatedAt: new Date(),
+    })
+    .where(eq(datasets.id, datasetId));
 }
