@@ -33,6 +33,7 @@ export default async function WidgetPreviewPage({ params }: PreviewPageProps) {
     .select({
       id: chatbots.id,
       name: chatbots.name,
+      tenantId: chatbots.tenantId,
       widgetEnabled: chatbots.widgetEnabled,
       widgetApiKey: chatbots.widgetApiKey,
       widgetConfig: chatbots.widgetConfig,
@@ -49,6 +50,7 @@ export default async function WidgetPreviewPage({ params }: PreviewPageProps) {
       chatbot={{
         id: chatbot.id,
         name: chatbot.name,
+        tenantId: chatbot.tenantId,
         widgetEnabled: chatbot.widgetEnabled ?? false,
         widgetApiKey: chatbot.widgetApiKey,
         widgetConfig: (chatbot.widgetConfig as Record<string, unknown>) || {},

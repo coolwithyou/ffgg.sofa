@@ -21,6 +21,7 @@ import {
 interface ChatbotInfo {
   id: string;
   name: string;
+  tenantId: string;
   widgetEnabled: boolean;
   widgetApiKey: string | null;
   widgetConfig: Record<string, unknown>;
@@ -65,7 +66,7 @@ export function WidgetPreview({ chatbot }: WidgetPreviewProps) {
   // 기본 URL
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const previewUrl = chatbot.widgetApiKey
-    ? `${baseUrl}/widget/${chatbot.id}?key=${chatbot.widgetApiKey}`
+    ? `${baseUrl}/widget/${chatbot.tenantId}?key=${chatbot.widgetApiKey}`
     : null;
 
   // 디바이스 크기
