@@ -25,6 +25,8 @@ export interface LibraryDocument {
   errorMessage: string | null;
   createdAt: string;
   updatedAt: string;
+  datasetId: string | null;
+  datasetName: string | null;
 }
 
 export interface LibraryChunk {
@@ -45,14 +47,14 @@ export interface DatasetOption {
   isDefault: boolean;
 }
 
-// 라이브러리 문서 목록 조회
+// 라이브러리 문서 목록 조회 (모든 문서)
 export async function getLibraryDocuments(): Promise<LibraryDocument[]> {
   const session = await getSession();
   if (!session?.tenantId) {
     throw new Error('인증이 필요합니다.');
   }
 
-  // 라이브러리 문서 조회 (datasetId가 null인 문서)
+  // 모든 문서 조회 (LEFT JOIN으로 데이터셋 이름 포함)
   const docs = await db
     .select({
       id: documents.id,
@@ -64,9 +66,12 @@ export async function getLibraryDocuments(): Promise<LibraryDocument[]> {
       errorMessage: documents.errorMessage,
       createdAt: documents.createdAt,
       updatedAt: documents.updatedAt,
+      datasetId: documents.datasetId,
+      datasetName: datasets.name,
     })
     .from(documents)
-    .where(and(eq(documents.tenantId, session.tenantId), isNull(documents.datasetId)))
+    .leftJoin(datasets, eq(documents.datasetId, datasets.id))
+    .where(eq(documents.tenantId, session.tenantId))
     .orderBy(desc(documents.createdAt));
 
   // 각 문서의 청크 통계 조회
@@ -94,6 +99,8 @@ export async function getLibraryDocuments(): Promise<LibraryDocument[]> {
         errorMessage: doc.errorMessage,
         createdAt: doc.createdAt?.toISOString() || new Date().toISOString(),
         updatedAt: doc.updatedAt?.toISOString() || new Date().toISOString(),
+        datasetId: doc.datasetId,
+        datasetName: doc.datasetName,
       };
     })
   );
@@ -101,25 +108,21 @@ export async function getLibraryDocuments(): Promise<LibraryDocument[]> {
   return result;
 }
 
-// 라이브러리 문서의 청크 목록 조회
+// 문서의 청크 목록 조회
 export async function getLibraryChunks(documentId: string): Promise<LibraryChunk[]> {
   const session = await getSession();
   if (!session?.tenantId) {
     throw new Error('인증이 필요합니다.');
   }
 
-  // 문서 존재 및 라이브러리 소속 확인
+  // 문서 존재 확인
   const [doc] = await db
-    .select({ id: documents.id, datasetId: documents.datasetId })
+    .select({ id: documents.id })
     .from(documents)
     .where(and(eq(documents.id, documentId), eq(documents.tenantId, session.tenantId)));
 
   if (!doc) {
     throw new Error('문서를 찾을 수 없습니다.');
-  }
-
-  if (doc.datasetId !== null) {
-    throw new Error('이 문서는 라이브러리에 없습니다.');
   }
 
   // 청크 목록 조회

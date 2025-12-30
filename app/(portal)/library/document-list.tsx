@@ -2,13 +2,15 @@
 
 /**
  * 라이브러리 문서 목록 컴포넌트
- * 라이브러리(데이터셋 미배치) 문서 표시
+ * 모든 문서 표시 (배치됨/미배치 구분)
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { LibraryDocument, LibraryChunk, DatasetOption } from './actions';
 import { getLibraryChunks } from './actions';
 import { ChunkSelector } from './chunk-selector';
+
+type FilterType = 'all' | 'assigned' | 'unassigned';
 
 interface LibraryDocumentListProps {
   documents: LibraryDocument[];
@@ -20,6 +22,26 @@ export function LibraryDocumentList({ documents: initialDocuments, datasets }: L
   const [selectedDocument, setSelectedDocument] = useState<LibraryDocument | null>(null);
   const [chunks, setChunks] = useState<LibraryChunk[]>([]);
   const [isLoadingChunks, setIsLoadingChunks] = useState(false);
+  const [filter, setFilter] = useState<FilterType>('all');
+
+  // 필터링된 문서 목록
+  const filteredDocuments = useMemo(() => {
+    switch (filter) {
+      case 'assigned':
+        return documents.filter((doc) => doc.datasetId !== null);
+      case 'unassigned':
+        return documents.filter((doc) => doc.datasetId === null);
+      default:
+        return documents;
+    }
+  }, [documents, filter]);
+
+  // 각 필터별 문서 개수
+  const counts = useMemo(() => ({
+    all: documents.length,
+    assigned: documents.filter((doc) => doc.datasetId !== null).length,
+    unassigned: documents.filter((doc) => doc.datasetId === null).length,
+  }), [documents]);
 
   const handleDocumentClick = async (doc: LibraryDocument) => {
     if (selectedDocument?.id === doc.id) {
@@ -60,44 +82,77 @@ export function LibraryDocumentList({ documents: initialDocuments, datasets }: L
       <div className="rounded-lg border border-border bg-card">
         <div className="border-b border-border px-6 py-4">
           <h2 className="text-lg font-semibold text-foreground">
-            라이브러리 문서 ({documents.length})
+            문서 목록
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             문서를 클릭하여 청크를 확인하고 데이터셋에 복사하세요
           </p>
         </div>
 
-        <div className="divide-y divide-border">
-          {documents.map((doc) => (
-            <button
-              key={doc.id}
-              onClick={() => handleDocumentClick(doc)}
-              className={`w-full px-6 py-4 text-left transition-colors ${
-                selectedDocument?.id === doc.id
-                  ? 'bg-primary/10'
-                  : 'hover:bg-muted/50'
-              }`}
-            >
-              <div className="flex items-center gap-4">
-                <FileTypeIcon fileType={doc.fileType} />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground truncate">{doc.filename}</p>
-                  <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-                    <span>{formatFileSize(doc.fileSize)}</span>
-                    <span>•</span>
-                    <span>{doc.chunkCount}개 청크</span>
-                    <span>•</span>
-                    <StatusBadge status={doc.status} />
+        {/* 필터 탭 */}
+        <div className="flex border-b border-border">
+          <FilterTab
+            label="전체"
+            count={counts.all}
+            isActive={filter === 'all'}
+            onClick={() => setFilter('all')}
+          />
+          <FilterTab
+            label="배치됨"
+            count={counts.assigned}
+            isActive={filter === 'assigned'}
+            onClick={() => setFilter('assigned')}
+          />
+          <FilterTab
+            label="미배치"
+            count={counts.unassigned}
+            isActive={filter === 'unassigned'}
+            onClick={() => setFilter('unassigned')}
+          />
+        </div>
+
+        <div className="divide-y divide-border max-h-[600px] overflow-y-auto">
+          {filteredDocuments.length === 0 ? (
+            <div className="px-6 py-8 text-center text-muted-foreground">
+              {filter === 'assigned' && '배치된 문서가 없습니다.'}
+              {filter === 'unassigned' && '미배치 문서가 없습니다.'}
+              {filter === 'all' && '문서가 없습니다.'}
+            </div>
+          ) : (
+            filteredDocuments.map((doc) => (
+              <button
+                key={doc.id}
+                onClick={() => handleDocumentClick(doc)}
+                className={`w-full px-6 py-4 text-left transition-colors ${
+                  selectedDocument?.id === doc.id
+                    ? 'bg-primary/10'
+                    : 'hover:bg-muted/50'
+                }`}
+              >
+                <div className="flex items-center gap-4">
+                  <FileTypeIcon fileType={doc.fileType} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-foreground truncate">{doc.filename}</p>
+                      <DatasetBadge datasetName={doc.datasetName} />
+                    </div>
+                    <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+                      <span>{formatFileSize(doc.fileSize)}</span>
+                      <span>•</span>
+                      <span>{doc.chunkCount}개 청크</span>
+                      <span>•</span>
+                      <StatusBadge status={doc.status} />
+                    </div>
                   </div>
+                  <ChevronIcon
+                    className={`h-5 w-5 text-muted-foreground transition-transform ${
+                      selectedDocument?.id === doc.id ? 'rotate-180' : ''
+                    }`}
+                  />
                 </div>
-                <ChevronIcon
-                  className={`h-5 w-5 text-muted-foreground transition-transform ${
-                    selectedDocument?.id === doc.id ? 'rotate-180' : ''
-                  }`}
-                />
-              </div>
-            </button>
-          ))}
+              </button>
+            ))
+          )}
         </div>
       </div>
 
@@ -125,6 +180,48 @@ export function LibraryDocumentList({ documents: initialDocuments, datasets }: L
         )}
       </div>
     </div>
+  );
+}
+
+// 필터 탭 컴포넌트
+function FilterTab({
+  label,
+  count,
+  isActive,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+        isActive
+          ? 'border-b-2 border-primary text-primary'
+          : 'text-muted-foreground hover:text-foreground'
+      }`}
+    >
+      {label} ({count})
+    </button>
+  );
+}
+
+// 데이터셋 배치 상태 배지
+function DatasetBadge({ datasetName }: { datasetName: string | null }) {
+  if (datasetName) {
+    return (
+      <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+        {datasetName}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+      미배치
+    </span>
   );
 }
 
