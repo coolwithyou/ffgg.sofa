@@ -7,7 +7,7 @@
 
 import { useState, useCallback, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { saveFAQDraft, deleteFAQDraft, type FAQDraft } from './actions';
+import { saveFAQDraft, deleteFAQDraft, uploadQAAsDocument, unlockQA, type FAQDraft } from './actions';
 import { type Category, type QAPair } from './utils';
 import { CategoryList } from './category-list';
 import { QAList } from './qa-list';
@@ -44,6 +44,20 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showDraftList, setShowDraftList] = useState(false);
+  const [uploadingQAId, setUploadingQAId] = useState<string | null>(null);
+
+  // 확인 다이얼로그 상태
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   // 자동 저장 (2초 디바운스)
   useEffect(() => {
@@ -101,15 +115,21 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
 
   // 초안 삭제
   const handleDeleteDraft = useCallback(
-    async (id: string) => {
-      if (!confirm('이 FAQ 초안을 삭제하시겠습니까?')) return;
-
-      startTransition(async () => {
-        await deleteFAQDraft(id);
-        if (currentDraftId === id) {
-          handleNewDraft();
-        }
-        router.refresh();
+    (id: string) => {
+      setConfirmDialog({
+        isOpen: true,
+        title: 'FAQ 초안 삭제',
+        message: '이 FAQ 초안을 삭제하시겠습니까? 삭제된 데이터는 복구할 수 없습니다.',
+        onConfirm: () => {
+          startTransition(async () => {
+            await deleteFAQDraft(id);
+            if (currentDraftId === id) {
+              handleNewDraft();
+            }
+            router.refresh();
+          });
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        },
       });
     },
     [currentDraftId, handleNewDraft, router]
@@ -184,11 +204,25 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
     setQAPairs([...qaPairs, newQA]);
   }, [selectedCategoryId, qaPairs]);
 
-  // Q&A 수정
+  // Q&A 수정 (수정 감지 로직 포함)
   const handleUpdateQA = useCallback(
     (id: string, field: 'question' | 'answer', value: string) => {
       setQAPairs(
-        qaPairs.map((qa) => (qa.id === id ? { ...qa, [field]: value } : qa))
+        qaPairs.map((qa) => {
+          if (qa.id !== id) return qa;
+
+          const updated = { ...qa, [field]: value };
+
+          // 잠금 해제 상태에서 원본과 비교하여 수정 여부 감지
+          if (!qa.isLocked && qa.originalQuestion !== undefined) {
+            const isModified =
+              (field === 'question' ? value : qa.question) !== qa.originalQuestion ||
+              (field === 'answer' ? value : qa.answer) !== qa.originalAnswer;
+            updated.isModified = isModified;
+          }
+
+          return updated;
+        })
       );
     },
     [qaPairs]
@@ -200,6 +234,61 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
       setQAPairs(qaPairs.filter((qa) => qa.id !== id));
     },
     [qaPairs]
+  );
+
+  // Q&A 문서 업로드
+  const handleUploadQA = useCallback(
+    async (qaId: string) => {
+      if (!currentDraftId) {
+        // 먼저 초안 저장
+        await handleSave();
+      }
+
+      const draftId = currentDraftId;
+      if (!draftId) {
+        alert('FAQ를 먼저 저장해주세요.');
+        return;
+      }
+
+      setUploadingQAId(qaId);
+      try {
+        const result = await uploadQAAsDocument(draftId, qaId);
+        // 로컬 상태 업데이트
+        setQAPairs(
+          qaPairs.map((qa) =>
+            qa.id === qaId ? result.updatedQAPair : qa
+          )
+        );
+        setLastSaved(new Date());
+      } catch (error) {
+        console.error('업로드 실패:', error);
+        alert(error instanceof Error ? error.message : '업로드에 실패했습니다.');
+      } finally {
+        setUploadingQAId(null);
+      }
+    },
+    [currentDraftId, qaPairs, handleSave]
+  );
+
+  // Q&A 잠금 해제
+  const handleUnlockQA = useCallback(
+    async (qaId: string) => {
+      if (!currentDraftId) return;
+
+      try {
+        const result = await unlockQA(currentDraftId, qaId);
+        // 로컬 상태 업데이트
+        setQAPairs(
+          qaPairs.map((qa) =>
+            qa.id === qaId ? result.updatedQAPair : qa
+          )
+        );
+      } catch (error) {
+        console.error('잠금 해제 실패:', error);
+        alert(error instanceof Error ? error.message : '잠금 해제에 실패했습니다.');
+      }
+    },
+    [currentDraftId, qaPairs]
   );
 
   // 선택된 카테고리의 Q&A 필터링
@@ -329,6 +418,9 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
             onAdd={handleAddQA}
             onUpdate={handleUpdateQA}
             onDelete={handleDeleteQA}
+            onUpload={handleUploadQA}
+            onUnlock={handleUnlockQA}
+            uploadingQAId={uploadingQAId}
           />
         </div>
 
@@ -348,6 +440,77 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
         qaPairs={qaPairs}
         onSave={handleSave}
       />
+
+      {/* 확인 다이얼로그 */}
+      {confirmDialog.isOpen && (
+        <ConfirmDialog
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
+        />
+      )}
+    </div>
+  );
+}
+
+// 확인 다이얼로그 컴포넌트
+function ConfirmDialog({
+  title,
+  message,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* 백드롭 */}
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={onCancel}
+        aria-hidden="true"
+      />
+
+      {/* 다이얼로그 */}
+      <div
+        className="relative z-10 w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        aria-describedby="confirm-dialog-description"
+      >
+        <h2
+          id="confirm-dialog-title"
+          className="text-lg font-semibold text-foreground"
+        >
+          {title}
+        </h2>
+        <p
+          id="confirm-dialog-description"
+          className="mt-2 text-sm text-muted-foreground"
+        >
+          {message}
+        </p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+          >
+            취소
+          </button>
+          <button
+            onClick={onConfirm}
+            className="rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
+          >
+            삭제
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

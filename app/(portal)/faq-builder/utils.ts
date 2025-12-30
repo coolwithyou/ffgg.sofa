@@ -16,6 +16,26 @@ export interface QAPair {
   question: string;
   answer: string;
   order: number;
+  // 문서 업로드 관련 필드
+  documentId?: string;        // 업로드된 문서 ID
+  uploadedAt?: string;        // 업로드 시간 (ISO string)
+  isLocked?: boolean;         // 잠금 상태
+  isModified?: boolean;       // 수정됨 상태 (잠금 해제 후 수정 시)
+  originalQuestion?: string;  // 원본 질문 (수정 감지용)
+  originalAnswer?: string;    // 원본 답변 (수정 감지용)
+}
+
+// 단일 Q&A를 Markdown 형식으로 변환
+export function generateSingleQAMarkdown(
+  qa: QAPair,
+  categoryName?: string
+): string {
+  const lines: string[] = ['# FAQ'];
+  if (categoryName) {
+    lines.push('', `## ${categoryName}`);
+  }
+  lines.push('', `Q: ${qa.question}`, `A: ${qa.answer}`);
+  return lines.join('\n');
 }
 
 // Markdown 생성
