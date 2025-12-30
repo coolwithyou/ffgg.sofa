@@ -13,6 +13,8 @@ export interface GenerateOptions {
   maxTokens?: number;
   temperature?: number;
   channel?: 'web' | 'kakao';
+  /** 첫 번째 턴 여부 (기본: true). false면 간결한 응답 생성 */
+  isFirstTurn?: boolean;
 }
 
 interface LLMProvider {
@@ -59,15 +61,34 @@ const LLM_PROVIDERS: LLMProvider[] = [
   },
 ];
 
-// 시스템 프롬프트
-const WEB_SYSTEM_PROMPT = `당신은 기업 고객의 문서를 기반으로 질문에 답변하는 AI 어시스턴트입니다.
+// 시스템 프롬프트 - 대화형 스타일로 개선
+const WEB_SYSTEM_PROMPT_BASE = `당신은 기업 문서 기반 AI 어시스턴트입니다.
 
-규칙:
-1. 제공된 컨텍스트에 기반하여 정확하게 답변하세요.
-2. 컨텍스트에 없는 정보는 "제공된 문서에서 관련 정보를 찾을 수 없습니다"라고 답변하세요.
-3. 친절하고 전문적인 어조를 유지하세요.
-4. 답변은 명확하고 구조적으로 작성하세요.
-5. 필요한 경우 불렛 포인트나 번호 목록을 사용하세요.`;
+## 답변 원칙
+1. 제공된 컨텍스트에 있는 정보만으로 정확하게 답변
+2. 컨텍스트에 정보가 없으면: "제공된 문서에서 관련 정보를 찾을 수 없습니다"
+3. 자연스럽고 간결한 대화체 사용
+4. 핵심을 먼저 전달하고 필요시 부연 설명
+
+## 금지 표현 (절대 사용하지 마세요)
+- 형식적 인사: "안녕하세요!", "안녕하세요~"
+- 불필요한 서론: "문서에 따르면", "제공된 정보를 바탕으로", "문서 [1]에 의하면"
+- 과도한 공손함: "도움이 되었으면 합니다", "더 궁금하신 점이 있으시면"
+- 반복 설명: 이미 언급한 내용을 다시 설명`;
+
+const WEB_FIRST_TURN_SUFFIX = `
+
+## 첫 질문 응답 가이드
+- 충분히 상세하게 답변
+- 필요시 불렛 포인트나 번호 목록 사용
+- 관련 맥락 정보 함께 제공`;
+
+const WEB_FOLLOWUP_TURN_SUFFIX = `
+
+## 후속 질문 응답 가이드
+- 핵심만 2-3문장 이내로 간결하게
+- 이미 설명한 내용은 반복하지 않음
+- 직접적으로 답변 시작 (서론 없이)`;
 
 const KAKAO_SYSTEM_PROMPT = `당신은 카카오톡에서 고객 질문에 답변하는 AI 어시스턴트입니다.
 
@@ -75,7 +96,19 @@ const KAKAO_SYSTEM_PROMPT = `당신은 카카오톡에서 고객 질문에 답�
 1. 제공된 컨텍스트에 기반하여 정확하게 답변하세요.
 2. 답변은 짧고 간결하게 (최대 300자) 작성하세요.
 3. 친근하면서도 전문적인 어조를 유지하세요.
-4. 컨텍스트에 없는 정보는 "관련 정보를 찾지 못했어요. 다른 질문이 있으신가요?"라고 답변하세요.`;
+4. 컨텍스트에 없는 정보는 "관련 정보를 찾지 못했어요. 다른 질문이 있으신가요?"라고 답변하세요.
+5. "안녕하세요"로 시작하지 마세요. 바로 답변하세요.`;
+
+/**
+ * 채널과 턴 정보에 따라 적절한 시스템 프롬프트를 생성합니다.
+ */
+function buildSystemPrompt(channel: 'web' | 'kakao', isFirstTurn: boolean): string {
+  if (channel === 'kakao') {
+    return KAKAO_SYSTEM_PROMPT;
+  }
+
+  return WEB_SYSTEM_PROMPT_BASE + (isFirstTurn ? WEB_FIRST_TURN_SUFFIX : WEB_FOLLOWUP_TURN_SUFFIX);
+}
 
 /**
  * RAG 기반 응답 생성
@@ -85,15 +118,15 @@ export async function generateResponse(
   chunks: SearchResult[],
   options: GenerateOptions = {}
 ): Promise<string> {
-  const { channel = 'web' } = options;
+  const { channel = 'web', isFirstTurn = true } = options;
 
   // 컨텍스트 구성
   const context = chunks
     .map((chunk, index) => `[${index + 1}] ${chunk.content}`)
     .join('\n\n---\n\n');
 
-  // 시스템 프롬프트 선택
-  const systemPrompt = channel === 'kakao' ? KAKAO_SYSTEM_PROMPT : WEB_SYSTEM_PROMPT;
+  // 동적 시스템 프롬프트 생성
+  const systemPrompt = buildSystemPrompt(channel, isFirstTurn);
 
   // 사용자 프롬프트 구성
   const userPrompt = `## 관련 문서 내용:
@@ -162,14 +195,15 @@ export async function generateStreamingResponse(
   chunks: SearchResult[],
   options: GenerateOptions = {}
 ): Promise<ReadableStream<Uint8Array>> {
-  const { channel = 'web' } = options;
+  const { channel = 'web', isFirstTurn = true } = options;
 
   // 컨텍스트 구성
   const context = chunks
     .map((chunk, index) => `[${index + 1}] ${chunk.content}`)
     .join('\n\n---\n\n');
 
-  const systemPrompt = channel === 'kakao' ? KAKAO_SYSTEM_PROMPT : WEB_SYSTEM_PROMPT;
+  // 동적 시스템 프롬프트 생성
+  const systemPrompt = buildSystemPrompt(channel, isFirstTurn);
 
   const userPrompt = `## 관련 문서 내용:
 ${context}

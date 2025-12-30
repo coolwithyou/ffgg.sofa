@@ -6,6 +6,7 @@
 import { logger } from '@/lib/logger';
 import { hybridSearch, hybridSearchMultiDataset } from '@/lib/rag/retrieval';
 import { generateResponse, type GenerateOptions } from '@/lib/rag/generator';
+import { rewriteQuery } from '@/lib/rag/query-rewriter';
 import {
   getOrCreateConversation,
   addMessageToConversation,
@@ -106,22 +107,53 @@ export async function processChat(
       contextMessages = await getConversationHistory(tenantId, conversation.sessionId, historyLimit);
     }
 
-    // 5. Hybrid Search로 관련 청크 검색
+    // 5. Query Rewriting (후속 질문인 경우 맥락 반영)
+    // 대화 맥락을 반영한 검색 쿼리 생성 (예: "아들 이름은?" → "성문희의 아들 이름은?")
+    const isFirstTurn = contextMessages.length === 0;
+    let searchQuery = request.message;
+
+    if (!isFirstTurn) {
+      try {
+        searchQuery = await rewriteQuery(request.message, contextMessages, {
+          maxHistoryMessages: historyLimit,
+          temperature: 0.3,
+          maxTokens: 150,
+        });
+
+        if (searchQuery !== request.message) {
+          logger.debug('Query rewritten for search', {
+            tenantId,
+            sessionId: conversation.sessionId,
+            original: request.message,
+            rewritten: searchQuery,
+          });
+        }
+      } catch (error) {
+        logger.warn('Query rewriting failed, using original', {
+          error: error instanceof Error ? error.message : String(error),
+          tenantId,
+          sessionId: conversation.sessionId,
+        });
+        searchQuery = request.message;
+      }
+    }
+
+    // 6. Hybrid Search로 관련 청크 검색 (재작성된 쿼리 사용)
     // 챗봇이 있으면 연결된 데이터셋에서만 검색, 없으면 전체 검색
     let searchResults;
     if (chatbotId) {
       const datasetIds = await getChatbotDatasetIds(chatbotId);
       if (datasetIds.length > 0) {
-        searchResults = await hybridSearchMultiDataset(tenantId, datasetIds, request.message, maxChunks);
+        searchResults = await hybridSearchMultiDataset(tenantId, datasetIds, searchQuery, maxChunks);
       } else {
         logger.warn('Chatbot has no linked datasets, falling back to tenant search', { chatbotId });
-        searchResults = await hybridSearch(tenantId, request.message, maxChunks);
+        searchResults = await hybridSearch(tenantId, searchQuery, maxChunks);
       }
     } else {
-      searchResults = await hybridSearch(tenantId, request.message, maxChunks);
+      searchResults = await hybridSearch(tenantId, searchQuery, maxChunks);
     }
 
-    // 6. 히스토리 컨텍스트를 쿼리에 포함
+    // 7. 히스토리 컨텍스트를 LLM 프롬프트에 포함 (원본 메시지 사용)
     let queryWithContext = request.message;
     if (contextMessages.length > 0) {
       const historyContext = contextMessages
@@ -130,16 +162,17 @@ export async function processChat(
       queryWithContext = `[이전 대화]\n${historyContext}\n\n[현재 질문]\n${request.message}`;
     }
 
-    // 7. LLM 응답 생성
+    // 8. LLM 응답 생성
     const generateOptions: GenerateOptions = {
       temperature,
       maxTokens: maxTokens || (channel === 'kakao' ? 300 : 1024),
       channel,
+      isFirstTurn, // 첫 턴 여부 전달 (응답 스타일 조절)
     };
 
     const responseText = await generateResponse(queryWithContext, searchResults, generateOptions);
 
-    // 8. 메시지 저장
+    // 9. 메시지 저장
     const userMessage: ChatMessage = {
       role: 'user',
       content: request.message,
@@ -158,7 +191,7 @@ export async function processChat(
     await addMessageToConversation(tenantId, conversation.sessionId, userMessage);
     await addMessageToConversation(tenantId, conversation.sessionId, assistantMessage);
 
-    // 9. 사용량 기록 (토큰 추정)
+    // 10. 사용량 기록 (토큰 추정)
     const estimatedTokens = Math.ceil(responseText.length / 4);
     await updateUsageLog(tenantId, estimatedTokens);
 
@@ -166,7 +199,7 @@ export async function processChat(
       await incrementConversationCount(tenantId);
     }
 
-    // 10. 응답 캐싱 (좋은 품질의 응답만)
+    // 11. 응답 캐싱 (좋은 품질의 응답만)
     if (searchResults.length > 0 && searchResults[0].score > 0.7) {
       await cacheResponse(tenantId, request.message, responseText);
     }
