@@ -40,6 +40,7 @@ export const users = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     email: text('email').unique().notNull(),
+    name: text('name'), // 사용자 이름 (마이페이지용)
     passwordHash: text('password_hash').notNull(),
     tenantId: uuid('tenant_id').references(() => tenants.id, {
       onDelete: 'cascade',
@@ -59,6 +60,10 @@ export const users = pgTable(
     failedLoginCount: integer('failed_login_count').default(0),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+    // 계정 삭제 관련 (30일 유예)
+    deletedAt: timestamp('deleted_at', { withTimezone: true }), // 실제 삭제일
+    deleteScheduledAt: timestamp('delete_scheduled_at', { withTimezone: true }), // 삭제 예정일
+    deleteReason: text('delete_reason'), // 탈퇴 사유 (선택)
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },

@@ -43,6 +43,13 @@
       "when": 1767065013115,
       "tag": "0005_clear_praxagora",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1767073162910,
+      "tag": "0006_dusty_vindicator",
+      "breakpoints": true
     }
   ]
 }
