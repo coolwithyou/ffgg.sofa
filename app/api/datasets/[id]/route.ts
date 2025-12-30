@@ -18,6 +18,7 @@ const updateDatasetSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional(),
   status: z.enum(['active', 'archived']).optional(),
+  isDefault: z.boolean().optional(),
 });
 
 interface RouteParams {
@@ -137,6 +138,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (existingDataset.isDefault && updateData.status === 'archived') {
       return NextResponse.json(
         { error: '기본 데이터셋은 보관할 수 없습니다' },
+        { status: 400 }
+      );
+    }
+
+    // 기본 데이터셋 변경 시 기존 기본 데이터셋의 isDefault를 false로 설정
+    if (updateData.isDefault === true && !existingDataset.isDefault) {
+      await db
+        .update(datasets)
+        .set({ isDefault: false, updatedAt: new Date() })
+        .where(and(eq(datasets.tenantId, tenantId), eq(datasets.isDefault, true)));
+    }
+
+    // 기본 데이터셋을 해제하려는 경우 방지
+    if (updateData.isDefault === false && existingDataset.isDefault) {
+      return NextResponse.json(
+        { error: '기본 데이터셋은 다른 데이터셋을 기본으로 설정하여 변경할 수 있습니다' },
         { status: 400 }
       );
     }

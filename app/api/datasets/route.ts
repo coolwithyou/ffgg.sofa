@@ -60,6 +60,15 @@ export async function POST(request: NextRequest) {
 
     const { name, description } = parseResult.data;
 
+    // 기존 데이터셋 존재 여부 확인 (첫 번째 데이터셋이면 기본으로 설정)
+    const existingDatasets = await db
+      .select({ id: datasets.id })
+      .from(datasets)
+      .where(eq(datasets.tenantId, tenantId))
+      .limit(1);
+
+    const isFirstDataset = existingDatasets.length === 0;
+
     // 데이터셋 생성
     const [newDataset] = await db
       .insert(datasets)
@@ -67,7 +76,7 @@ export async function POST(request: NextRequest) {
         tenantId,
         name,
         description,
-        isDefault: false,
+        isDefault: isFirstDataset,
       })
       .returning();
 

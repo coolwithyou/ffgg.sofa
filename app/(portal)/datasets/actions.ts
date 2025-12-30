@@ -119,6 +119,51 @@ export async function updateDataset(
 }
 
 /**
+ * 기본 데이터셋 설정
+ */
+export async function setDefaultDataset(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await validateSession();
+  if (!session) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  try {
+    const [existing] = await db
+      .select()
+      .from(datasets)
+      .where(and(eq(datasets.id, id), eq(datasets.tenantId, session.tenantId)));
+
+    if (!existing) {
+      return { success: false, error: '데이터셋을 찾을 수 없습니다.' };
+    }
+
+    if (existing.isDefault) {
+      return { success: true }; // 이미 기본 데이터셋임
+    }
+
+    // 기존 기본 데이터셋 해제
+    await db
+      .update(datasets)
+      .set({ isDefault: false, updatedAt: new Date() })
+      .where(and(eq(datasets.tenantId, session.tenantId), eq(datasets.isDefault, true)));
+
+    // 새 기본 데이터셋 설정
+    await db
+      .update(datasets)
+      .set({ isDefault: true, updatedAt: new Date() })
+      .where(eq(datasets.id, id));
+
+    revalidatePath('/datasets');
+    return { success: true };
+  } catch (error) {
+    console.error('Set default dataset error:', error);
+    return { success: false, error: '기본 데이터셋 설정 중 오류가 발생했습니다.' };
+  }
+}
+
+/**
  * 데이터셋 삭제
  */
 export async function deleteDataset(

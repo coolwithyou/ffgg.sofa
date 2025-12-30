@@ -8,7 +8,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { FolderOpen, FileText, MoreVertical, Pencil, Trash2, Star } from 'lucide-react';
 import type { DatasetSummary } from './actions';
-import { deleteDataset, updateDataset } from './actions';
+import { deleteDataset, updateDataset, setDefaultDataset } from './actions';
 
 interface DatasetListProps {
   datasets: DatasetSummary[];
@@ -20,6 +20,7 @@ export function DatasetList({ datasets }: DatasetListProps) {
   const [editDescription, setEditDescription] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSettingDefault, setIsSettingDefault] = useState(false);
 
   const handleEdit = (dataset: DatasetSummary) => {
     setEditingId(dataset.id);
@@ -51,6 +52,17 @@ export function DatasetList({ datasets }: DatasetListProps) {
     setIsDeleting(true);
     const result = await deleteDataset(id);
     setIsDeleting(false);
+    setMenuOpenId(null);
+
+    if (!result.success) {
+      alert(result.error);
+    }
+  };
+
+  const handleSetDefault = async (id: string) => {
+    setIsSettingDefault(true);
+    const result = await setDefaultDataset(id);
+    setIsSettingDefault(false);
     setMenuOpenId(null);
 
     if (!result.success) {
@@ -160,7 +172,7 @@ export function DatasetList({ datasets }: DatasetListProps) {
                   </button>
 
                   {menuOpenId === dataset.id && (
-                    <div className="absolute right-0 top-full z-10 mt-1 w-36 rounded-lg border border-border bg-card py-1 shadow-lg">
+                    <div className="absolute right-0 top-full z-10 mt-1 w-40 rounded-lg border border-border bg-card py-1 shadow-lg">
                       <button
                         onClick={() => handleEdit(dataset)}
                         className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted"
@@ -169,14 +181,24 @@ export function DatasetList({ datasets }: DatasetListProps) {
                         수정
                       </button>
                       {!dataset.isDefault && (
-                        <button
-                          onClick={() => handleDelete(dataset.id)}
-                          disabled={isDeleting}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          삭제
-                        </button>
+                        <>
+                          <button
+                            onClick={() => handleSetDefault(dataset.id)}
+                            disabled={isSettingDefault}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted"
+                          >
+                            <Star className="h-4 w-4" />
+                            기본으로 설정
+                          </button>
+                          <button
+                            onClick={() => handleDelete(dataset.id)}
+                            disabled={isDeleting}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            삭제
+                          </button>
+                        </>
                       )}
                     </div>
                   )}
