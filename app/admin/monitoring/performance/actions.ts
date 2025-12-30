@@ -20,6 +20,18 @@ import { db } from '@/lib/db';
 import { chatbots, tenants } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
 
+/**
+ * periodStart를 ISO 문자열로 안전하게 변환
+ * PostgreSQL date_trunc()은 문자열로 반환될 수 있음
+ */
+function toISOString(value: Date | string): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  // 이미 문자열인 경우 Date로 파싱 후 변환
+  return new Date(value).toISOString();
+}
+
 export interface PerformanceDashboardData {
   overview: {
     avgMs: number;
@@ -103,13 +115,13 @@ export async function getPerformanceDashboardData(
         trendPercent,
       },
       trendData: trendData.map((t) => ({
-        periodStart: t.periodStart.toISOString(),
+        periodStart: toISOString(t.periodStart),
         avgMs: t.avgMs,
         p95Ms: t.p95Ms,
         requestCount: t.requestCount,
       })),
       realtimeTrend: realtimeTrend.map((t) => ({
-        periodStart: t.periodStart.toISOString(),
+        periodStart: toISOString(t.periodStart),
         avgMs: t.avgMs,
         p95Ms: t.p95Ms,
         requestCount: t.requestCount,
