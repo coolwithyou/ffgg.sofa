@@ -1,6 +1,10 @@
 /**
  * 로그인 API
  * POST /api/auth/login
+ *
+ * 2FA 지원:
+ * - totpRequired: true 반환 시 클라이언트가 TOTP 코드 재요청
+ * - totpToken 포함 시 2FA 검증 후 세션 생성
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -14,6 +18,7 @@ import {
   recordLoginAttempt,
   isPasswordChangeRequired,
 } from '@/lib/auth';
+import { verifyTotpToken } from '@/lib/auth/totp';
 import { withRateLimit } from '@/lib/middleware';
 import { ErrorCode, AppError, errorResponse } from '@/lib/errors';
 import { logLoginSuccess, logLoginFailure } from '@/lib/audit/logger';
@@ -21,6 +26,8 @@ import { logLoginSuccess, logLoginFailure } from '@/lib/audit/logger';
 const loginSchema = z.object({
   email: z.string().email('유효한 이메일 주소를 입력하세요.'),
   password: z.string().min(1, '비밀번호를 입력하세요.'),
+  totpToken: z.string().optional(), // 2FA 코드 (선택)
+  useBackupCode: z.boolean().optional(), // 백업 코드 사용 여부
 });
 
 export async function POST(request: NextRequest) {
@@ -42,7 +49,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { email, password } = parsed.data;
+    const { email, password, totpToken, useBackupCode } = parsed.data;
     const ipAddress =
       request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
       request.headers.get('x-real-ip') ||
@@ -108,10 +115,56 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 7. 로그인 성공 처리
+    // 7. 2FA 검증 (활성화된 경우)
+    if (user.totpEnabled && user.totpSecret) {
+      // TOTP 코드가 제공되지 않은 경우 - 2FA 필요 응답
+      if (!totpToken) {
+        return NextResponse.json({
+          success: false,
+          totpRequired: true,
+          message: '2단계 인증 코드를 입력해주세요.',
+        });
+      }
+
+      // 백업 코드 사용
+      if (useBackupCode && user.totpBackupCodes) {
+        const backupCodes = user.totpBackupCodes as string[];
+        const codeIndex = backupCodes.indexOf(totpToken);
+
+        if (codeIndex === -1) {
+          await logLoginFailure(request, email, 'invalid_backup_code');
+
+          return NextResponse.json(
+            { error: '유효하지 않은 백업 코드입니다.' },
+            { status: 401 }
+          );
+        }
+
+        // 사용된 백업 코드 제거
+        const newBackupCodes = backupCodes.filter((_, i) => i !== codeIndex);
+        await db
+          .update(users)
+          .set({ totpBackupCodes: newBackupCodes })
+          .where(eq(users.id, user.id));
+      } else {
+        // TOTP 코드 검증
+        const isValidTotp = verifyTotpToken(user.totpSecret, totpToken);
+
+        if (!isValidTotp) {
+          await logLoginFailure(request, email, 'invalid_totp');
+
+          return NextResponse.json(
+            { error: '유효하지 않은 인증 코드입니다.' },
+            { status: 401 }
+          );
+        }
+      }
+    }
+
+    // 8. 로그인 성공 처리
     await recordLoginAttempt(email, true, ipAddress);
 
-    // 8. 세션 생성
+    // 9. 세션 생성
     await createSession({
       userId: user.id,
       email: user.email,
@@ -119,10 +172,10 @@ export async function POST(request: NextRequest) {
       role: (user.role || 'user') as 'user' | 'admin' | 'internal_operator',
     });
 
-    // 9. 접속기록 로깅
+    // 10. 접속기록 로깅
     await logLoginSuccess(request, user.id, user.tenantId || undefined);
 
-    // 10. 비밀번호 변경 필요 여부 확인
+    // 11. 비밀번호 변경 필요 여부 확인
     const passwordChangeRequired = isPasswordChangeRequired(user.passwordChangedAt);
 
     return NextResponse.json({

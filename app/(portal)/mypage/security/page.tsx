@@ -2,10 +2,13 @@
 
 /**
  * 보안 탭
- * 비밀번호 변경 및 2FA 설정
+ * 비밀번호 변경, 2FA 설정, 로그인 기록, 세션 관리
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { TotpSetup } from '../components/totp-setup';
+import { LoginHistory } from '../components/login-history';
+import { ActiveSessions } from '../components/active-sessions';
 
 export default function SecurityPage() {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -16,6 +19,28 @@ export default function SecurityPage() {
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+  const [totpEnabled, setTotpEnabled] = useState(false);
+  const [totpLoading, setTotpLoading] = useState(true);
+
+  // 2FA 상태 조회
+  useEffect(() => {
+    fetchTotpStatus();
+  }, []);
+
+  const fetchTotpStatus = async () => {
+    try {
+      setTotpLoading(true);
+      const res = await fetch('/api/user/totp/status');
+      const data = await res.json();
+      if (res.ok) {
+        setTotpEnabled(data.enabled);
+      }
+    } catch {
+      // 에러 무시 - 기본값 false 유지
+    } finally {
+      setTotpLoading(false);
+    }
+  };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,40 +181,21 @@ export default function SecurityPage() {
       </div>
 
       {/* 2단계 인증 (2FA) */}
-      <div className="rounded-lg border border-border bg-card p-6">
-        <h2 className="mb-2 text-lg font-semibold text-foreground">
-          2단계 인증 (2FA)
-        </h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          TOTP 앱(Google Authenticator 등)을 사용하여 계정 보안을 강화하세요.
-        </p>
-
-        <div className="flex items-center justify-between rounded-lg bg-muted/50 p-4">
-          <div>
-            <p className="font-medium text-foreground">2단계 인증</p>
-            <p className="text-sm text-muted-foreground">비활성화됨</p>
+      {totpLoading ? (
+        <div className="rounded-lg border border-border bg-card p-6">
+          <div className="flex items-center justify-center py-8">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
-          <button
-            onClick={() => {
-              // TODO: 2FA 설정 다이얼로그 표시
-              alert('2FA 설정 기능은 곧 구현됩니다');
-            }}
-            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
-          >
-            설정하기
-          </button>
         </div>
-      </div>
+      ) : (
+        <TotpSetup isEnabled={totpEnabled} onStatusChange={fetchTotpStatus} />
+      )}
+
+      {/* 활성 세션 */}
+      <ActiveSessions />
 
       {/* 로그인 기록 */}
-      <div className="rounded-lg border border-border bg-card p-6">
-        <h2 className="mb-4 text-lg font-semibold text-foreground">
-          로그인 기록
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          로그인 기록 조회 기능은 곧 제공될 예정입니다.
-        </p>
-      </div>
+      <LoginHistory />
     </div>
   );
 }

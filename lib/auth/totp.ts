@@ -78,7 +78,8 @@ export function verifyTotpToken(secret: string, token: string): boolean {
 export async function enableTotpForUser(
   userId: string,
   secret: string,
-  token: string
+  token: string,
+  backupCodes: string[]
 ): Promise<{ success: boolean; error?: string }> {
   // 토큰 검증
   if (!verifyTotpToken(secret, token)) {
@@ -91,8 +92,9 @@ export async function enableTotpForUser(
     await db
       .update(users)
       .set({
-        // totpSecret과 totpEnabled 필드가 스키마에 추가되어야 함
-        // 현재는 임시로 metadata에 저장
+        totpSecret: secret,
+        totpEnabled: true,
+        totpBackupCodes: backupCodes,
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId));
@@ -152,6 +154,9 @@ export async function disableTotpForUser(userId: string): Promise<boolean> {
     await db
       .update(users)
       .set({
+        totpSecret: null,
+        totpEnabled: false,
+        totpBackupCodes: null,
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId));
