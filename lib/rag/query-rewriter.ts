@@ -6,7 +6,7 @@
  */
 
 import { ChatMessage } from '@/lib/chat/types';
-import { generateWithFallback } from './generator';
+import { generateWithFallback, type TrackingContext } from './generator';
 import { logger } from '@/lib/logger';
 
 export interface QueryRewriteOptions {
@@ -16,6 +16,8 @@ export interface QueryRewriteOptions {
   temperature?: number;
   /** 최대 출력 토큰 수 (기본: 150) */
   maxTokens?: number;
+  /** 토큰 사용량 추적을 위한 컨텍스트 */
+  trackingContext?: TrackingContext;
 }
 
 const REWRITE_SYSTEM_PROMPT = `당신은 대화 맥락을 고려하여 후속 질문을 재작성하는 전문가입니다.
@@ -58,7 +60,7 @@ export async function rewriteQuery(
     return currentQuery;
   }
 
-  const { maxHistoryMessages = 4, temperature = 0.3, maxTokens = 150 } = options;
+  const { maxHistoryMessages = 4, temperature = 0.3, maxTokens = 150, trackingContext } = options;
 
   try {
     // 최근 N개 메시지만 사용
@@ -78,6 +80,9 @@ ${currentQuery}
     const rewritten = await generateWithFallback(REWRITE_SYSTEM_PROMPT, userPrompt, {
       temperature,
       maxTokens,
+      trackingContext: trackingContext
+        ? { ...trackingContext, featureType: 'rewrite' }
+        : undefined,
     });
 
     const result = rewritten.trim();

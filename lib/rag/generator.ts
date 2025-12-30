@@ -11,6 +11,14 @@ import { trackTokenUsage } from '@/lib/usage/token-tracker';
 import { SearchResult } from './retrieval';
 import type { ModelProvider, ModelId, FeatureType } from '@/lib/usage/types';
 
+/** 토큰 사용량 추적을 위한 컨텍스트 */
+export interface TrackingContext {
+  tenantId: string;
+  chatbotId?: string;
+  conversationId?: string;
+  featureType?: FeatureType;
+}
+
 export interface GenerateOptions {
   maxTokens?: number;
   temperature?: number;
@@ -18,12 +26,7 @@ export interface GenerateOptions {
   /** 첫 번째 턴 여부 (기본: true). false면 간결한 응답 생성 */
   isFirstTurn?: boolean;
   /** 토큰 추적용 컨텍스트 */
-  trackingContext?: {
-    tenantId: string;
-    chatbotId?: string;
-    conversationId?: string;
-    featureType?: FeatureType;
-  };
+  trackingContext?: TrackingContext;
 }
 
 interface LLMProviderResult {

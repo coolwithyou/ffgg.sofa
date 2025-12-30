@@ -6,7 +6,7 @@
 import { db } from '@/lib/db';
 import { chunks } from '@/drizzle/schema';
 import { sql, eq, and } from 'drizzle-orm';
-import { embedText } from './embedding';
+import { embedText, type EmbeddingTrackingContext } from './embedding';
 import { logger } from '@/lib/logger';
 
 export interface SearchResult {
@@ -35,14 +35,15 @@ const RRF_K = 60; // Reciprocal Rank Fusion 상수
 export async function hybridSearch(
   tenantId: string,
   query: string,
-  limit: number = DEFAULT_LIMIT
+  limit: number = DEFAULT_LIMIT,
+  trackingContext?: EmbeddingTrackingContext
 ): Promise<SearchResult[]> {
   const startTime = Date.now();
 
   try {
     // 병렬로 두 검색 수행
     const [denseResults, sparseResults] = await Promise.all([
-      denseSearch(tenantId, query, limit * 2),
+      denseSearch(tenantId, query, limit * 2, trackingContext),
       sparseSearch(tenantId, query, limit * 2),
     ]);
 
@@ -82,7 +83,8 @@ export async function hybridSearchMultiDataset(
   tenantId: string,
   datasetIds: string[],
   query: string,
-  limit: number = DEFAULT_LIMIT
+  limit: number = DEFAULT_LIMIT,
+  trackingContext?: EmbeddingTrackingContext
 ): Promise<SearchResult[]> {
   const startTime = Date.now();
 
@@ -94,7 +96,7 @@ export async function hybridSearchMultiDataset(
   try {
     // 병렬로 두 검색 수행
     const [denseResults, sparseResults] = await Promise.all([
-      denseSearchMultiDataset(tenantId, datasetIds, query, limit * 2),
+      denseSearchMultiDataset(tenantId, datasetIds, query, limit * 2, trackingContext),
       sparseSearchMultiDataset(tenantId, datasetIds, query, limit * 2),
     ]);
 
@@ -133,11 +135,12 @@ export async function hybridSearchMultiDataset(
 async function denseSearch(
   tenantId: string,
   query: string,
-  limit: number
+  limit: number,
+  trackingContext?: EmbeddingTrackingContext
 ): Promise<SearchResult[]> {
   try {
     // 쿼리 임베딩 생성
-    const queryEmbedding = await embedText(query);
+    const queryEmbedding = await embedText(query, trackingContext);
     const embeddingStr = `[${queryEmbedding.join(',')}]`;
 
     // pgvector 코사인 유사도 검색
@@ -239,11 +242,12 @@ async function denseSearchMultiDataset(
   tenantId: string,
   datasetIds: string[],
   query: string,
-  limit: number
+  limit: number,
+  trackingContext?: EmbeddingTrackingContext
 ): Promise<SearchResult[]> {
   try {
     // 쿼리 임베딩 생성
-    const queryEmbedding = await embedText(query);
+    const queryEmbedding = await embedText(query, trackingContext);
     const embeddingStr = `[${queryEmbedding.join(',')}]`;
     const datasetIdsArray = `{${datasetIds.join(',')}}`;
 
