@@ -114,10 +114,65 @@ Query Rewriting은 이미 최적화되어 있음:
 }
 ```
 
+## 데이터셋 확장 대비: 인덱스 최적화
+
+데이터셋이 커질 경우 병목이 발생하는 지점과 해결책입니다.
+
+### 병목 분석
+
+| 컴포넌트 | 인덱스 없을 때 | 인덱스 적용 후 | 비고 |
+|---------|--------------|--------------|------|
+| Dense Search (pgvector) | O(n) - 10만 청크에서 5-10초 | O(log n) - ~50ms | **HNSW 인덱스 필수** |
+| Sparse Search (BM25) | O(n) | O(log n) | GIN 인덱스 필요 |
+| 필터링 (tenant + status) | 전체 스캔 | 인덱스 스캔 | 복합 인덱스 권장 |
+
+### 적용된 인덱스 (마이그레이션 0010)
+
+**파일**: [drizzle/migrations/0010_vector_search_performance_indexes.sql](../drizzle/migrations/0010_vector_search_performance_indexes.sql)
+
+#### 1. pgvector HNSW 인덱스 (가장 중요)
+
+```sql
+CREATE INDEX CONCURRENTLY idx_chunks_embedding_hnsw
+ON chunks USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
+```
+
+- **효과**: 벡터 검색 O(n) → O(log n)
+- **예상 성능**: 10만 청크에서 5초 → 50ms
+
+#### 2. GIN 인덱스 (전문 검색)
+
+```sql
+CREATE INDEX CONCURRENTLY idx_chunks_content_tsv_gin
+ON chunks USING GIN (content_tsv);
+```
+
+- **효과**: BM25 전문 검색 최적화
+
+#### 3. 복합 Partial 인덱스
+
+```sql
+CREATE INDEX CONCURRENTLY idx_chunks_tenant_approved_active
+ON chunks (tenant_id, dataset_id)
+WHERE status = 'approved' AND is_active = true;
+```
+
+- **효과**: 가장 빈번한 쿼리 패턴 최적화
+
+### 인덱스 적용 방법
+
+```bash
+# 마이그레이션 실행
+pnpm db:migrate
+```
+
+> ⚠️ HNSW 인덱스는 데이터 크기에 따라 수 분 소요될 수 있습니다. `CONCURRENTLY` 옵션으로 서비스 중단 없이 생성됩니다.
+
 ## 향후 최적화 방안
 
 ### 단기
-1. **Hybrid Search 병렬 최적화**: Dense/Sparse 검색 결과 스트리밍
+1. ~~**벡터 인덱스 추가**~~: ✅ 완료 (HNSW 인덱스)
 2. **DB 커넥션 풀 최적화**: 연결 재사용 효율화
 
 ### 중기
