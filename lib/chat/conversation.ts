@@ -30,6 +30,7 @@ export async function getOrCreateConversation(
   if (existing.length > 0) {
     const conv = existing[0];
     return {
+      id: conv.id, // UUID 반환
       tenantId,
       sessionId: sid,
       channel: conv.channel as 'web' | 'kakao',
@@ -37,17 +38,20 @@ export async function getOrCreateConversation(
     };
   }
 
-  // 새 대화 생성
-  await db.insert(conversations).values({
-    tenantId,
-    sessionId: sid,
-    channel,
-    messages: [],
-    metadata: {
-      createdVia: channel,
-      userAgent: null, // API에서 설정
-    },
-  });
+  // 새 대화 생성 (returning으로 생성된 ID 받기)
+  const [newConv] = await db
+    .insert(conversations)
+    .values({
+      tenantId,
+      sessionId: sid,
+      channel,
+      messages: [],
+      metadata: {
+        createdVia: channel,
+        userAgent: null, // API에서 설정
+      },
+    })
+    .returning({ id: conversations.id });
 
   logger.info('New conversation created', {
     tenantId,
@@ -56,6 +60,7 @@ export async function getOrCreateConversation(
   });
 
   return {
+    id: newConv.id, // UUID 반환
     tenantId,
     sessionId: sid,
     channel,

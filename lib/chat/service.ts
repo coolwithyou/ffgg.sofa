@@ -16,6 +16,7 @@ import {
 } from './conversation';
 import { findCachedResponse, cacheResponse } from './cache';
 import { getChatbotDatasetIds, getDefaultChatbot, getChatbot } from './chatbot';
+import { trackResponseTime, trackCacheHitResponseTime } from '@/lib/performance/response-tracker';
 import type { ChatMessage, ChatRequest, ChatResponse, ChatOptions } from './types';
 
 /**
@@ -27,6 +28,9 @@ export async function processChat(
   options: ChatOptions = {}
 ): Promise<ChatResponse> {
   const startTime = Date.now();
+  const timings: Record<string, number> = {};
+  let stepStart = Date.now();
+
   const {
     maxChunks = 3,
     temperature = 0.7,
@@ -39,10 +43,12 @@ export async function processChat(
 
   try {
     // 1. 챗봇 조회 (chatbotId가 없으면 기본 챗봇 사용)
+    stepStart = Date.now();
     let chatbotId = request.chatbotId;
     let chatbot = chatbotId
       ? await getChatbot(chatbotId, tenantId)
       : await getDefaultChatbot(tenantId);
+    timings['1_chatbot_lookup'] = Date.now() - stepStart;
 
     if (!chatbot) {
       logger.warn('No chatbot found, using default settings', { tenantId, chatbotId });
@@ -61,11 +67,15 @@ export async function processChat(
     }
 
     // 2. 대화 세션 조회/생성
+    stepStart = Date.now();
     const conversation = await getOrCreateConversation(tenantId, request.sessionId, channel);
     const isNewConversation = conversation.messages.length === 0;
+    timings['2_session_lookup'] = Date.now() - stepStart;
 
     // 3. 캐시 확인
+    stepStart = Date.now();
     const cacheResult = await findCachedResponse(tenantId, request.message);
+    timings['3_cache_lookup'] = Date.now() - stepStart;
 
     if (cacheResult.hit && cacheResult.response) {
       // 캐시된 응답 사용
@@ -88,11 +98,23 @@ export async function processChat(
         await incrementConversationCount(tenantId);
       }
 
+      const cacheDuration = Date.now() - startTime;
       logger.info('Chat response from cache', {
         tenantId,
         sessionId: conversation.sessionId,
-        duration: Date.now() - startTime,
+        duration: cacheDuration,
+        timings,
       });
+
+      // 캐시 히트 응답 시간 추적 (비동기, Fire-and-Forget)
+      trackCacheHitResponseTime({
+        tenantId,
+        chatbotId: chatbotId ?? undefined,
+        conversationId: conversation.id, // UUID 사용
+        channel,
+        totalDurationMs: cacheDuration,
+        cacheLookupMs: timings['3_cache_lookup'] ?? 0,
+      }).catch(() => {});
 
       return {
         message: cacheResult.response,
@@ -102,10 +124,12 @@ export async function processChat(
     }
 
     // 4. 대화 히스토리 조회
+    stepStart = Date.now();
     let contextMessages: ChatMessage[] = [];
     if (includeHistory && conversation.messages.length > 0) {
       contextMessages = await getConversationHistory(tenantId, conversation.sessionId, historyLimit);
     }
+    timings['4_history_lookup'] = Date.now() - stepStart;
 
     // 5. Query Rewriting (후속 질문인 경우 맥락 반영)
     // 대화 맥락을 반영한 검색 쿼리 생성 (예: "아들 이름은?" → "성문희의 아들 이름은?")
@@ -113,11 +137,18 @@ export async function processChat(
     let searchQuery = request.message;
 
     if (!isFirstTurn) {
+      stepStart = Date.now();
       try {
         searchQuery = await rewriteQuery(request.message, contextMessages, {
           maxHistoryMessages: historyLimit,
           temperature: 0.3,
           maxTokens: 150,
+          trackingContext: {
+            tenantId,
+            chatbotId: chatbotId ?? undefined,
+            conversationId: conversation.id, // UUID 사용
+            featureType: 'rewrite',
+          },
         });
 
         if (searchQuery !== request.message) {
@@ -136,22 +167,26 @@ export async function processChat(
         });
         searchQuery = request.message;
       }
+      timings['5_query_rewriting'] = Date.now() - stepStart;
     }
 
     // 6. Hybrid Search로 관련 청크 검색 (재작성된 쿼리 사용)
     // 챗봇이 있으면 연결된 데이터셋에서만 검색, 없으면 전체 검색
+    stepStart = Date.now();
+    const embeddingTrackingContext = { tenantId, chatbotId: chatbotId ?? undefined };
     let searchResults;
     if (chatbotId) {
       const datasetIds = await getChatbotDatasetIds(chatbotId);
       if (datasetIds.length > 0) {
-        searchResults = await hybridSearchMultiDataset(tenantId, datasetIds, searchQuery, maxChunks);
+        searchResults = await hybridSearchMultiDataset(tenantId, datasetIds, searchQuery, maxChunks, embeddingTrackingContext);
       } else {
         logger.warn('Chatbot has no linked datasets, falling back to tenant search', { chatbotId });
-        searchResults = await hybridSearch(tenantId, searchQuery, maxChunks);
+        searchResults = await hybridSearch(tenantId, searchQuery, maxChunks, embeddingTrackingContext);
       }
     } else {
-      searchResults = await hybridSearch(tenantId, searchQuery, maxChunks);
+      searchResults = await hybridSearch(tenantId, searchQuery, maxChunks, embeddingTrackingContext);
     }
+    timings['6_hybrid_search'] = Date.now() - stepStart;
 
     // 7. 히스토리 컨텍스트를 LLM 프롬프트에 포함 (원본 메시지 사용)
     let queryWithContext = request.message;
@@ -163,16 +198,25 @@ export async function processChat(
     }
 
     // 8. LLM 응답 생성
+    stepStart = Date.now();
     const generateOptions: GenerateOptions = {
       temperature,
       maxTokens: maxTokens || (channel === 'kakao' ? 300 : 1024),
       channel,
       isFirstTurn, // 첫 턴 여부 전달 (응답 스타일 조절)
+      trackingContext: {
+        tenantId,
+        chatbotId: chatbotId ?? undefined,
+        conversationId: conversation.id, // UUID 사용
+        featureType: 'chat',
+      },
     };
 
     const responseText = await generateResponse(queryWithContext, searchResults, generateOptions);
+    timings['8_llm_generation'] = Date.now() - stepStart;
 
     // 9. 메시지 저장
+    stepStart = Date.now();
     const userMessage: ChatMessage = {
       role: 'user',
       content: request.message,
@@ -190,19 +234,24 @@ export async function processChat(
 
     await addMessageToConversation(tenantId, conversation.sessionId, userMessage);
     await addMessageToConversation(tenantId, conversation.sessionId, assistantMessage);
+    timings['9_message_save'] = Date.now() - stepStart;
 
     // 10. 사용량 기록 (토큰 추정)
+    stepStart = Date.now();
     const estimatedTokens = Math.ceil(responseText.length / 4);
     await updateUsageLog(tenantId, estimatedTokens);
 
     if (isNewConversation) {
       await incrementConversationCount(tenantId);
     }
+    timings['10_usage_log'] = Date.now() - stepStart;
 
     // 11. 응답 캐싱 (좋은 품질의 응답만)
+    stepStart = Date.now();
     if (searchResults.length > 0 && searchResults[0].score > 0.7) {
       await cacheResponse(tenantId, request.message, responseText);
     }
+    timings['11_cache_save'] = Date.now() - stepStart;
 
     const duration = Date.now() - startTime;
     logger.info('Chat response generated', {
@@ -212,7 +261,21 @@ export async function processChat(
       chunksUsed: searchResults.length,
       estimatedTokens,
       duration,
+      timings,
     });
+
+    // 응답 시간 추적 (비동기, Fire-and-Forget)
+    trackResponseTime({
+      tenantId,
+      chatbotId: chatbotId ?? undefined,
+      conversationId: conversation.id, // UUID 사용
+      channel,
+      totalDurationMs: duration,
+      timings,
+      cacheHit: false,
+      chunksUsed: searchResults.length,
+      estimatedTokens,
+    }).catch(() => {});
 
     return {
       message: responseText,

@@ -33,6 +33,7 @@ export interface ChatResponse {
 }
 
 export interface ConversationContext {
+  id: string; // UUID - DB 기본 키 (토큰 추적용)
   tenantId: string;
   sessionId: string;
   channel: 'web' | 'kakao';
