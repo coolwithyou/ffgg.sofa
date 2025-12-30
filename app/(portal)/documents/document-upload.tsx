@@ -4,11 +4,19 @@
  * 문서 업로드 컴포넌트
  * [Week 9] 드래그앤드롭 파일 업로드
  * [Week 13] 업로드 전 미리보기 기능 추가
+ * [Week 14] 데이터셋 선택 기능 추가
  */
 
-import { useState, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ChevronDown, Database } from 'lucide-react';
 import { PreviewModal } from './preview-modal';
+
+interface DatasetOption {
+  id: string;
+  name: string;
+  isDefault: boolean;
+}
 
 const ALLOWED_TYPES = [
   'application/pdf',
@@ -61,6 +69,7 @@ interface PreviewData {
 
 export function DocumentUpload() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState>({
@@ -68,10 +77,55 @@ export function DocumentUpload() {
     progress: 0,
   });
 
+  // 데이터셋 선택 상태
+  const [datasets, setDatasets] = useState<DatasetOption[]>([]);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
+  const [showDatasetDropdown, setShowDatasetDropdown] = useState(false);
+  const [isLoadingDatasets, setIsLoadingDatasets] = useState(true);
+
   // 미리보기 관련 상태
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+
+  // 데이터셋 목록 로드
+  useEffect(() => {
+    async function fetchDatasets() {
+      try {
+        const response = await fetch('/api/datasets');
+        if (response.ok) {
+          const data = await response.json();
+          setDatasets(data.datasets || []);
+
+          // URL 파라미터에 datasetId가 있으면 해당 데이터셋 선택
+          const urlDatasetId = searchParams.get('datasetId');
+          if (urlDatasetId) {
+            const exists = data.datasets?.some((d: DatasetOption) => d.id === urlDatasetId);
+            if (exists) {
+              setSelectedDatasetId(urlDatasetId);
+            }
+          }
+
+          // 없으면 기본 데이터셋 선택
+          if (!selectedDatasetId) {
+            const defaultDataset = data.datasets?.find((d: DatasetOption) => d.isDefault);
+            if (defaultDataset) {
+              setSelectedDatasetId(defaultDataset.id);
+            } else if (data.datasets?.length > 0) {
+              setSelectedDatasetId(data.datasets[0].id);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch datasets:', err);
+      } finally {
+        setIsLoadingDatasets(false);
+      }
+    }
+    fetchDatasets();
+  }, [searchParams]);
+
+  const selectedDataset = datasets.find((d) => d.id === selectedDatasetId);
 
   const validateFile = (file: File): string | null => {
     // MIME 타입 또는 확장자로 검증
@@ -137,6 +191,9 @@ export function DocumentUpload() {
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
+      if (selectedDatasetId) {
+        formData.append('datasetId', selectedDatasetId);
+      }
 
       const response = await fetch('/api/documents/upload', {
         method: 'POST',
@@ -170,7 +227,7 @@ export function DocumentUpload() {
         message: error instanceof Error ? error.message : '업로드에 실패했습니다.',
       });
     }
-  }, [selectedFile, router]);
+  }, [selectedFile, selectedDatasetId, router]);
 
   const handleClosePreview = useCallback(() => {
     setShowPreview(false);
@@ -220,6 +277,74 @@ export function DocumentUpload() {
 
   return (
     <>
+      {/* 데이터셋 선택 */}
+      <div className="mb-4">
+        <label className="mb-2 block text-sm font-medium text-foreground">
+          업로드할 데이터셋
+        </label>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowDatasetDropdown(!showDatasetDropdown)}
+            disabled={isLoadingDatasets || datasets.length === 0}
+            className="flex w-full items-center justify-between rounded-md border border-border bg-background px-4 py-2.5 text-left text-sm text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <div className="flex items-center gap-2">
+              <Database className="h-4 w-4 text-muted-foreground" />
+              {isLoadingDatasets ? (
+                <span className="text-muted-foreground">로딩 중...</span>
+              ) : selectedDataset ? (
+                <span>
+                  {selectedDataset.name}
+                  {selectedDataset.isDefault && (
+                    <span className="ml-2 text-xs text-muted-foreground">(기본)</span>
+                  )}
+                </span>
+              ) : datasets.length === 0 ? (
+                <span className="text-muted-foreground">데이터셋이 없습니다</span>
+              ) : (
+                <span className="text-muted-foreground">데이터셋 선택</span>
+              )}
+            </div>
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          </button>
+
+          {showDatasetDropdown && datasets.length > 0 && (
+            <div className="absolute z-10 mt-1 w-full rounded-md border border-border bg-card shadow-lg">
+              <div className="max-h-60 overflow-auto py-1">
+                {datasets.map((dataset) => (
+                  <button
+                    key={dataset.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedDatasetId(dataset.id);
+                      setShowDatasetDropdown(false);
+                    }}
+                    className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-muted ${
+                      selectedDatasetId === dataset.id
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-foreground'
+                    }`}
+                  >
+                    <Database className="h-4 w-4" />
+                    <span>{dataset.name}</span>
+                    {dataset.isDefault && (
+                      <span className="ml-auto text-xs text-muted-foreground">(기본)</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        {datasets.length === 0 && !isLoadingDatasets && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            먼저 <a href="/datasets" className="text-primary hover:underline">데이터셋을 생성</a>하세요.
+          </p>
+        )}
+      </div>
+
+      {/* 드래그 앤 드롭 영역 */}
       <div
         onClick={handleClick}
         onDragOver={handleDragOver}
@@ -229,6 +354,7 @@ export function DocumentUpload() {
           relative cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors
           ${isDragging ? 'border-primary bg-primary/5' : 'border-border bg-card hover:border-muted-foreground'}
           ${uploadState.status === 'uploading' || uploadState.status === 'previewing' ? 'pointer-events-none' : ''}
+          ${datasets.length === 0 ? 'pointer-events-none opacity-50' : ''}
         `}
       >
         <input
@@ -237,6 +363,7 @@ export function DocumentUpload() {
           accept=".pdf,.txt,.md,.csv,.docx,application/pdf,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           onChange={handleFileSelect}
           className="hidden"
+          disabled={datasets.length === 0}
         />
 
         {uploadState.status === 'idle' && (
