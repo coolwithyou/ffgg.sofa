@@ -9,7 +9,12 @@ import { useState, useRef, useEffect, useTransition } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { sendTestMessage, type ChatMessage } from './actions';
 
-export function ChatInterface() {
+interface ChatInterfaceProps {
+  chatbotId: string;
+  chatbotName: string;
+}
+
+export function ChatInterface({ chatbotId, chatbotName }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isPending, startTransition] = useTransition();
@@ -43,7 +48,7 @@ export function ChatInterface() {
     setInput('');
 
     startTransition(async () => {
-      const result = await sendTestMessage(currentInput, sessionId);
+      const result = await sendTestMessage(currentInput, sessionId, chatbotId);
 
       if (result.success && result.message) {
         setMessages((prev) => [...prev, result.message!]);
@@ -79,7 +84,8 @@ export function ChatInterface() {
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-green-500" />
-          <span className="text-sm font-medium text-foreground">챗봇 테스트 모드</span>
+          <span className="text-sm font-medium text-foreground">{chatbotName}</span>
+          <span className="text-xs text-muted-foreground">테스트 모드</span>
         </div>
         {messages.length > 0 && (
           <button
