@@ -13,6 +13,11 @@ import { logger } from '@/lib/logger';
 const CACHE_TTL_HOURS = 24; // 캐시 만료 시간 (시간)
 const SIMILARITY_THRESHOLD = 0.92; // 유사도 임계값 (92% 이상)
 
+// 캐시 유사도 검색 비활성화 (성능 최적화)
+// 임베딩 생성에 ~800ms가 소요되어 캐시 이점이 상쇄됨
+// 해시 기반 정확 매칭만 사용하여 ~800ms 절감
+const ENABLE_SIMILARITY_SEARCH = false;
+
 export interface CacheResult {
   hit: boolean;
   response?: string;
@@ -59,8 +64,14 @@ export async function findCachedResponse(
       };
     }
 
-    // 2. 임베딩 기반 유사도 검색 (느린 경로)
+    // 2. 임베딩 기반 유사도 검색 (비활성화 시 스킵)
+    // 임베딩 생성에 ~800ms가 소요되어 캐시 이점이 상쇄됨
+    if (!ENABLE_SIMILARITY_SEARCH) {
+      return { hit: false };
+    }
+
     const queryEmbedding = await embedText(query);
+    const embeddingStr = `[${queryEmbedding.join(',')}]`;
 
     // 유효한 캐시 중 가장 유사한 것 검색
     const similarResults = await db.execute<{
@@ -73,7 +84,7 @@ export async function findCachedResponse(
       WHERE tenant_id = ${tenantId}
         AND expires_at > NOW()
         AND query_embedding IS NOT NULL
-      ORDER BY query_embedding <=> ${queryEmbedding}::vector
+      ORDER BY query_embedding <=> ${embeddingStr}::vector
       LIMIT 5
     `);
 
@@ -113,6 +124,7 @@ export async function findCachedResponse(
 
 /**
  * 응답을 캐시에 저장
+ * ENABLE_SIMILARITY_SEARCH=false일 때 임베딩 생성 스킵 (~800ms 절감)
  */
 export async function cacheResponse(
   tenantId: string,
@@ -121,8 +133,10 @@ export async function cacheResponse(
 ): Promise<void> {
   try {
     const queryHash = hashQuery(query);
-    const queryEmbedding = await embedText(query);
     const expiresAt = new Date(Date.now() + CACHE_TTL_HOURS * 60 * 60 * 1000);
+
+    // 유사도 검색 비활성화 시 임베딩 생성 스킵
+    const queryEmbedding = ENABLE_SIMILARITY_SEARCH ? await embedText(query) : null;
 
     await db
       .insert(responseCache)
