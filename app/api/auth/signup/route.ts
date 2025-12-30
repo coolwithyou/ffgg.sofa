@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { db, users, tenants } from '@/lib/db';
+import { db, users, tenants, datasets } from '@/lib/db';
 import { eq } from 'drizzle-orm';
 import { hashPassword, passwordSchema } from '@/lib/auth';
 import { withRateLimit } from '@/lib/middleware';
@@ -112,7 +112,15 @@ export async function POST(request: NextRequest) {
       passwordChangedAt: new Date(),
     });
 
-    // 6. 이메일 인증 발송
+    // 6. 기본 데이터셋 생성
+    await db.insert(datasets).values({
+      tenantId,
+      name: '기본 데이터셋',
+      description: '문서를 업로드하면 자동으로 이 데이터셋에 저장됩니다.',
+      isDefault: true,
+    });
+
+    // 7. 이메일 인증 발송
     const emailResult = await sendVerificationEmail({
       to: email,
       token: emailVerificationToken,
