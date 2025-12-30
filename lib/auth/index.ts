@@ -13,6 +13,9 @@ export {
   getCurrentUserId,
   getCurrentTenantId,
   isAdmin,
+  extendSession,
+  SESSION_TTL,
+  SESSION_EXTEND_AMOUNT,
   type SessionData,
 } from './session';
 

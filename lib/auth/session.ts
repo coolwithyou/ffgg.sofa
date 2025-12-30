@@ -1,6 +1,6 @@
 /**
  * iron-session 기반 세션 관리
- * [C-006] 세션 타임아웃 30분 설정
+ * [C-006] 세션 타임아웃 300분 설정 (5시간)
  */
 
 import { getIronSession, SessionOptions } from 'iron-session';
@@ -15,6 +15,7 @@ export interface SessionData {
   isLoggedIn: boolean;
   createdAt: number; // 세션 생성 시간 (timestamp)
   lastActivityAt: number; // 마지막 활동 시간
+  expiresAt: number; // 세션 만료 시간 (Unix timestamp, 초 단위)
 }
 
 // 세션 기본값
@@ -26,10 +27,15 @@ const defaultSession: SessionData = {
   isLoggedIn: false,
   createdAt: 0,
   lastActivityAt: 0,
+  expiresAt: 0,
 };
 
 // 세션 설정
-const SESSION_TTL = 30 * 60; // 30분 (초 단위)
+const SESSION_TTL = 300 * 60; // 300분 (5시간, 초 단위)
+const SESSION_EXTEND_AMOUNT = 60 * 60; // 60분 연장 (초 단위)
+
+// 외부에서 TTL 조회용 export
+export { SESSION_TTL, SESSION_EXTEND_AMOUNT };
 
 // 개발용 기본 비밀번호 (32자 이상 필요)
 const DEV_SESSION_PASSWORD = 'dev_session_password_must_be_32_chars_long';
@@ -86,11 +92,12 @@ export async function getSession(): Promise<SessionData> {
 /**
  * 세션 생성 (로그인 시)
  */
-export async function createSession(data: Omit<SessionData, 'isLoggedIn' | 'createdAt' | 'lastActivityAt'>): Promise<void> {
+export async function createSession(data: Omit<SessionData, 'isLoggedIn' | 'createdAt' | 'lastActivityAt' | 'expiresAt'>): Promise<void> {
   const cookieStore = await cookies();
   const session = await getIronSession<SessionData>(cookieStore, sessionOptions);
 
   const now = Date.now();
+  const nowSeconds = Math.floor(now / 1000);
 
   session.userId = data.userId;
   session.email = data.email;
@@ -99,6 +106,7 @@ export async function createSession(data: Omit<SessionData, 'isLoggedIn' | 'crea
   session.isLoggedIn = true;
   session.createdAt = now;
   session.lastActivityAt = now;
+  session.expiresAt = nowSeconds + SESSION_TTL; // 300분 후 만료
 
   await session.save();
 }
@@ -123,7 +131,7 @@ export async function refreshSession(): Promise<SessionData | null> {
 
 /**
  * 세션 유효성 검사
- * [C-006] 30분 타임아웃 체크
+ * [C-006] expiresAt 기준 만료 체크
  */
 export async function validateSession(): Promise<SessionData | null> {
   const session = await getSession();
@@ -132,14 +140,22 @@ export async function validateSession(): Promise<SessionData | null> {
     return null;
   }
 
-  const now = Date.now();
-  const lastActivity = session.lastActivityAt;
-  const sessionTimeout = SESSION_TTL * 1000; // ms로 변환
+  const nowSeconds = Math.floor(Date.now() / 1000);
 
-  // 30분 이상 비활성 시 세션 무효화
-  if (now - lastActivity > sessionTimeout) {
+  // expiresAt 기준 만료 체크
+  if (session.expiresAt && nowSeconds >= session.expiresAt) {
     await destroySession();
     return null;
+  }
+
+  // 기존 세션 호환성: expiresAt이 없는 경우 lastActivityAt 기반 체크
+  if (!session.expiresAt) {
+    const lastActivity = session.lastActivityAt;
+    const sessionTimeout = SESSION_TTL * 1000; // ms로 변환
+    if (Date.now() - lastActivity > sessionTimeout) {
+      await destroySession();
+      return null;
+    }
   }
 
   return session;
@@ -185,4 +201,32 @@ export async function getCurrentTenantId(): Promise<string | null> {
 export async function isAdmin(): Promise<boolean> {
   const session = await validateSession();
   return session?.role === 'admin' || session?.role === 'internal_operator';
+}
+
+/**
+ * 세션 연장 (60분 추가)
+ * @returns 새로운 만료 시간 또는 null (세션 없음)
+ */
+export async function extendSession(): Promise<{ expiresAt: number } | null> {
+  const cookieStore = await cookies();
+  const session = await getIronSession<SessionData>(cookieStore, sessionOptions);
+
+  if (!session.isLoggedIn) {
+    return null;
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+
+  // 이미 만료된 세션은 연장 불가
+  if (session.expiresAt && nowSeconds >= session.expiresAt) {
+    return null;
+  }
+
+  // 60분 연장
+  session.expiresAt = (session.expiresAt || nowSeconds) + SESSION_EXTEND_AMOUNT;
+  session.lastActivityAt = Date.now();
+
+  await session.save();
+
+  return { expiresAt: session.expiresAt };
 }

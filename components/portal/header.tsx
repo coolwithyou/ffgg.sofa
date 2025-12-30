@@ -8,12 +8,14 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { SessionTimer } from '@/components/session/session-timer';
 
 interface PortalHeaderProps {
   userName: string;
+  sessionExpiresAt: number;
 }
 
-export function PortalHeader({ userName }: PortalHeaderProps) {
+export function PortalHeader({ userName, sessionExpiresAt }: PortalHeaderProps) {
   const router = useRouter();
   const [showDropdown, setShowDropdown] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -33,8 +35,9 @@ export function PortalHeader({ userName }: PortalHeaderProps) {
       {/* 좌측: 페이지 타이틀 영역 (필요시 확장) */}
       <div />
 
-      {/* 우측: 테마 토글 + 사용자 메뉴 */}
+      {/* 우측: 세션 타이머 + 테마 토글 + 사용자 메뉴 */}
       <div className="flex items-center gap-2">
+        <SessionTimer initialExpiresAt={sessionExpiresAt} />
         <ThemeToggle />
         <div className="relative">
         <button

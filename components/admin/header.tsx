@@ -8,12 +8,14 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { SessionTimer } from '@/components/session/session-timer';
 
 interface AdminHeaderProps {
   operatorName: string;
+  sessionExpiresAt: number;
 }
 
-export function AdminHeader({ operatorName }: AdminHeaderProps) {
+export function AdminHeader({ operatorName, sessionExpiresAt }: AdminHeaderProps) {
   const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLoggingOut, startLogout] = useTransition();
@@ -42,10 +44,13 @@ export function AdminHeader({ operatorName }: AdminHeaderProps) {
         <span className="text-sm text-muted-foreground">Admin Console</span>
       </div>
 
-      {/* 우측: 시스템 상태 + 테마 토글 + 사용자 메뉴 */}
+      {/* 우측: 시스템 상태 + 세션 타이머 + 테마 토글 + 사용자 메뉴 */}
       <div className="flex items-center gap-4">
         {/* 시스템 상태 표시 */}
         <span className="text-sm text-muted-foreground">All systems operational</span>
+
+        {/* 세션 타이머 */}
+        <SessionTimer initialExpiresAt={sessionExpiresAt} />
 
         {/* 테마 토글 */}
         <ThemeToggle />
