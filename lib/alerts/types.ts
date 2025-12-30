@@ -2,7 +2,13 @@
  * 알림 시스템 타입 정의
  */
 
-export type AlertType = 'budget_warning' | 'budget_critical' | 'budget_exceeded' | 'anomaly_spike';
+export type AlertType =
+  | 'budget_warning'
+  | 'budget_critical'
+  | 'budget_exceeded'
+  | 'anomaly_spike'
+  | 'response_time_p95'
+  | 'response_time_spike';
 
 export type AlertSeverity = 'info' | 'warning' | 'critical';
 
@@ -34,6 +40,23 @@ export interface AnomalyAlert extends Alert {
   increaseRatio: number;
 }
 
+export interface ResponseTimeP95Alert extends Alert {
+  type: 'response_time_p95';
+  chatbotId?: string;
+  chatbotName?: string;
+  p95Ms: number;
+  thresholdMs: number;
+}
+
+export interface ResponseTimeSpikeAlert extends Alert {
+  type: 'response_time_spike';
+  chatbotId?: string;
+  chatbotName?: string;
+  currentAvgMs: number;
+  previousAvgMs: number;
+  increasePercent: number;
+}
+
 export interface AlertSettings {
   emailRecipients: string[];
   slackWebhookUrl?: string;
@@ -58,6 +81,8 @@ export const ALERT_SEVERITY_MAP: Record<AlertType, AlertSeverity> = {
   budget_critical: 'critical',
   budget_exceeded: 'critical',
   anomaly_spike: 'warning',
+  response_time_p95: 'warning',
+  response_time_spike: 'warning',
 };
 
 export const ALERT_MESSAGES: Record<AlertType, (data: Record<string, unknown>) => string> = {
@@ -69,6 +94,10 @@ export const ALERT_MESSAGES: Record<AlertType, (data: Record<string, unknown>) =
     `🚨 예산 초과! $${data.currentUsage} / $${data.budgetLimit} (${data.percentUsed}%)`,
   anomaly_spike: (data) =>
     `📈 비정상 사용량 감지: 전일 대비 ${data.increaseRatio}% 증가`,
+  response_time_p95: (data) =>
+    `⏱️ 응답 시간 P95 임계치 초과${data.chatbotName ? ` (${data.chatbotName})` : ''}: ${data.p95Ms}ms > ${data.thresholdMs}ms`,
+  response_time_spike: (data) =>
+    `⚡ 응답 시간 급증 감지${data.chatbotName ? ` (${data.chatbotName})` : ''}: 평균 ${data.previousAvgMs}ms → ${data.currentAvgMs}ms (+${data.increasePercent}%)`,
 };
 
 export const ALERT_CONFIG: Record<AlertType, { label: string; severity: AlertSeverity }> = {
@@ -76,4 +105,6 @@ export const ALERT_CONFIG: Record<AlertType, { label: string; severity: AlertSev
   budget_critical: { label: '예산 위험', severity: 'critical' },
   budget_exceeded: { label: '예산 초과', severity: 'critical' },
   anomaly_spike: { label: '이상 급증', severity: 'warning' },
+  response_time_p95: { label: '응답 지연 (P95)', severity: 'warning' },
+  response_time_spike: { label: '응답 시간 급증', severity: 'warning' },
 };

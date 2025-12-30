@@ -7,8 +7,9 @@ import { db } from '@/lib/db';
 import { tenants, tokenUsageLogs, tenantBudgetStatus } from '@/drizzle/schema';
 import { eq, sql, gte, and } from 'drizzle-orm';
 import { getTenantBudgetLimit } from '@/lib/tier/budget-limits';
-import type { BudgetAlert, AnomalyAlert, AlertType, Alert } from './types';
+import type { BudgetAlert, AnomalyAlert, AlertType, Alert, ResponseTimeP95Alert, ResponseTimeSpikeAlert } from './types';
 import { ALERT_SEVERITY_MAP, ALERT_MESSAGES } from './types';
+import { checkAllResponseTimeAlerts } from './response-time-checker';
 
 interface BudgetCheckResult {
   tenantId: string;
@@ -189,13 +190,14 @@ export async function checkAnomalies(spikeThreshold: number = 200): Promise<Anom
 }
 
 /**
- * 모든 알림 체크 실행 (예산 + 이상 탐지)
+ * 모든 알림 체크 실행 (예산 + 이상 탐지 + 응답 시간)
  */
 export async function checkAllAlerts(): Promise<Alert[]> {
-  const [budgetAlerts, anomalyAlerts] = await Promise.all([
+  const [budgetAlerts, anomalyAlerts, responseTimeAlerts] = await Promise.all([
     checkAllBudgetThresholds(),
     checkAnomalies(),
+    checkAllResponseTimeAlerts(),
   ]);
 
-  return [...budgetAlerts, ...anomalyAlerts];
+  return [...budgetAlerts, ...anomalyAlerts, ...responseTimeAlerts];
 }

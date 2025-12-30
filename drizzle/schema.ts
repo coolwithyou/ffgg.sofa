@@ -585,6 +585,149 @@ export const slackAlertSettings = pgTable('slack_alert_settings', {
 });
 
 // ============================================
+// 응답 시간 로그 (개별 요청)
+// ============================================
+export const responseTimeLogs = pgTable(
+  'response_time_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    chatbotId: uuid('chatbot_id').references(() => chatbots.id, {
+      onDelete: 'set null',
+    }),
+    conversationId: uuid('conversation_id').references(() => conversations.id, {
+      onDelete: 'set null',
+    }),
+    channel: text('channel').default('web'), // web, kakao
+
+    // 전체 응답 시간
+    totalDurationMs: integer('total_duration_ms').notNull(),
+
+    // 단계별 상세 시간 (JSONB)
+    timings: jsonb('timings').default({}).$type<{
+      chatbot_lookup?: number;
+      session_lookup?: number;
+      cache_lookup?: number;
+      history_lookup?: number;
+      query_rewriting?: number;
+      hybrid_search?: number;
+      llm_generation?: number;
+      message_save?: number;
+      usage_log?: number;
+      cache_save?: number;
+    }>(),
+
+    // 주요 단계별 시간 (인덱싱 및 집계용 개별 컬럼)
+    llmDurationMs: integer('llm_duration_ms'),
+    searchDurationMs: integer('search_duration_ms'),
+    rewriteDurationMs: integer('rewrite_duration_ms'),
+
+    // 캐시 히트 여부
+    cacheHit: boolean('cache_hit').default(false),
+
+    // 메타데이터
+    chunksUsed: integer('chunks_used').default(0),
+    estimatedTokens: integer('estimated_tokens').default(0),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_response_time_tenant').on(table.tenantId),
+    index('idx_response_time_tenant_date').on(table.tenantId, table.createdAt),
+    index('idx_response_time_chatbot').on(table.chatbotId),
+    index('idx_response_time_created').on(table.createdAt),
+    index('idx_response_time_total').on(table.totalDurationMs),
+  ]
+);
+
+// ============================================
+// 응답 시간 집계 통계
+// ============================================
+export const responseTimeStats = pgTable(
+  'response_time_stats',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    chatbotId: uuid('chatbot_id').references(() => chatbots.id, {
+      onDelete: 'cascade',
+    }),
+
+    // 집계 기간
+    periodType: text('period_type').notNull(), // 'hourly', 'daily'
+    periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+
+    // 기본 통계
+    requestCount: integer('request_count').default(0),
+    cacheHitCount: integer('cache_hit_count').default(0),
+
+    // 전체 응답 시간 통계
+    totalAvgMs: real('total_avg_ms'),
+    totalP50Ms: real('total_p50_ms'),
+    totalP95Ms: real('total_p95_ms'),
+    totalP99Ms: real('total_p99_ms'),
+    totalMinMs: integer('total_min_ms'),
+    totalMaxMs: integer('total_max_ms'),
+
+    // LLM 응답 시간 통계
+    llmAvgMs: real('llm_avg_ms'),
+    llmP95Ms: real('llm_p95_ms'),
+
+    // 검색 시간 통계
+    searchAvgMs: real('search_avg_ms'),
+    searchP95Ms: real('search_p95_ms'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    unique('unique_response_stats').on(
+      table.tenantId,
+      table.chatbotId,
+      table.periodType,
+      table.periodStart
+    ),
+    index('idx_response_stats_tenant').on(table.tenantId),
+    index('idx_response_stats_period').on(table.periodType, table.periodStart),
+  ]
+);
+
+// ============================================
+// 응답 시간 임계치 설정
+// ============================================
+export const responseTimeThresholds = pgTable(
+  'response_time_thresholds',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+
+    // 적용 범위 (null이면 전역, 값이 있으면 해당 테넌트/챗봇에 적용)
+    tenantId: uuid('tenant_id').references(() => tenants.id, {
+      onDelete: 'cascade',
+    }),
+    chatbotId: uuid('chatbot_id').references(() => chatbots.id, {
+      onDelete: 'cascade',
+    }),
+
+    // 임계치 설정
+    p95ThresholdMs: integer('p95_threshold_ms').default(3000), // P95 3초 기본값
+    avgSpikeThreshold: real('avg_spike_threshold').default(150), // 평균 150% 급증
+
+    // 알림 설정
+    alertEnabled: boolean('alert_enabled').default(true),
+    alertCooldownMinutes: integer('alert_cooldown_minutes').default(60), // 1시간 쿨다운
+
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    unique('unique_response_threshold').on(table.tenantId, table.chatbotId),
+  ]
+);
+
+// ============================================
 // 타입 추론용 exports
 // ============================================
 export type Tenant = typeof tenants.$inferSelect;
@@ -637,3 +780,12 @@ export type NewUsageAlert = typeof usageAlerts.$inferInsert;
 
 export type SlackAlertSetting = typeof slackAlertSettings.$inferSelect;
 export type NewSlackAlertSetting = typeof slackAlertSettings.$inferInsert;
+
+export type ResponseTimeLog = typeof responseTimeLogs.$inferSelect;
+export type NewResponseTimeLog = typeof responseTimeLogs.$inferInsert;
+
+export type ResponseTimeStat = typeof responseTimeStats.$inferSelect;
+export type NewResponseTimeStat = typeof responseTimeStats.$inferInsert;
+
+export type ResponseTimeThreshold = typeof responseTimeThresholds.$inferSelect;
+export type NewResponseTimeThreshold = typeof responseTimeThresholds.$inferInsert;

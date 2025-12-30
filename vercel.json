@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/aggregate-response-time",
+      "schedule": "5 * * * *"
+    },
+    {
+      "path": "/api/cron/check-performance-alerts",
+      "schedule": "*/15 * * * *"
+    }
+  ]
+}

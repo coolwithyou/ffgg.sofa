@@ -71,6 +71,13 @@
       "when": 1767075991198,
       "tag": "0009_admin_dashboard_usage_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1767105778798,
+      "tag": "0010_moaning_squirrel_girl",
+      "breakpoints": true
     }
   ]
 }
