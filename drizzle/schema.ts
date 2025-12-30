@@ -234,7 +234,8 @@ export const chunks = pgTable(
       .references(() => documents.id, { onDelete: 'cascade' }),
     datasetId: uuid('dataset_id').references(() => datasets.id, {
       onDelete: 'cascade',
-    }), // nullable for migration, denormalized for search performance
+    }), // nullable - null이면 라이브러리, 값이 있으면 해당 데이터셋 소속
+    sourceChunkId: uuid('source_chunk_id'), // 복사된 청크의 원본 ID (null이면 원본 청크)
     content: text('content').notNull(),
     embedding: vector('embedding', { dimensions: 1536 }), // OpenAI text-embedding-3-small 1536차원
     contentTsv: text('content_tsv'), // Hybrid Retrieval용 tsvector (마이그레이션에서 generated column으로 설정)
@@ -252,6 +253,7 @@ export const chunks = pgTable(
     index('idx_chunks_tenant').on(table.tenantId),
     index('idx_chunks_document').on(table.documentId),
     index('idx_chunks_dataset').on(table.datasetId),
+    index('idx_chunks_source').on(table.sourceChunkId),
   ]
 );
 

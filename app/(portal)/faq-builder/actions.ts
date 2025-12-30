@@ -188,7 +188,8 @@ export async function exportAsDocument(
 // 개별 Q&A를 문서로 업로드
 export async function uploadQAAsDocument(
   draftId: string,
-  qaId: string
+  qaId: string,
+  targetDatasetId?: string // 대상 데이터셋 ID (없으면 기본 데이터셋 사용)
 ): Promise<{ documentId: string; success: boolean; updatedQAPair: QAPair }> {
   const session = await getSession();
   if (!session?.tenantId) {
@@ -234,14 +235,31 @@ export async function uploadQAAsDocument(
   // 파일명 생성
   const filename = `QA_${qa.question.slice(0, 20).replace(/[^a-zA-Z0-9가-힣]/g, '_')}.md`;
 
-  // 기본 데이터셋 찾기
-  const [defaultDataset] = await db
-    .select({ id: datasets.id })
-    .from(datasets)
-    .where(and(eq(datasets.tenantId, session.tenantId), eq(datasets.isDefault, true)));
+  // 대상 데이터셋 결정
+  let datasetId: string;
 
-  if (!defaultDataset) {
-    throw new Error('기본 데이터셋이 없습니다. 먼저 데이터셋을 생성하세요.');
+  if (targetDatasetId) {
+    // 지정된 데이터셋 검증
+    const [targetDataset] = await db
+      .select({ id: datasets.id })
+      .from(datasets)
+      .where(and(eq(datasets.id, targetDatasetId), eq(datasets.tenantId, session.tenantId)));
+
+    if (!targetDataset) {
+      throw new Error('유효하지 않은 데이터셋입니다.');
+    }
+    datasetId = targetDataset.id;
+  } else {
+    // 기본 데이터셋 사용
+    const [defaultDataset] = await db
+      .select({ id: datasets.id })
+      .from(datasets)
+      .where(and(eq(datasets.tenantId, session.tenantId), eq(datasets.isDefault, true)));
+
+    if (!defaultDataset) {
+      throw new Error('기본 데이터셋이 없습니다. 먼저 데이터셋을 생성하세요.');
+    }
+    datasetId = defaultDataset.id;
   }
 
   // 파일 업로드 (스토리지)
@@ -271,7 +289,7 @@ export async function uploadQAAsDocument(
     .insert(documents)
     .values({
       tenantId: session.tenantId,
-      datasetId: defaultDataset.id,
+      datasetId: datasetId,
       filename: filename,
       filePath: uploadResult.key!,
       fileSize: fileBuffer.length,
@@ -296,7 +314,7 @@ export async function uploadQAAsDocument(
     data: {
       documentId: newDocumentId,
       tenantId: session.tenantId,
-      datasetId: defaultDataset.id,
+      datasetId: datasetId,
       userId: session.userId,
       filename: filename,
       fileType: 'text/markdown',

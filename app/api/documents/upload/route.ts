@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     let datasetId = formData.get('datasetId') as string | null;
+    const destination = (formData.get('destination') as string) || 'dataset'; // 'library' | 'dataset'
 
     if (!file) {
       return NextResponse.json(
@@ -54,9 +55,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. 데이터셋 확인 (없으면 기본 데이터셋 사용)
-    if (datasetId) {
-      // 제공된 datasetId가 현재 테넌트의 것인지 확인
+    // 4. 저장 위치 결정
+    if (destination === 'library') {
+      // 라이브러리에 저장: datasetId를 null로 설정
+      datasetId = null;
+    } else if (datasetId) {
+      // 데이터셋 직접 지정: 제공된 datasetId가 현재 테넌트의 것인지 확인
       const [dataset] = await db
         .select({ id: datasets.id })
         .from(datasets)
@@ -69,7 +73,7 @@ export async function POST(request: NextRequest) {
         );
       }
     } else {
-      // 기본 데이터셋 찾기
+      // datasetId 미제공 + destination이 dataset인 경우: 기본 데이터셋 찾기
       const [defaultDataset] = await db
         .select({ id: datasets.id })
         .from(datasets)
@@ -133,7 +137,7 @@ export async function POST(request: NextRequest) {
       .insert(documents)
       .values({
         tenantId: tenant.tenantId,
-        datasetId: datasetId!,
+        datasetId: datasetId, // null이면 라이브러리에 저장
         filename: validationResult.sanitizedFilename!,
         filePath: uploadResult.key!,
         fileSize: file.size,
@@ -143,6 +147,7 @@ export async function POST(request: NextRequest) {
           originalFilename: file.name,
           uploadedBy: session.userId,
           url: uploadResult.url,
+          destination: destination, // 저장 위치 기록
         },
       })
       .returning();
@@ -169,7 +174,7 @@ export async function POST(request: NextRequest) {
       data: {
         documentId: document.id,
         tenantId: tenant.tenantId,
-        datasetId: datasetId!,
+        datasetId: datasetId, // null이면 라이브러리 문서
         userId: session.userId,
         filename: validationResult.sanitizedFilename!,
         fileType: validationResult.detectedMimeType!,

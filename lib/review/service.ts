@@ -259,6 +259,12 @@ export async function bulkUpdateChunks(
   }
 
   try {
+    // 업데이트 전에 영향받는 문서 ID들을 조회
+    const affectedDocuments = await db
+      .selectDistinct({ documentId: chunks.documentId })
+      .from(chunks)
+      .where(and(eq(chunks.tenantId, tenantId), inArray(chunks.id, chunkIds)));
+
     const result = await db
       .update(chunks)
       .set({
@@ -271,6 +277,13 @@ export async function bulkUpdateChunks(
     const failed = chunkIds.length - updated;
 
     logger.info('Bulk chunk update', { tenantId, status, requested: chunkIds.length, updated, failed });
+
+    // 승인으로 변경된 경우, 영향받는 모든 문서의 상태 확인 및 업데이트
+    if (status === 'approved' && updated > 0) {
+      for (const doc of affectedDocuments) {
+        await checkAndUpdateDocumentStatus(tenantId, doc.documentId);
+      }
+    }
 
     return { updated, failed };
   } catch (error) {
@@ -392,6 +405,9 @@ export async function applyAutoApproval(
       count,
       minScore: config.minQualityScore,
     });
+
+    // 자동 승인 후 문서 상태 확인 및 업데이트
+    await checkAndUpdateDocumentStatus(tenantId, documentId);
   }
 
   return count;

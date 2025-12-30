@@ -14,6 +14,13 @@ import { QAList } from './qa-list';
 import { FAQPreview } from './faq-preview';
 import { ExportModal } from './export-modal';
 
+// 데이터셋 타입
+interface Dataset {
+  id: string;
+  name: string;
+  isDefault: boolean;
+}
+
 interface FAQEditorProps {
   initialDrafts: FAQDraft[];
 }
@@ -46,6 +53,10 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
   const [showDraftList, setShowDraftList] = useState(false);
   const [uploadingQAId, setUploadingQAId] = useState<string | null>(null);
 
+  // 데이터셋 상태
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
+
   // 확인 다이얼로그 상태
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
@@ -58,6 +69,27 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
     message: '',
     onConfirm: () => {},
   });
+
+  // 데이터셋 목록 로드
+  useEffect(() => {
+    fetch('/api/datasets')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.datasets) {
+          setDatasets(data.datasets);
+          // 기본 데이터셋이 있으면 선택
+          const defaultDs = data.datasets.find((d: Dataset) => d.isDefault);
+          if (defaultDs) {
+            setSelectedDatasetId(defaultDs.id);
+          } else if (data.datasets.length > 0) {
+            setSelectedDatasetId(data.datasets[0].id);
+          }
+        }
+      })
+      .catch((error) => {
+        console.error('데이터셋 로드 실패:', error);
+      });
+  }, []);
 
   // 자동 저장 (2초 디바운스)
   useEffect(() => {
@@ -238,7 +270,7 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
 
   // Q&A 문서 업로드
   const handleUploadQA = useCallback(
-    async (qaId: string) => {
+    async (qaId: string, targetDatasetId?: string) => {
       if (!currentDraftId) {
         // 먼저 초안 저장
         await handleSave();
@@ -250,9 +282,12 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
         return;
       }
 
+      // 데이터셋 ID 결정 (전달된 값 우선, 없으면 선택된 값 사용)
+      const datasetId = targetDatasetId || selectedDatasetId || undefined;
+
       setUploadingQAId(qaId);
       try {
-        const result = await uploadQAAsDocument(draftId, qaId);
+        const result = await uploadQAAsDocument(draftId, qaId, datasetId);
         // 로컬 상태 업데이트
         setQAPairs(
           qaPairs.map((qa) =>
@@ -267,7 +302,7 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
         setUploadingQAId(null);
       }
     },
-    [currentDraftId, qaPairs, handleSave]
+    [currentDraftId, qaPairs, handleSave, selectedDatasetId]
   );
 
   // Q&A 잠금 해제
@@ -421,6 +456,9 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
             onUpload={handleUploadQA}
             onUnlock={handleUnlockQA}
             uploadingQAId={uploadingQAId}
+            datasets={datasets}
+            selectedDatasetId={selectedDatasetId}
+            onDatasetChange={setSelectedDatasetId}
           />
         </div>
 

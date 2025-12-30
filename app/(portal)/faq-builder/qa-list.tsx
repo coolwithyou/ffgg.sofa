@@ -12,14 +12,24 @@ import type { QAPair } from './utils';
 const MAX_QUESTION_LENGTH = 500;
 const MAX_ANSWER_LENGTH = 5000;
 
+// 데이터셋 타입
+interface Dataset {
+  id: string;
+  name: string;
+  isDefault: boolean;
+}
+
 interface QAListProps {
   qaPairs: QAPair[];
   onAdd: () => void;
   onUpdate: (id: string, field: 'question' | 'answer', value: string) => void;
   onDelete: (id: string) => void;
-  onUpload: (id: string) => void;
+  onUpload: (id: string, targetDatasetId?: string) => void;
   onUnlock: (id: string) => void;
   uploadingQAId: string | null;
+  datasets: Dataset[];
+  selectedDatasetId: string;
+  onDatasetChange: (datasetId: string) => void;
 }
 
 export function QAList({
@@ -30,25 +40,56 @@ export function QAList({
   onUpload,
   onUnlock,
   uploadingQAId,
+  datasets,
+  selectedDatasetId,
+  onDatasetChange,
 }: QAListProps) {
   const sortedQAPairs = useMemo(
     () => [...qaPairs].sort((a, b) => a.order - b.order),
     [qaPairs]
   );
 
+  // 선택된 데이터셋 이름 찾기
+  const selectedDatasetName = datasets.find(d => d.id === selectedDatasetId)?.name || '데이터셋 선택';
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-2">
-        <h3 className="text-sm font-medium text-foreground">
-          Q&A 목록 ({qaPairs.length}개)
-        </h3>
-        <button
-          onClick={onAdd}
-          className="flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20"
-        >
-          <PlusIcon />
-          Q&A 추가
-        </button>
+      {/* 헤더 */}
+      <div className="flex flex-col gap-2 border-b border-border bg-muted/30 px-4 py-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium text-foreground">
+            Q&A 목록 ({qaPairs.length}개)
+          </h3>
+          <button
+            onClick={onAdd}
+            className="flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20"
+          >
+            <PlusIcon />
+            Q&A 추가
+          </button>
+        </div>
+
+        {/* 데이터셋 선택 */}
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-muted-foreground">업로드 대상:</label>
+          <select
+            value={selectedDatasetId}
+            onChange={(e) => onDatasetChange(e.target.value)}
+            className="flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            {datasets.length === 0 ? (
+              <option value="">데이터셋 로딩 중...</option>
+            ) : (
+              datasets.map((dataset) => (
+                <option key={dataset.id} value={dataset.id}>
+                  {dataset.name}
+                  {dataset.isDefault ? ' (기본)' : ''}
+                </option>
+              ))
+            )}
+          </select>
+          <FolderIcon className="h-4 w-4 text-muted-foreground" />
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
@@ -483,6 +524,19 @@ function LoadingIcon({ className }: { className?: string }) {
         className="opacity-75"
         fill="currentColor"
         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
+    </svg>
+  );
+}
+
+function FolderIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
       />
     </svg>
   );

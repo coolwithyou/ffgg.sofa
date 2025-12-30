@@ -330,10 +330,12 @@ onFailure: async ({ event, error }) => {
       });
     });
 
-    // Step 7: 데이터셋 통계 업데이트
-    await step.run('update-dataset-stats', async () => {
-      await updateDatasetStats(datasetId);
-    });
+    // Step 7: 데이터셋 통계 업데이트 (라이브러리 문서가 아닌 경우에만)
+    if (datasetId) {
+      await step.run('update-dataset-stats', async () => {
+        await updateDatasetStats(datasetId);
+      });
+    }
 
     // Step 8: 관리자 알림 (검토 필요 시)
     const pendingCount = chunkResults.filter((c) => c.qualityScore < 85).length;
