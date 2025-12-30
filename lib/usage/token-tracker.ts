@@ -120,39 +120,40 @@ export async function trackTokenUsage(params: TokenUsageParams): Promise<void> {
 
     const totalTokens = inputTokens + outputTokens;
 
-    // 트랜잭션으로 원자적 실행 보장
-    await db.transaction(async (tx) => {
-      // 1. 토큰 사용량 로그 저장
-      await tx.insert(tokenUsageLogs).values({
-        tenantId,
-        chatbotId: chatbotId ?? null,
-        conversationId: conversationId ?? null,
-        modelProvider,
-        modelId,
-        featureType,
-        inputTokens,
-        outputTokens,
-        totalTokens,
-        inputCostUsd: cost.inputCostUsd,
-        outputCostUsd: cost.outputCostUsd,
-        totalCostUsd: cost.totalCostUsd,
-      });
+    // Note: neon-http 드라이버는 트랜잭션을 지원하지 않으므로 순차적 쿼리 실행
+    // 두 쿼리가 모두 성공해야 하지만, 실패 시 부분 업데이트가 발생할 수 있음
+    // 실제 환경에서는 neon-serverless WebSocket 드라이버 사용 권장
 
-      // 2. 테넌트 월간 사용량 업데이트 (upsert)
-      await tx
-        .insert(tenantBudgetStatus)
-        .values({
-          tenantId,
-          currentMonthUsageUsd: cost.totalCostUsd,
-        })
-        .onConflictDoUpdate({
-          target: tenantBudgetStatus.tenantId,
-          set: {
-            currentMonthUsageUsd: sql`${tenantBudgetStatus.currentMonthUsageUsd} + ${cost.totalCostUsd}`,
-            updatedAt: sql`now()`,
-          },
-        });
+    // 1. 토큰 사용량 로그 저장
+    await db.insert(tokenUsageLogs).values({
+      tenantId,
+      chatbotId: chatbotId ?? null,
+      conversationId: conversationId ?? null,
+      modelProvider,
+      modelId,
+      featureType,
+      inputTokens,
+      outputTokens,
+      totalTokens,
+      inputCostUsd: cost.inputCostUsd,
+      outputCostUsd: cost.outputCostUsd,
+      totalCostUsd: cost.totalCostUsd,
     });
+
+    // 2. 테넌트 월간 사용량 업데이트 (upsert)
+    await db
+      .insert(tenantBudgetStatus)
+      .values({
+        tenantId,
+        currentMonthUsageUsd: cost.totalCostUsd,
+      })
+      .onConflictDoUpdate({
+        target: tenantBudgetStatus.tenantId,
+        set: {
+          currentMonthUsageUsd: sql`${tenantBudgetStatus.currentMonthUsageUsd} + ${cost.totalCostUsd}`,
+          updatedAt: sql`now()`,
+        },
+      });
 
     logger.debug('Token usage tracked', {
       tenantId,
