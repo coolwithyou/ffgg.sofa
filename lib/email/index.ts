@@ -265,6 +265,140 @@ export async function sendWelcomeEmail({
 }
 
 /**
+ * 이메일 변경 인증 메일 발송
+ */
+export async function sendEmailChangeVerification({
+  to,
+  token,
+  userName,
+  oldEmail,
+}: {
+  to: string;
+  token: string;
+  userName?: string;
+  oldEmail: string;
+}): Promise<SendEmailResult> {
+  const verifyUrl = `${APP_URL}/verify-email-change?token=${token}`;
+  const name = userName || '고객';
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 28px;">SOFA</h1>
+    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">기업용 RAG 챗봇 서비스</p>
+  </div>
+
+  <div style="background: #ffffff; padding: 40px 30px; border: 1px solid #e5e7eb; border-top: none;">
+    <h2 style="color: #1f2937; margin-top: 0;">안녕하세요, ${name}님!</h2>
+
+    <p>새 이메일 주소(${to})로 변경 요청이 접수되었습니다.</p>
+    <p>아래 버튼을 클릭하여 이메일 변경을 완료해 주세요.</p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${verifyUrl}" style="display: inline-block; background: #f97316; color: white; text-decoration: none; padding: 14px 30px; border-radius: 8px; font-weight: 600; font-size: 16px;">이메일 변경 확인</a>
+    </div>
+
+    <p style="color: #6b7280; font-size: 14px;">버튼이 작동하지 않으면 아래 링크를 브라우저에 붙여넣어 주세요:</p>
+    <p style="color: #6b7280; font-size: 12px; word-break: break-all;">${verifyUrl}</p>
+
+    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+
+    <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0;">
+      <p style="color: #92400e; margin: 0; font-size: 14px;">
+        <strong>보안 안내:</strong> 본인이 요청하지 않은 경우, 이 이메일을 무시하시고 기존 이메일(${oldEmail})로 계속 로그인하세요.
+      </p>
+    </div>
+
+    <p style="color: #9ca3af; font-size: 12px; margin-bottom: 0;">
+      이 링크는 24시간 동안 유효합니다.<br>
+      링크가 만료된 경우 이메일 변경을 다시 요청해 주세요.
+    </p>
+  </div>
+
+  <div style="text-align: center; padding: 20px; color: #9ca3af; font-size: 12px;">
+    <p>&copy; 2024 SOFA. All rights reserved.</p>
+  </div>
+</body>
+</html>
+  `;
+
+  return sendEmail({
+    to,
+    subject: '[SOFA] 새 이메일 주소 인증',
+    html,
+  });
+}
+
+/**
+ * 이메일 변경 알림 발송 (기존 이메일로)
+ */
+export async function sendEmailChangeNotification({
+  to,
+  newEmail,
+  userName,
+}: {
+  to: string;
+  newEmail: string;
+  userName?: string;
+}): Promise<SendEmailResult> {
+  const name = userName || '고객';
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 28px;">SOFA</h1>
+    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">기업용 RAG 챗봇 서비스</p>
+  </div>
+
+  <div style="background: #ffffff; padding: 40px 30px; border: 1px solid #e5e7eb; border-top: none;">
+    <h2 style="color: #1f2937; margin-top: 0;">안녕하세요, ${name}님!</h2>
+
+    <p>계정의 이메일 주소가 변경되었음을 알려드립니다.</p>
+
+    <div style="background: #f9fafb; border-radius: 8px; padding: 20px; margin: 20px 0;">
+      <p style="margin: 0; color: #4b5563;">
+        <strong>새 이메일 주소:</strong> ${newEmail}
+      </p>
+    </div>
+
+    <p>앞으로는 새 이메일 주소로 로그인해 주세요.</p>
+
+    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+
+    <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0;">
+      <p style="color: #92400e; margin: 0; font-size: 14px;">
+        <strong>보안 안내:</strong> 본인이 변경하지 않은 경우, 즉시 고객센터(support@sofa.app)로 연락해 주세요.
+      </p>
+    </div>
+  </div>
+
+  <div style="text-align: center; padding: 20px; color: #9ca3af; font-size: 12px;">
+    <p>&copy; 2024 SOFA. All rights reserved.</p>
+  </div>
+</body>
+</html>
+  `;
+
+  return sendEmail({
+    to,
+    subject: '[SOFA] 이메일 주소가 변경되었습니다',
+    html,
+  });
+}
+
+/**
  * HTML을 텍스트로 간단 변환 (폴백용)
  */
 function htmlToText(html: string): string {

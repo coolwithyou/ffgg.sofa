@@ -16,6 +16,7 @@ interface Tab {
 const tabs: Tab[] = [
   { href: '/mypage/profile', label: '프로필' },
   { href: '/mypage/security', label: '보안' },
+  { href: '/mypage/notifications', label: '알림' },
   { href: '/mypage/subscription', label: '구독' },
 ];
 

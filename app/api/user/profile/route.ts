@@ -28,6 +28,7 @@ export async function GET() {
         name: true,
         email: true,
         role: true,
+        avatarUrl: true,
         createdAt: true,
       },
     });
@@ -45,6 +46,7 @@ export async function GET() {
         name: user.name,
         email: user.email,
         role: user.role,
+        avatarUrl: user.avatarUrl,
         createdAt: user.createdAt,
       },
     });
@@ -95,6 +97,7 @@ export async function PATCH(request: NextRequest) {
         name: users.name,
         email: users.email,
         role: users.role,
+        avatarUrl: users.avatarUrl,
         createdAt: users.createdAt,
       });
 

@@ -6,12 +6,15 @@
  */
 
 import { useState, useEffect } from 'react';
+import EmailChangeForm from '../components/email-change-form';
+import AvatarUpload from '../components/avatar-upload';
 
 interface UserProfile {
   id: string;
   name: string;
   email: string;
   role: string;
+  avatarUrl: string | null;
   createdAt: string;
 }
 
@@ -147,7 +150,20 @@ export default function ProfilePage() {
           기본 정보
         </h2>
 
-        <div className="space-y-4">
+        <div className="space-y-6">
+          {/* 프로필 이미지 */}
+          <AvatarUpload
+            currentAvatar={profile.avatarUrl}
+            userName={profile.name}
+            onUpdate={(newAvatarUrl) => {
+              setProfile((prev) =>
+                prev ? { ...prev, avatarUrl: newAvatarUrl } : null
+              );
+            }}
+          />
+
+          <hr className="border-border" />
+
           {/* 이름 */}
           <div className="flex items-start justify-between">
             <div className="flex-1">
@@ -199,13 +215,14 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* 이메일 (읽기 전용) */}
-          <div>
-            <label className="text-sm font-medium text-muted-foreground">
-              이메일
-            </label>
-            <p className="mt-1 text-foreground">{profile.email}</p>
-          </div>
+          {/* 이메일 변경 */}
+          <EmailChangeForm
+            currentEmail={profile.email}
+            onSuccess={() => {
+              // 성공 시 프로필 새로고침
+              fetchProfile();
+            }}
+          />
 
           {/* 역할 (읽기 전용) */}
           <div>

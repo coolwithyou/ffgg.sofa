@@ -46,6 +46,7 @@ export const users = pgTable(
       onDelete: 'cascade',
     }),
     role: text('role').default('user'), // user, admin, internal_operator
+    avatarUrl: text('avatar_url'), // 프로필 이미지 URL (Data URL 또는 외부 URL)
     emailVerified: boolean('email_verified').default(false),
     emailVerificationToken: text('email_verification_token'),
     passwordResetToken: text('password_reset_token'),
@@ -60,6 +61,16 @@ export const users = pgTable(
     failedLoginCount: integer('failed_login_count').default(0),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+    // 이메일 변경
+    newEmail: text('new_email'), // 변경 예정 이메일
+    newEmailToken: text('new_email_token'), // 변경 인증 토큰
+    newEmailExpires: timestamp('new_email_expires', { withTimezone: true }), // 토큰 만료 시간
+    // 알림 설정
+    notificationSettings: jsonb('notification_settings').default({
+      security: true,
+      usage: true,
+      marketing: false,
+    }),
     // 계정 삭제 관련 (30일 유예)
     deletedAt: timestamp('deleted_at', { withTimezone: true }), // 실제 삭제일
     deleteScheduledAt: timestamp('delete_scheduled_at', { withTimezone: true }), // 삭제 예정일
