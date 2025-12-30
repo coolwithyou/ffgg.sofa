@@ -7,7 +7,9 @@ import { generateText } from 'ai';
 import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import { logger } from '@/lib/logger';
+import { trackTokenUsage } from '@/lib/usage/token-tracker';
 import { SearchResult } from './retrieval';
+import type { ModelProvider, ModelId, FeatureType } from '@/lib/usage/types';
 
 export interface GenerateOptions {
   maxTokens?: number;
@@ -15,20 +17,37 @@ export interface GenerateOptions {
   channel?: 'web' | 'kakao';
   /** 첫 번째 턴 여부 (기본: true). false면 간결한 응답 생성 */
   isFirstTurn?: boolean;
+  /** 토큰 추적용 컨텍스트 */
+  trackingContext?: {
+    tenantId: string;
+    chatbotId?: string;
+    conversationId?: string;
+    featureType?: FeatureType;
+  };
+}
+
+interface LLMProviderResult {
+  text: string;
+  inputTokens: number;
+  outputTokens: number;
 }
 
 interface LLMProvider {
-  name: string;
-  model: string;
+  name: ModelProvider;
+  model: ModelId;
   priority: number;
   isAvailable: () => Promise<boolean>;
-  generate: (systemPrompt: string, userPrompt: string, options: GenerateOptions) => Promise<string>;
+  generate: (
+    systemPrompt: string,
+    userPrompt: string,
+    options: GenerateOptions
+  ) => Promise<LLMProviderResult>;
 }
 
 // LLM 프로바이더 설정
 const LLM_PROVIDERS: LLMProvider[] = [
   {
-    name: 'gemini',
+    name: 'google',
     model: 'gemini-2.5-flash-lite',
     priority: 1,
     isAvailable: async () => !!process.env.GOOGLE_GENERATIVE_AI_API_KEY,
@@ -40,7 +59,11 @@ const LLM_PROVIDERS: LLMProvider[] = [
         maxOutputTokens: options.maxTokens || 1024,
         temperature: options.temperature || 0.7,
       });
-      return result.text;
+      return {
+        text: result.text,
+        inputTokens: result.usage?.inputTokens ?? 0,
+        outputTokens: result.usage?.outputTokens ?? 0,
+      };
     },
   },
   {
@@ -56,7 +79,11 @@ const LLM_PROVIDERS: LLMProvider[] = [
         maxOutputTokens: options.maxTokens || 1024,
         temperature: options.temperature || 0.7,
       });
-      return result.text;
+      return {
+        text: result.text,
+        inputTokens: result.usage?.inputTokens ?? 0,
+        outputTokens: result.usage?.outputTokens ?? 0,
+      };
     },
   },
 ];
@@ -151,6 +178,7 @@ export async function generateWithFallback(
 ): Promise<string> {
   const startTime = Date.now();
   const errors: Array<{ provider: string; error: string }> = [];
+  const { trackingContext } = options;
 
   // 우선순위 순으로 프로바이더 시도
   for (const provider of LLM_PROVIDERS) {
@@ -161,17 +189,35 @@ export async function generateWithFallback(
         continue;
       }
 
-      const response = await provider.generate(systemPrompt, userPrompt, options);
+      const result = await provider.generate(systemPrompt, userPrompt, options);
 
       const duration = Date.now() - startTime;
       logger.info('LLM response generated', {
         provider: provider.name,
         model: provider.model,
         duration,
-        responseLength: response.length,
+        responseLength: result.text.length,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
       });
 
-      return response;
+      // 토큰 사용량 추적 (비동기, 실패해도 응답 반환)
+      if (trackingContext?.tenantId) {
+        trackTokenUsage({
+          tenantId: trackingContext.tenantId,
+          chatbotId: trackingContext.chatbotId,
+          conversationId: trackingContext.conversationId,
+          modelProvider: provider.name,
+          modelId: provider.model,
+          featureType: trackingContext.featureType ?? 'chat',
+          inputTokens: result.inputTokens,
+          outputTokens: result.outputTokens,
+        }).catch((err) => {
+          logger.warn('Failed to track token usage', { error: err });
+        });
+      }
+
+      return result.text;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       errors.push({ provider: provider.name, error: errorMessage });

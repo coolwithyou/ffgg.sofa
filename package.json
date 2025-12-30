@@ -18,7 +18,8 @@
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
     "db:seed:admin": "dotenv -e .env.local -- tsx scripts/create-admin.ts",
     "db:enable-vector": "dotenv -e .env.local -- tsx scripts/enable-pgvector.ts",
-    "db:reprocess": "dotenv -e .env.local -- tsx scripts/reprocess-documents.ts"
+    "db:reprocess": "dotenv -e .env.local -- tsx scripts/reprocess-documents.ts",
+    "rag:evaluate": "dotenv -e .env.local -- tsx scripts/evaluate-rag.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.1",

@@ -84,6 +84,30 @@ export const TIER_LIMITS = {
   },
 } as const;
 
+/**
+ * 티어별 예산 한도 (USD)
+ * DB의 tier_budget_limits 테이블과 동기화 필요
+ */
+export const TIER_BUDGET_LIMITS = {
+  basic: {
+    monthlyBudgetUsd: 10, // $10/월
+    dailyBudgetUsd: 0.33, // ~$0.33/일
+    alertThreshold: 80, // 80%에서 경고
+  },
+  standard: {
+    monthlyBudgetUsd: 50, // $50/월
+    dailyBudgetUsd: 1.67, // ~$1.67/일
+    alertThreshold: 80,
+  },
+  premium: {
+    monthlyBudgetUsd: 200, // $200/월
+    dailyBudgetUsd: 6.67, // ~$6.67/일
+    alertThreshold: 80,
+  },
+} as const;
+
+export type TierBudget = (typeof TIER_BUDGET_LIMITS)[Tier];
+
 export type Tier = keyof typeof TIER_LIMITS;
 export type TierLimits = (typeof TIER_LIMITS)[Tier];
 

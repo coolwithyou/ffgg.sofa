@@ -5,11 +5,17 @@
  */
 
 import { logger } from '@/lib/logger';
+import { trackTokenUsage } from '@/lib/usage/token-tracker';
 
 export interface EmbeddingResult {
   embedding: number[];
   model: string;
   tokenCount?: number;
+}
+
+export interface EmbeddingTrackingContext {
+  tenantId: string;
+  chatbotId?: string;
 }
 
 const EMBEDDING_API_URL = process.env.EMBEDDING_API_URL;
@@ -43,22 +49,28 @@ function isBGEServerConfigured(): boolean {
 /**
  * 단일 텍스트 임베딩 생성
  */
-export async function embedText(text: string): Promise<number[]> {
-  const result = await embedTexts([text]);
+export async function embedText(
+  text: string,
+  trackingContext?: EmbeddingTrackingContext
+): Promise<number[]> {
+  const result = await embedTexts([text], trackingContext);
   return result[0];
 }
 
 /**
  * 여러 텍스트 배치 임베딩 생성
  */
-export async function embedTexts(texts: string[]): Promise<number[][]> {
+export async function embedTexts(
+  texts: string[],
+  trackingContext?: EmbeddingTrackingContext
+): Promise<number[][]> {
   if (texts.length === 0) {
     return [];
   }
 
   // OpenAI 사용 (기본)
   if (isOpenAIConfigured()) {
-    return generateOpenAIEmbeddingsBatch(texts);
+    return generateOpenAIEmbeddingsBatch(texts, trackingContext);
   }
 
   // BGE 서버 사용 (설정된 경우)
@@ -78,13 +90,17 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
 /**
  * OpenAI 임베딩 배치 생성
  */
-async function generateOpenAIEmbeddingsBatch(texts: string[]): Promise<number[][]> {
+async function generateOpenAIEmbeddingsBatch(
+  texts: string[],
+  trackingContext?: EmbeddingTrackingContext
+): Promise<number[][]> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error('OpenAI API key not configured');
   }
 
   const results: number[][] = [];
+  let totalTokensUsed = 0;
 
   for (let i = 0; i < texts.length; i += OPENAI_BATCH_SIZE) {
     const batch = texts.slice(i, i + OPENAI_BATCH_SIZE);
@@ -117,11 +133,27 @@ async function generateOpenAIEmbeddingsBatch(texts: string[]): Promise<number[][
       .map((item) => item.embedding);
 
     results.push(...sortedEmbeddings);
+    totalTokensUsed += data.usage.total_tokens;
 
     logger.info('OpenAI embeddings generated', {
       batchIndex: Math.floor(i / OPENAI_BATCH_SIZE),
       batchSize: batch.length,
       tokens: data.usage.total_tokens,
+    });
+  }
+
+  // 토큰 사용량 추적 (비동기, 전체 배치 완료 후)
+  if (trackingContext?.tenantId && totalTokensUsed > 0) {
+    trackTokenUsage({
+      tenantId: trackingContext.tenantId,
+      chatbotId: trackingContext.chatbotId,
+      modelProvider: 'openai',
+      modelId: 'text-embedding-3-small',
+      featureType: 'embedding',
+      inputTokens: totalTokensUsed,
+      outputTokens: 0, // 임베딩은 output 토큰 없음
+    }).catch((err) => {
+      logger.warn('Failed to track embedding token usage', { error: err });
     });
   }
 

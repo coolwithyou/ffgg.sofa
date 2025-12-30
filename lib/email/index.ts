@@ -399,6 +399,180 @@ export async function sendEmailChangeNotification({
 }
 
 /**
+ * 예산 알림 이메일 발송
+ */
+export async function sendBudgetAlertEmail({
+  to,
+  tenantName,
+  alertType,
+  currentUsage,
+  budgetLimit,
+  percentUsed,
+}: {
+  to: string;
+  tenantName: string;
+  alertType: 'warning' | 'critical' | 'exceeded';
+  currentUsage: number;
+  budgetLimit: number;
+  percentUsed: number;
+}): Promise<SendEmailResult> {
+  const alertConfig = {
+    warning: {
+      emoji: '⚠️',
+      title: '예산 경고',
+      color: '#FF9800',
+      bgColor: '#FFF3E0',
+      borderColor: '#FF9800',
+    },
+    critical: {
+      emoji: '🚨',
+      title: '예산 위험',
+      color: '#F44336',
+      bgColor: '#FFEBEE',
+      borderColor: '#F44336',
+    },
+    exceeded: {
+      emoji: '🚨',
+      title: '예산 초과',
+      color: '#D32F2F',
+      bgColor: '#FFCDD2',
+      borderColor: '#D32F2F',
+    },
+  };
+
+  const config = alertConfig[alertType];
+  const progressWidth = Math.min(percentUsed, 100);
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 28px;">SOFA</h1>
+    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">AI 사용량 알림</p>
+  </div>
+
+  <div style="background: #ffffff; padding: 40px 30px; border: 1px solid #e5e7eb; border-top: none;">
+    <div style="background: ${config.bgColor}; border: 1px solid ${config.borderColor}; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+      <h2 style="color: ${config.color}; margin: 0 0 10px 0; font-size: 20px;">${config.emoji} ${config.title}</h2>
+      <p style="color: ${config.color}; margin: 0;">테넌트: <strong>${tenantName}</strong></p>
+    </div>
+
+    <div style="background: #f9fafb; border-radius: 8px; padding: 20px; margin: 20px 0;">
+      <h3 style="color: #1f2937; margin-top: 0; font-size: 16px;">현재 사용량</h3>
+      <p style="font-size: 24px; font-weight: bold; color: #1f2937; margin: 10px 0;">
+        $${currentUsage.toFixed(2)} / $${budgetLimit.toFixed(2)}
+      </p>
+      <div style="background: #e5e7eb; border-radius: 4px; height: 8px; margin: 10px 0;">
+        <div style="background: ${config.color}; border-radius: 4px; height: 8px; width: ${progressWidth}%;"></div>
+      </div>
+      <p style="color: #6b7280; margin: 0; font-size: 14px;">${percentUsed.toFixed(1)}% 사용</p>
+    </div>
+
+    <p style="color: #4b5563;">
+      ${alertType === 'exceeded' ? '예산을 초과하였습니다. 추가 비용이 발생할 수 있습니다.' : '예산 한도에 도달하기 전에 사용량을 검토해 주세요.'}
+    </p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${APP_URL}/admin/usage" style="display: inline-block; background: #f97316; color: white; text-decoration: none; padding: 14px 30px; border-radius: 8px; font-weight: 600; font-size: 16px;">사용량 대시보드 보기</a>
+    </div>
+  </div>
+
+  <div style="text-align: center; padding: 20px; color: #9ca3af; font-size: 12px;">
+    <p>&copy; 2024 SOFA. All rights reserved.</p>
+  </div>
+</body>
+</html>
+  `;
+
+  return sendEmail({
+    to,
+    subject: `[SOFA] ${config.emoji} ${tenantName} - ${config.title} (${percentUsed.toFixed(1)}%)`,
+    html,
+  });
+}
+
+/**
+ * 이상 사용량 알림 이메일 발송
+ */
+export async function sendAnomalyAlertEmail({
+  to,
+  tenantName,
+  todayCost,
+  yesterdayCost,
+  increaseRatio,
+}: {
+  to: string;
+  tenantName: string;
+  todayCost: number;
+  yesterdayCost: number;
+  increaseRatio: number;
+}): Promise<SendEmailResult> {
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 28px;">SOFA</h1>
+    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">AI 사용량 알림</p>
+  </div>
+
+  <div style="background: #ffffff; padding: 40px 30px; border: 1px solid #e5e7eb; border-top: none;">
+    <div style="background: #FFF3E0; border: 1px solid #FF9800; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+      <h2 style="color: #E65100; margin: 0 0 10px 0; font-size: 20px;">📈 비정상 사용량 감지</h2>
+      <p style="color: #E65100; margin: 0;">테넌트: <strong>${tenantName}</strong></p>
+    </div>
+
+    <div style="background: #f9fafb; border-radius: 8px; padding: 20px; margin: 20px 0;">
+      <h3 style="color: #1f2937; margin-top: 0; font-size: 16px;">사용량 비교</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 10px 0; color: #6b7280;">어제 비용</td>
+          <td style="padding: 10px 0; text-align: right; font-weight: bold;">$${yesterdayCost.toFixed(2)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 10px 0; color: #6b7280;">오늘 비용</td>
+          <td style="padding: 10px 0; text-align: right; font-weight: bold; color: #E65100;">$${todayCost.toFixed(2)}</td>
+        </tr>
+        <tr style="border-top: 1px solid #e5e7eb;">
+          <td style="padding: 10px 0; color: #6b7280;">증가율</td>
+          <td style="padding: 10px 0; text-align: right; font-weight: bold; font-size: 18px; color: #D32F2F;">+${increaseRatio.toFixed(0)}%</td>
+        </tr>
+      </table>
+    </div>
+
+    <p style="color: #4b5563;">
+      전일 대비 사용량이 급증하였습니다. 비정상적인 사용이 아닌지 확인해 주세요.
+    </p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${APP_URL}/admin/usage" style="display: inline-block; background: #f97316; color: white; text-decoration: none; padding: 14px 30px; border-radius: 8px; font-weight: 600; font-size: 16px;">사용량 대시보드 보기</a>
+    </div>
+  </div>
+
+  <div style="text-align: center; padding: 20px; color: #9ca3af; font-size: 12px;">
+    <p>&copy; 2024 SOFA. All rights reserved.</p>
+  </div>
+</body>
+</html>
+  `;
+
+  return sendEmail({
+    to,
+    subject: `[SOFA] 📈 ${tenantName} - 비정상 사용량 감지 (+${increaseRatio.toFixed(0)}%)`,
+    html,
+  });
+}
+
+/**
  * HTML을 텍스트로 간단 변환 (폴백용)
  */
 function htmlToText(html: string): string {

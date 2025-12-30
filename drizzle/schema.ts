@@ -449,6 +449,142 @@ export const faqDrafts = pgTable(
 );
 
 // ============================================
+// 토큰 사용량 상세 로그 (어드민 대시보드용)
+// ============================================
+export const tokenUsageLogs = pgTable(
+  'token_usage_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    chatbotId: uuid('chatbot_id').references(() => chatbots.id, {
+      onDelete: 'set null',
+    }),
+    conversationId: uuid('conversation_id').references(() => conversations.id, {
+      onDelete: 'set null',
+    }),
+    modelProvider: text('model_provider').notNull(), // 'google', 'openai'
+    modelId: text('model_id').notNull(), // 'gemini-2.5-flash-lite', 'gpt-4o-mini', 'text-embedding-3-small'
+    featureType: text('feature_type').notNull(), // 'chat', 'embedding', 'rewrite'
+    inputTokens: integer('input_tokens').default(0),
+    outputTokens: integer('output_tokens').default(0),
+    totalTokens: integer('total_tokens').default(0),
+    inputCostUsd: real('input_cost_usd').default(0),
+    outputCostUsd: real('output_cost_usd').default(0),
+    totalCostUsd: real('total_cost_usd').default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_token_usage_tenant').on(table.tenantId),
+    index('idx_token_usage_tenant_date').on(table.tenantId, table.createdAt),
+    index('idx_token_usage_model').on(table.modelProvider, table.modelId),
+    index('idx_token_usage_chatbot').on(table.chatbotId),
+  ]
+);
+
+// ============================================
+// LLM 모델 가격 마스터
+// ============================================
+export const llmModels = pgTable(
+  'llm_models',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    provider: text('provider').notNull(), // 'google', 'openai', 'anthropic'
+    modelId: text('model_id').notNull(), // 'gemini-2.5-flash-lite', 'gpt-4o-mini', etc.
+    displayName: text('display_name').notNull(),
+    inputPricePerMillion: real('input_price_per_million').notNull(), // USD per 1M tokens
+    outputPricePerMillion: real('output_price_per_million').notNull(),
+    isEmbedding: boolean('is_embedding').default(false), // 임베딩 모델 여부
+    isActive: boolean('is_active').default(true),
+    isDefault: boolean('is_default').default(false), // 기본 모델 여부
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    unique('unique_llm_model').on(table.provider, table.modelId),
+    index('idx_llm_models_active').on(table.isActive),
+  ]
+);
+
+// ============================================
+// 티어별 예산 한도
+// ============================================
+export const tierBudgetLimits = pgTable(
+  'tier_budget_limits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tier: text('tier').notNull().unique(), // 'basic', 'standard', 'premium'
+    monthlyBudgetUsd: real('monthly_budget_usd').notNull(),
+    dailyBudgetUsd: real('daily_budget_usd').notNull(),
+    alertThreshold: integer('alert_threshold').default(80), // 80%에서 경고
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  }
+);
+
+// ============================================
+// 테넌트별 예산 상태
+// ============================================
+export const tenantBudgetStatus = pgTable(
+  'tenant_budget_status',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .unique()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    currentMonthUsageUsd: real('current_month_usage_usd').default(0),
+    lastAlertType: text('last_alert_type'), // 'warning', 'critical', 'exceeded'
+    lastAlertAt: timestamp('last_alert_at', { withTimezone: true }),
+    overrideMonthlyBudgetUsd: real('override_monthly_budget_usd'), // 관리자 수동 설정 (null이면 티어 기본값)
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [index('idx_tenant_budget_tenant').on(table.tenantId)]
+);
+
+// ============================================
+// 사용량 알림 이력
+// ============================================
+export const usageAlerts = pgTable(
+  'usage_alerts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    alertType: text('alert_type').notNull(), // 'budget_warning', 'budget_critical', 'budget_exceeded', 'anomaly_spike', 'anomaly_pattern'
+    alertChannel: text('alert_channel').notNull(), // 'email', 'slack'
+    threshold: real('threshold'), // 예: 80 (80%)
+    actualValue: real('actual_value'), // 예: 85 (85%)
+    message: text('message').notNull(),
+    sentAt: timestamp('sent_at', { withTimezone: true }).defaultNow(),
+    acknowledged: boolean('acknowledged').default(false),
+    acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }),
+    acknowledgedBy: uuid('acknowledged_by').references(() => users.id),
+  },
+  (table) => [
+    index('idx_usage_alerts_tenant').on(table.tenantId),
+    index('idx_usage_alerts_date').on(table.sentAt),
+    index('idx_usage_alerts_unack').on(table.acknowledged),
+  ]
+);
+
+// ============================================
+// Slack 알림 설정
+// ============================================
+export const slackAlertSettings = pgTable('slack_alert_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  webhookUrl: text('webhook_url').notNull(),
+  channelName: text('channel_name'), // 표시용 채널명
+  enableBudgetAlerts: boolean('enable_budget_alerts').default(true),
+  enableAnomalyAlerts: boolean('enable_anomaly_alerts').default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+});
+
+// ============================================
 // 타입 추론용 exports
 // ============================================
 export type Tenant = typeof tenants.$inferSelect;
@@ -483,3 +619,21 @@ export type NewChatbot = typeof chatbots.$inferInsert;
 
 export type ChatbotDataset = typeof chatbotDatasets.$inferSelect;
 export type NewChatbotDataset = typeof chatbotDatasets.$inferInsert;
+
+export type TokenUsageLog = typeof tokenUsageLogs.$inferSelect;
+export type NewTokenUsageLog = typeof tokenUsageLogs.$inferInsert;
+
+export type LlmModel = typeof llmModels.$inferSelect;
+export type NewLlmModel = typeof llmModels.$inferInsert;
+
+export type TierBudgetLimit = typeof tierBudgetLimits.$inferSelect;
+export type NewTierBudgetLimit = typeof tierBudgetLimits.$inferInsert;
+
+export type TenantBudgetStatus = typeof tenantBudgetStatus.$inferSelect;
+export type NewTenantBudgetStatus = typeof tenantBudgetStatus.$inferInsert;
+
+export type UsageAlert = typeof usageAlerts.$inferSelect;
+export type NewUsageAlert = typeof usageAlerts.$inferInsert;
+
+export type SlackAlertSetting = typeof slackAlertSettings.$inferSelect;
+export type NewSlackAlertSetting = typeof slackAlertSettings.$inferInsert;
