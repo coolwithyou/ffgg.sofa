@@ -14,6 +14,7 @@ import {
   Database,
   AlertCircle,
   ExternalLink,
+  Eye,
 } from 'lucide-react';
 import { ChatbotWithWidgetStatus, toggleWidgetStatus } from './actions';
 import { EmbedModal } from './embed-modal';
@@ -180,6 +181,17 @@ export function WidgetList({ chatbots }: WidgetListProps) {
                 {/* 액션 */}
                 <td className="px-4 py-4">
                   <div className="flex items-center justify-end gap-2">
+                    {/* 미리보기 버튼 */}
+                    <Link
+                      href={`/widgets/${chatbot.id}/preview`}
+                      className={`inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted ${
+                        !chatbot.widgetEnabled ? 'pointer-events-none opacity-50' : ''
+                      }`}
+                    >
+                      <Eye className="h-4 w-4" />
+                      미리보기
+                    </Link>
+
                     {/* 임베드 코드 버튼 */}
                     <button
                       onClick={() => openEmbedModal(chatbot)}
