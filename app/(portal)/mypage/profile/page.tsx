@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react';
 import EmailChangeForm from '../components/email-change-form';
 import AvatarUpload from '../components/avatar-upload';
+import DeleteAccountDialog from '../components/delete-account-dialog';
 
 interface UserProfile {
   id: string;
@@ -29,6 +30,7 @@ export default function ProfilePage() {
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchProfile();
@@ -254,15 +256,18 @@ export default function ProfilePage() {
           유예 기간 내에 다시 로그인하면 삭제를 취소할 수 있습니다.
         </p>
         <button
-          onClick={() => {
-            // TODO: 삭제 다이얼로그 표시
-            alert('계정 삭제 기능은 곧 구현됩니다');
-          }}
+          onClick={() => setIsDeleteDialogOpen(true)}
           className="rounded-md border border-destructive px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/10"
         >
           계정 삭제 요청
         </button>
       </div>
+
+      {/* 계정 삭제 다이얼로그 */}
+      <DeleteAccountDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+      />
     </div>
   );
 }
