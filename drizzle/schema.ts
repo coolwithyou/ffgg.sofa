@@ -168,6 +168,13 @@ export const chatbots = pgTable(
       minScore: 0.5,
     }),
 
+    // 페르소나 설정 (Intent-Aware RAG)
+    personaConfig: jsonb('persona_config').default({
+      name: 'AI 어시스턴트',
+      expertiseArea: '기업 문서 및 FAQ',
+      tone: 'friendly',
+    }),
+
     status: text('status').default('active'), // active, inactive
     isDefault: boolean('is_default').default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),

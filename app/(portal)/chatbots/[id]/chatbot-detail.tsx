@@ -18,11 +18,13 @@ import {
   Pencil,
   Check,
   X,
+  User,
 } from 'lucide-react';
 import { DatasetManager } from './dataset-manager';
 import { WidgetSettings } from './widget-settings';
 import { KakaoSettings } from './kakao-settings';
 import { LlmSettings } from './llm-settings';
+import { PersonaSettings } from './persona-settings';
 
 interface ChatbotData {
   id: string;
@@ -63,7 +65,7 @@ interface ChatbotDetailProps {
   chatbotId: string;
 }
 
-type TabType = 'datasets' | 'widget' | 'kakao' | 'settings';
+type TabType = 'datasets' | 'widget' | 'kakao' | 'settings' | 'persona';
 
 export function ChatbotDetail({ chatbotId }: ChatbotDetailProps) {
   const router = useRouter();
@@ -168,6 +170,7 @@ export function ChatbotDetail({ chatbotId }: ChatbotDetailProps) {
     { id: 'widget' as const, label: '위젯 배포', icon: Globe },
     { id: 'kakao' as const, label: '카카오 연동', icon: MessageCircle },
     { id: 'settings' as const, label: 'LLM 설정', icon: Settings },
+    { id: 'persona' as const, label: '페르소나', icon: User },
   ];
 
   return (
@@ -343,6 +346,12 @@ export function ChatbotDetail({ chatbotId }: ChatbotDetailProps) {
             chatbotId={chatbotId}
             llmConfig={chatbot.llmConfig}
             searchConfig={chatbot.searchConfig}
+            onUpdate={fetchChatbot}
+          />
+        )}
+        {activeTab === 'persona' && (
+          <PersonaSettings
+            chatbotId={chatbotId}
             onUpdate={fetchChatbot}
           />
         )}

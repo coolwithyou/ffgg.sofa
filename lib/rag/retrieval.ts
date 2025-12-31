@@ -443,3 +443,44 @@ export async function getChunksByDocument(
     source: 'dense' as const,
   }));
 }
+
+/**
+ * 다중 데이터셋에서 승인된 청크 랜덤 샘플링
+ * 페르소나 자동 생성용으로 문서 청크를 샘플링합니다.
+ */
+export async function getChunksByDatasets(
+  tenantId: string,
+  datasetIds: string[],
+  limit: number = 50
+): Promise<Array<{ content: string; documentId: string }>> {
+  if (datasetIds.length === 0) return [];
+
+  try {
+    const datasetIdsArray = `{${datasetIds.join(',')}}`;
+
+    const results = await db.execute(sql`
+      SELECT content, document_id
+      FROM chunks
+      WHERE tenant_id = ${tenantId}
+        AND dataset_id = ANY(${datasetIdsArray}::uuid[])
+        AND status = 'approved'
+        AND is_active = true
+      ORDER BY RANDOM()
+      LIMIT ${limit}
+    `);
+
+    return (results.rows as Array<{ content: string; document_id: string }>).map(
+      (row) => ({
+        content: row.content,
+        documentId: row.document_id,
+      })
+    );
+  } catch (error) {
+    logger.error(
+      'Get chunks by datasets failed',
+      error instanceof Error ? error : undefined,
+      { tenantId, datasetIds }
+    );
+    return [];
+  }
+}

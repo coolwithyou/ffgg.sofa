@@ -16,7 +16,7 @@ import {
 } from './conversation';
 import { findCachedResponse, cacheResponse } from './cache';
 import { getChatbotDatasetIds, getDefaultChatbot, getChatbot } from './chatbot';
-import { classifyIntent, DEFAULT_PERSONA } from './intent-classifier';
+import { classifyIntent, DEFAULT_PERSONA, type PersonaConfig } from './intent-classifier';
 import { routeQuery } from './query-router';
 import { trackResponseTime, trackCacheHitResponseTime } from '@/lib/performance/response-tracker';
 import type { ChatMessage, ChatRequest, ChatResponse, ChatOptions } from './types';
@@ -52,6 +52,9 @@ export async function processChat(
       : await getDefaultChatbot(tenantId);
     timings['1_chatbot_lookup'] = Date.now() - stepStart;
 
+    // 페르소나 설정 (챗봇 설정 우선, 없으면 기본값)
+    let persona: PersonaConfig = DEFAULT_PERSONA;
+
     if (!chatbot) {
       logger.warn('No chatbot found, using default settings', { tenantId, chatbotId });
     } else {
@@ -65,6 +68,13 @@ export async function processChat(
       }
       if (chatbot.searchConfig?.maxChunks !== undefined) {
         options.maxChunks = options.maxChunks ?? chatbot.searchConfig.maxChunks;
+      }
+      // 페르소나 설정 (DB 값이 있으면 사용, 없으면 기본값 유지)
+      if (chatbot.personaConfig) {
+        persona = {
+          ...DEFAULT_PERSONA,
+          ...chatbot.personaConfig,
+        };
       }
     }
 
@@ -200,7 +210,7 @@ export async function processChat(
 
     // 병렬 실행
     const [intentResult, ragPipelineResult] = await Promise.all([
-      classifyIntent(request.message, contextMessages, DEFAULT_PERSONA),
+      classifyIntent(request.message, contextMessages, persona),
       executeRAGPipeline(),
     ]);
     const { searchResults } = ragPipelineResult;
@@ -217,7 +227,7 @@ export async function processChat(
 
     // 6. Query Router - Intent와 RAG 결과를 기반으로 응답 전략 결정
     stepStart = Date.now();
-    const routerResult = await routeQuery(request.message, intentResult, searchResults, DEFAULT_PERSONA);
+    const routerResult = await routeQuery(request.message, intentResult, searchResults, persona);
     timings['6_query_routing'] = Date.now() - stepStart;
 
     // 7. 응답 생성 (Intent 기반 또는 RAG 기반)

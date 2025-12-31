@@ -21,6 +21,11 @@ export interface ChatbotInfo {
     maxChunks?: number;
     minScore?: number;
   };
+  personaConfig: {
+    name?: string;
+    expertiseArea?: string;
+    tone?: 'professional' | 'friendly' | 'casual';
+  };
 }
 
 /**
@@ -52,6 +57,7 @@ export async function getDefaultChatbot(tenantId: string): Promise<ChatbotInfo |
         tenantId: chatbots.tenantId,
         llmConfig: chatbots.llmConfig,
         searchConfig: chatbots.searchConfig,
+        personaConfig: chatbots.personaConfig,
       })
       .from(chatbots)
       .where(and(eq(chatbots.tenantId, tenantId), eq(chatbots.isDefault, true)));
@@ -66,6 +72,7 @@ export async function getDefaultChatbot(tenantId: string): Promise<ChatbotInfo |
       tenantId: chatbot.tenantId,
       llmConfig: (chatbot.llmConfig as ChatbotInfo['llmConfig']) || {},
       searchConfig: (chatbot.searchConfig as ChatbotInfo['searchConfig']) || {},
+      personaConfig: (chatbot.personaConfig as ChatbotInfo['personaConfig']) || {},
     };
   } catch (error) {
     logger.error('Failed to get default chatbot', error as Error, { tenantId });
@@ -85,6 +92,7 @@ export async function getChatbot(chatbotId: string, tenantId: string): Promise<C
         tenantId: chatbots.tenantId,
         llmConfig: chatbots.llmConfig,
         searchConfig: chatbots.searchConfig,
+        personaConfig: chatbots.personaConfig,
       })
       .from(chatbots)
       .where(and(eq(chatbots.id, chatbotId), eq(chatbots.tenantId, tenantId)));
@@ -99,6 +107,7 @@ export async function getChatbot(chatbotId: string, tenantId: string): Promise<C
       tenantId: chatbot.tenantId,
       llmConfig: (chatbot.llmConfig as ChatbotInfo['llmConfig']) || {},
       searchConfig: (chatbot.searchConfig as ChatbotInfo['searchConfig']) || {},
+      personaConfig: (chatbot.personaConfig as ChatbotInfo['personaConfig']) || {},
     };
   } catch (error) {
     logger.error('Failed to get chatbot', error as Error, { chatbotId, tenantId });
@@ -118,6 +127,7 @@ export async function getChatbotByWidgetApiKey(apiKey: string): Promise<ChatbotI
         tenantId: chatbots.tenantId,
         llmConfig: chatbots.llmConfig,
         searchConfig: chatbots.searchConfig,
+        personaConfig: chatbots.personaConfig,
       })
       .from(chatbots)
       .where(and(eq(chatbots.widgetApiKey, apiKey), eq(chatbots.widgetEnabled, true)));
@@ -132,6 +142,7 @@ export async function getChatbotByWidgetApiKey(apiKey: string): Promise<ChatbotI
       tenantId: chatbot.tenantId,
       llmConfig: (chatbot.llmConfig as ChatbotInfo['llmConfig']) || {},
       searchConfig: (chatbot.searchConfig as ChatbotInfo['searchConfig']) || {},
+      personaConfig: (chatbot.personaConfig as ChatbotInfo['personaConfig']) || {},
     };
   } catch (error) {
     logger.error('Failed to get chatbot by widget API key', error as Error);
@@ -151,6 +162,7 @@ export async function getChatbotByKakaoBotId(kakaoBotId: string): Promise<Chatbo
         tenantId: chatbots.tenantId,
         llmConfig: chatbots.llmConfig,
         searchConfig: chatbots.searchConfig,
+        personaConfig: chatbots.personaConfig,
       })
       .from(chatbots)
       .where(and(eq(chatbots.kakaoBotId, kakaoBotId), eq(chatbots.kakaoEnabled, true)));
@@ -165,6 +177,7 @@ export async function getChatbotByKakaoBotId(kakaoBotId: string): Promise<Chatbo
       tenantId: chatbot.tenantId,
       llmConfig: (chatbot.llmConfig as ChatbotInfo['llmConfig']) || {},
       searchConfig: (chatbot.searchConfig as ChatbotInfo['searchConfig']) || {},
+      personaConfig: (chatbot.personaConfig as ChatbotInfo['personaConfig']) || {},
     };
   } catch (error) {
     logger.error('Failed to get chatbot by Kakao bot ID', error as Error, { kakaoBotId });
