@@ -7,6 +7,7 @@
 import { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { FileText, Trash2, RotateCcw, ExternalLink } from 'lucide-react';
+import { DocumentProgressModal } from '@/components/document-progress-modal';
 
 interface DocumentItem {
   id: string;
@@ -32,6 +33,7 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
   const [isPending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDocuments();
@@ -194,11 +196,18 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
             </div>
 
             <div className="flex items-center gap-4">
-              <StatusBadge
-                status={doc.status}
-                progressPercent={doc.progressPercent}
-                errorMessage={doc.errorMessage}
-              />
+              {/* 클릭하면 진행 상태 모달 표시 */}
+              <button
+                onClick={() => setSelectedDocumentId(doc.id)}
+                className="cursor-pointer hover:opacity-80"
+                title="처리 상태 상세 보기"
+              >
+                <StatusBadge
+                  status={doc.status}
+                  progressPercent={doc.progressPercent}
+                  errorMessage={doc.errorMessage}
+                />
+              </button>
 
               {/* 재처리 버튼 */}
               {['uploaded', 'failed'].includes(doc.status) && (
@@ -233,6 +242,19 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
           </div>
         ))}
       </div>
+
+      {/* 문서 처리 상태 모달 */}
+      {selectedDocumentId && (
+        <DocumentProgressModal
+          documentId={selectedDocumentId}
+          isOpen={!!selectedDocumentId}
+          onClose={() => setSelectedDocumentId(null)}
+          onReprocess={() => {
+            handleReprocess(selectedDocumentId);
+            setSelectedDocumentId(null);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -99,8 +99,8 @@ onFailure: async ({ event, error }) => {
     });
 
     // Step 2: 문서 파싱 (파일 다운로드 포함)
+    const parsingStartTime = Date.now();
     const parseResult = await step.run('parse-document', async () => {
-      const stepStartTime = Date.now();
       await updateDocumentProgress(documentId, 'parsing', 30);
 
       // 파일 다운로드 - step 내에서 직접 수행 (직렬화 문제 회피)
@@ -112,23 +112,23 @@ onFailure: async ({ event, error }) => {
 
       await updateDocumentProgress(documentId, 'parsing', 100);
 
-      // 파싱 완료 로그
-      await logDocumentProcessing({
-        documentId,
-        tenantId,
-        step: 'parsing',
-        status: 'completed',
-        message: '문서 파싱 완료',
-        details: { textLength: result.text.length },
-        durationMs: Date.now() - stepStartTime,
-      });
-
       return result;
     });
 
+    // 파싱 완료 로그 (step.run 외부에서 호출하여 확실히 실행)
+    await logDocumentProcessing({
+      documentId,
+      tenantId,
+      step: 'parsing',
+      status: 'completed',
+      message: '문서 파싱 완료',
+      details: { textLength: parseResult.text.length },
+      durationMs: Date.now() - parsingStartTime,
+    });
+
     // Step 3: 스마트 청킹
+    const chunkingStartTime = Date.now();
     const chunkResults = await step.run('chunk-document', async () => {
-      const stepStartTime = Date.now();
       await updateDocumentProgress(documentId, 'chunking', 0);
 
       const chunksData = await smartChunk(parseResult.text, {
@@ -139,37 +139,29 @@ onFailure: async ({ event, error }) => {
 
       await updateDocumentProgress(documentId, 'chunking', 100);
 
-      // 청킹 완료 로그
-      await logDocumentProcessing({
-        documentId,
-        tenantId,
-        step: 'chunking',
-        status: 'completed',
-        message: '청크 분할 완료',
-        details: { chunkCount: chunksData.length },
-        durationMs: Date.now() - stepStartTime,
-      });
-
       return chunksData;
     });
 
+    // 청킹 완료 로그 (step.run 외부에서 호출)
+    await logDocumentProcessing({
+      documentId,
+      tenantId,
+      step: 'chunking',
+      status: 'completed',
+      message: '청크 분할 완료',
+      details: { chunkCount: chunkResults.length },
+      durationMs: Date.now() - chunkingStartTime,
+    });
+
     // Step 3.5: Contextual Retrieval - 컨텍스트 생성
+    const contextStartTime = Date.now();
     const contextResults = await step.run('generate-contexts', async () => {
       // Anthropic API 키가 없으면 스킵
       if (!isContextGenerationEnabled()) {
         logger.info('Context generation skipped (ANTHROPIC_API_KEY not configured)');
-        await logDocumentProcessing({
-          documentId,
-          tenantId,
-          step: 'context_generation',
-          status: 'completed',
-          message: '컨텍스트 생성 스킵됨 (API 키 미설정)',
-          details: { skipped: true },
-        });
-        return null;
+        return { skipped: true, results: null };
       }
 
-      const stepStartTime = Date.now();
       await updateDocumentProgress(documentId, 'context_generation', 0);
 
       const results = await generateContextsBatch(
@@ -185,12 +177,25 @@ onFailure: async ({ event, error }) => {
 
       await updateDocumentProgress(documentId, 'context_generation', 100);
 
-      const successCount = results.filter((r) => r.contextPrefix.length > 0).length;
-      const avgLength = results.length > 0
-        ? Math.round(results.reduce((sum, r) => sum + r.contextPrefix.length, 0) / results.length)
+      return { skipped: false, results };
+    });
+
+    // 컨텍스트 생성 완료 로그 (step.run 외부에서 호출)
+    if (contextResults.skipped) {
+      await logDocumentProcessing({
+        documentId,
+        tenantId,
+        step: 'context_generation',
+        status: 'completed',
+        message: '컨텍스트 생성 스킵됨 (API 키 미설정)',
+        details: { skipped: true },
+      });
+    } else if (contextResults.results) {
+      const successCount = contextResults.results.filter((r) => r.contextPrefix.length > 0).length;
+      const avgLength = contextResults.results.length > 0
+        ? Math.round(contextResults.results.reduce((sum, r) => sum + r.contextPrefix.length, 0) / contextResults.results.length)
         : 0;
 
-      // 컨텍스트 생성 완료 로그
       await logDocumentProcessing({
         documentId,
         tenantId,
@@ -203,20 +208,21 @@ onFailure: async ({ event, error }) => {
           failureCount: chunkResults.length - successCount,
           avgContextLength: avgLength,
         },
-        durationMs: Date.now() - stepStartTime,
+        durationMs: Date.now() - contextStartTime,
       });
+    }
 
-      return results;
-    });
+    // contextResults에서 실제 결과 추출
+    const actualContextResults = contextResults.results;
 
     // Step 4: 임베딩 생성 (배치 처리) - 컨텍스트 포함
+    const embeddingStartTime = Date.now();
     const embeddings = await step.run('generate-embeddings', async () => {
-      const stepStartTime = Date.now();
       await updateDocumentProgress(documentId, 'embedding', 0);
 
       // 컨텍스트가 있으면 포함하여 임베딩
       const texts = chunkResults.map((chunk) => {
-        const context = contextResults?.find((c: ContextResult) => c.chunkIndex === chunk.index);
+        const context = actualContextResults?.find((c: ContextResult) => c.chunkIndex === chunk.index);
         return buildContextualContent(chunk.content, context?.contextPrefix);
       });
       // 토큰 사용량 추적을 위해 trackingContext 전달
@@ -224,28 +230,28 @@ onFailure: async ({ event, error }) => {
 
       await updateDocumentProgress(documentId, 'embedding', 100);
 
-      // 임베딩 완료 로그
-      await logDocumentProcessing({
-        documentId,
-        tenantId,
-        step: 'embedding',
-        status: 'completed',
-        message: '임베딩 생성 완료',
-        details: { embeddingCount: embeddingVectors.length },
-        durationMs: Date.now() - stepStartTime,
-      });
-
       return embeddingVectors;
     });
 
+    // 임베딩 완료 로그 (step.run 외부에서 호출)
+    await logDocumentProcessing({
+      documentId,
+      tenantId,
+      step: 'embedding',
+      status: 'completed',
+      message: '임베딩 생성 완료',
+      details: { embeddingCount: embeddings.length },
+      durationMs: Date.now() - embeddingStartTime,
+    });
+
     // Step 5: 청크 저장 (트랜잭션 사용)
-    await step.run('save-chunks', async () => {
-      const stepStartTime = Date.now();
+    const saveChunksStartTime = Date.now();
+    const saveChunksResult = await step.run('save-chunks', async () => {
       await updateDocumentProgress(documentId, 'quality_check', 0);
 
       const chunkRecords = chunkResults.map((chunk, index) => {
         // 해당 청크의 컨텍스트 찾기
-        const context = contextResults?.find((c: ContextResult) => c.chunkIndex === chunk.index);
+        const context = actualContextResults?.find((c: ContextResult) => c.chunkIndex === chunk.index);
 
         return {
           tenantId,
@@ -281,55 +287,60 @@ onFailure: async ({ event, error }) => {
       const avgQualityScore =
         chunkResults.reduce((sum, c) => sum + c.qualityScore, 0) / chunkResults.length;
 
-      // 품질 검사 완료 로그
-      await logDocumentProcessing({
-        documentId,
-        tenantId,
-        step: 'quality_check',
-        status: 'completed',
-        message: '품질 검사 및 저장 완료',
-        details: {
-          totalChunks: chunkRecords.length,
-          autoApproved: autoApprovedCount,
-          pendingReview: chunkRecords.length - autoApprovedCount,
-          avgQualityScore: Math.round(avgQualityScore * 10) / 10,
-        },
-        durationMs: Date.now() - stepStartTime,
-      });
+      return {
+        totalChunks: chunkRecords.length,
+        autoApprovedCount,
+        avgQualityScore,
+      };
+    });
+
+    // 품질 검사 완료 로그 (step.run 외부에서 호출)
+    await logDocumentProcessing({
+      documentId,
+      tenantId,
+      step: 'quality_check',
+      status: 'completed',
+      message: '품질 검사 및 저장 완료',
+      details: {
+        totalChunks: saveChunksResult.totalChunks,
+        autoApproved: saveChunksResult.autoApprovedCount,
+        pendingReview: saveChunksResult.totalChunks - saveChunksResult.autoApprovedCount,
+        avgQualityScore: Math.round(saveChunksResult.avgQualityScore * 10) / 10,
+      },
+      durationMs: Date.now() - saveChunksStartTime,
     });
 
     // Step 6: 문서 상태 업데이트
-    await step.run('update-status', async () => {
-      // 자동 승인되지 않은 청크가 있는지 확인
-      const pendingChunks = chunkResults.filter((c) => c.qualityScore < 85);
-      const status = pendingChunks.length > 0 ? 'reviewing' : 'approved';
+    const pendingChunks = chunkResults.filter((c) => c.qualityScore < 85);
+    const finalStatus = pendingChunks.length > 0 ? 'reviewing' : 'approved';
 
+    await step.run('update-status', async () => {
       await db
         .update(documents)
         .set({
-          status,
+          status: finalStatus,
           progressStep: null,
           progressPercent: 100,
           updatedAt: new Date(),
         })
         .where(eq(documents.id, documentId));
+    });
 
-      // 처리 완료 로그
-      const totalDurationMs = Date.now() - processingStartTime;
-      await logDocumentProcessing({
-        documentId,
-        tenantId,
-        step: 'completed',
-        status: 'completed',
-        message: `문서 처리 완료 (${status === 'approved' ? '자동 승인' : '검토 필요'})`,
-        details: {
-          finalStatus: status,
-          totalChunks: chunkResults.length,
-          pendingReview: pendingChunks.length,
-          totalDurationMs,
-        },
-        durationMs: totalDurationMs,
-      });
+    // 처리 완료 로그 (step.run 외부에서 호출)
+    const totalDurationMs = Date.now() - processingStartTime;
+    await logDocumentProcessing({
+      documentId,
+      tenantId,
+      step: 'completed',
+      status: 'completed',
+      message: `문서 처리 완료 (${finalStatus === 'approved' ? '자동 승인' : '검토 필요'})`,
+      details: {
+        finalStatus,
+        totalChunks: chunkResults.length,
+        pendingReview: pendingChunks.length,
+        totalDurationMs,
+      },
+      durationMs: totalDurationMs,
     });
 
     // Step 7: 데이터셋 통계 업데이트 (라이브러리 문서가 아닌 경우에만)

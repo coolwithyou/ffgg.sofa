@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.18.1",
   "scripts": {
     "dev": "next dev --port 3060",
-    "dev:inngest": "npx inngest-cli@latest dev",
+    "dev:inngest": "npx inngest-cli@latest dev -u http://localhost:3060/api/inngest",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
