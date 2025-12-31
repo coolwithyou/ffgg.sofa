@@ -16,7 +16,10 @@ import { DEFAULT_PERSONA } from '@/lib/chat/intent-classifier';
 // 페르소나 수정 스키마
 const updatePersonaSchema = z.object({
   name: z.string().min(1).max(50).optional(),
-  expertiseArea: z.string().min(1).max(500).optional(),
+  expertiseArea: z.string().min(1).max(100).optional(),
+  expertiseDescription: z.string().max(1000).optional(),
+  includedTopics: z.array(z.string().max(50)).max(20).optional(),
+  excludedTopics: z.array(z.string().max(50)).max(20).optional(),
   tone: z.enum(['professional', 'friendly', 'casual']).optional(),
 });
 

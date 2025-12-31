@@ -1,0 +1,1 @@
+ALTER TABLE "chatbots" ADD COLUMN "persona_config" jsonb DEFAULT '{"name":"AI 어시스턴트","expertiseArea":"기업 문서 및 FAQ","tone":"friendly"}'::jsonb;

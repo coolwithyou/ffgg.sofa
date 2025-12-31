@@ -25,7 +25,14 @@ export interface IntentResult {
 
 export interface PersonaConfig {
   name: string;
+  /** 전문 분야 요약 (짧은 설명) */
   expertiseArea: string;
+  /** 전문 분야 상세 설명 (RAG 접근 판단에 사용) */
+  expertiseDescription?: string;
+  /** 포함되는 주제 목록 (이 주제들은 RAG 검색 대상) */
+  includedTopics?: string[];
+  /** 제외되는 주제 목록 (이 주제들은 OUT_OF_SCOPE로 분류) */
+  excludedTopics?: string[];
   tone: 'professional' | 'friendly' | 'casual';
 }
 
@@ -33,6 +40,9 @@ export interface PersonaConfig {
 export const DEFAULT_PERSONA: PersonaConfig = {
   name: 'AI 어시스턴트',
   expertiseArea: '기업 문서 및 FAQ',
+  expertiseDescription: '',
+  includedTopics: [],
+  excludedTopics: [],
   tone: 'friendly',
 };
 
@@ -106,11 +116,28 @@ function classifyByRules(message: string): IntentResult | null {
  * Intent 분류용 시스템 프롬프트
  */
 function buildClassificationPrompt(persona: PersonaConfig): string {
+  // 포함/제외 주제 목록 포맷팅
+  const includedTopicsText =
+    persona.includedTopics && persona.includedTopics.length > 0
+      ? `\n- 포함 주제: ${persona.includedTopics.join(', ')}`
+      : '';
+
+  const excludedTopicsText =
+    persona.excludedTopics && persona.excludedTopics.length > 0
+      ? `\n- 제외 주제: ${persona.excludedTopics.join(', ')}`
+      : '';
+
+  // 상세 설명 포맷팅
+  const descriptionText =
+    persona.expertiseDescription && persona.expertiseDescription.trim()
+      ? `\n\n### 상세 설명\n${persona.expertiseDescription}`
+      : '';
+
   return `당신은 사용자 메시지의 의도를 분류하는 전문가입니다.
 
 ## 챗봇 정보
 - 이름: ${persona.name}
-- 전문 분야: ${persona.expertiseArea}
+- 전문 분야: ${persona.expertiseArea}${includedTopicsText}${excludedTopicsText}${descriptionText}
 
 ## 분류 기준
 
@@ -120,16 +147,20 @@ function buildClassificationPrompt(persona: PersonaConfig): string {
 
 ### DOMAIN_QUERY (전문 분야 질문)
 "${persona.expertiseArea}" 관련 질문. RAG 검색이 필요한 질문.
+${persona.includedTopics && persona.includedTopics.length > 0 ? `특히 다음 주제들은 DOMAIN_QUERY로 분류: ${persona.includedTopics.join(', ')}` : ''}
 예시: 문서에 있을 법한 정보 요청, 정책/절차 질문, 제품/서비스 관련 질문
 
 ### OUT_OF_SCOPE (범위 외 질문)
-전문 분야와 무관한 일반 지식 질문. 프로그래밍, 과학, 금융, 날씨, 뉴스 등.
+전문 분야와 무관한 일반 지식 질문.
+${persona.excludedTopics && persona.excludedTopics.length > 0 ? `특히 다음 주제들은 OUT_OF_SCOPE로 분류: ${persona.excludedTopics.join(', ')}` : '프로그래밍, 과학, 금융, 날씨, 뉴스 등.'}
 예시: "JavaScript 함수 만드는 법", "오늘 날씨 어때?", "비트코인 전망은?"
 
 ## 규칙
 1. 복합 의도 (예: "안녕, 반품 정책 알려줘")는 실질적 의도(DOMAIN_QUERY)로 분류
 2. 불확실하면 DOMAIN_QUERY로 분류 (RAG 검색 후 판단 가능)
 3. 이전 대화 맥락을 고려하여 분류
+4. 포함 주제에 명시된 키워드가 있으면 DOMAIN_QUERY 우선
+5. 제외 주제에 명시된 키워드가 있으면 OUT_OF_SCOPE로 분류
 
 ## 응답 형식 (JSON만 출력)
 {"intent": "CHITCHAT|DOMAIN_QUERY|OUT_OF_SCOPE", "confidence": 0.0-1.0, "reasoning": "분류 이유"}`;

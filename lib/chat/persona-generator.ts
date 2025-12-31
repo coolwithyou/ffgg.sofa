@@ -31,14 +31,26 @@ const PERSONA_GENERATION_PROMPT = `당신은 기업 문서를 분석하여 AI �
 위 문서들을 분석하여 다음 정보를 JSON 형식으로 추출하세요:
 
 1. **keywords**: 이 기업/서비스의 핵심 키워드 5-10개 (배열)
-2. **expertiseArea**: 이 챗봇의 전문 분야를 한 문장으로 요약 (50자 이내)
-3. **tone**: 문서의 어조를 분석하여 추천 ("professional", "friendly", "casual" 중 하나)
-4. **confidence**: 분석 신뢰도 (0.0 ~ 1.0)
+2. **expertiseArea**: 이 챗봇의 전문 분야를 한 문장으로 요약 (100자 이내)
+3. **expertiseDescription**: 전문 분야에 대한 상세 설명 (300자 이내)
+   - 어떤 종류의 질문에 답변할 수 있는지
+   - 주요 서비스/제품 카테고리
+   - 고객이 자주 묻는 질문 유형
+4. **includedTopics**: 이 챗봇이 답변해야 하는 주요 주제/키워드 5-15개 (배열)
+   - 문서에서 자주 등장하는 제품명, 서비스명, 기술 용어 등
+5. **excludedTopics**: 이 챗봇의 범위를 벗어나는 주제 3-5개 (배열)
+   - 문서에 언급되지 않은 일반적인 범위 외 주제 추천
+   - 예: 코딩, 주식, 날씨, 의료 상담 등
+6. **tone**: 문서의 어조를 분석하여 추천 ("professional", "friendly", "casual" 중 하나)
+7. **confidence**: 분석 신뢰도 (0.0 ~ 1.0)
 
 ## 응답 형식 (JSON만 출력)
 {
   "keywords": ["키워드1", "키워드2", ...],
-  "expertiseArea": "전문 분야 설명",
+  "expertiseArea": "전문 분야 요약",
+  "expertiseDescription": "전문 분야에 대한 상세 설명. 이 챗봇은 ~에 대해 답변합니다.",
+  "includedTopics": ["주제1", "주제2", ...],
+  "excludedTopics": ["코딩", "주식", ...],
   "tone": "friendly",
   "confidence": 0.85
 }`;
@@ -80,7 +92,7 @@ export async function generatePersonaFromDocuments(
   try {
     const response = await generateWithFallback(systemPrompt, prompt, {
       temperature: 0.3,
-      maxTokens: 500,
+      maxTokens: 800, // 상세 설명이 추가되어 토큰 증가
       trackingContext: {
         tenantId,
         chatbotId,
@@ -107,16 +119,29 @@ export async function generatePersonaFromDocuments(
       parsed.tone = 'friendly'; // 기본값으로 폴백
     }
 
+    // 배열 필드 검증 및 기본값
+    const includedTopics = Array.isArray(parsed.includedTopics)
+      ? parsed.includedTopics.slice(0, 20)
+      : [];
+    const excludedTopics = Array.isArray(parsed.excludedTopics)
+      ? parsed.excludedTopics.slice(0, 20)
+      : [];
+
     logger.info('Persona generated from documents', {
       chatbotId,
       chunksAnalyzed: chunks.length,
       keywords: parsed.keywords,
+      includedTopics: includedTopics.length,
+      excludedTopics: excludedTopics.length,
       confidence: parsed.confidence,
     });
 
     return {
       name: 'AI 어시스턴트', // 이름은 기본값 유지
       expertiseArea: parsed.expertiseArea,
+      expertiseDescription: parsed.expertiseDescription || '',
+      includedTopics,
+      excludedTopics,
       tone: parsed.tone,
       keywords: parsed.keywords || [],
       confidence: parsed.confidence || 0.7,
