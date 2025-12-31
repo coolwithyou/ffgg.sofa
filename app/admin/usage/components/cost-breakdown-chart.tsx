@@ -15,12 +15,14 @@ const MODEL_COLORS: Record<string, string> = {
   'gemini-2.5-flash-lite': '#4285F4', // Google Blue
   'gpt-4o-mini': '#10A37F', // OpenAI Green
   'text-embedding-3-small': '#FF6B6B', // Coral
+  'claude-3-haiku-20240307': '#D97706', // Anthropic Orange
 };
 
 const FEATURE_COLORS: Record<string, string> = {
   chat: '#8B5CF6', // Purple
   embedding: '#F59E0B', // Amber
   rewrite: '#06B6D4', // Cyan
+  context_generation: '#EC4899', // Pink
 };
 
 export function CostBreakdownChart({ overview }: CostBreakdownChartProps) {
@@ -123,11 +125,17 @@ export function CostBreakdownChart({ overview }: CostBreakdownChartProps) {
         </div>
       )}
 
-      {/* 토큰 상세 정보 */}
+      {/* 토큰 상세 정보 - 전체 요약 */}
       {hasModelData && (
         <div className="mt-6 border-t border-border pt-4">
-          <h3 className="mb-2 text-sm font-medium text-muted-foreground">토큰 상세</h3>
-          <div className="grid gap-2 text-sm sm:grid-cols-2">
+          <h3 className="mb-3 text-sm font-medium text-muted-foreground">토큰 사용량 요약</h3>
+          <div className="grid gap-2 text-sm sm:grid-cols-3">
+            <div className="flex justify-between rounded bg-muted/50 px-3 py-2">
+              <span className="text-muted-foreground">총 토큰</span>
+              <span className="font-medium text-foreground">
+                {overview.totalTokens.toLocaleString()}
+              </span>
+            </div>
             <div className="flex justify-between rounded bg-muted/50 px-3 py-2">
               <span className="text-muted-foreground">입력 토큰</span>
               <span className="font-medium text-foreground">
@@ -143,6 +151,71 @@ export function CostBreakdownChart({ overview }: CostBreakdownChartProps) {
           </div>
         </div>
       )}
+
+      {/* 모델별 상세 토큰 테이블 */}
+      {hasModelData && (
+        <div className="mt-4 border-t border-border pt-4">
+          <h3 className="mb-3 text-sm font-medium text-muted-foreground">모델별 상세 사용량</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">모델</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">입력 토큰</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">출력 토큰</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">총 토큰</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">비용</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {overview.byModel.map((model) => (
+                  <tr key={model.modelId} className="hover:bg-muted/50">
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: MODEL_COLORS[model.modelId] || '#94A3B8' }}
+                        />
+                        <span className="text-foreground">{model.displayName}</span>
+                        <span className="text-xs text-muted-foreground">({model.provider})</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                      {model.inputTokens.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                      {model.outputTokens.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                      {(model.inputTokens + model.outputTokens).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground">
+                      ${model.totalCostUsd.toFixed(4)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-border bg-muted/30 font-medium">
+                  <td className="px-3 py-2 text-foreground">합계</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                    {overview.inputTokens.toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                    {overview.outputTokens.toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                    {overview.totalTokens.toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                    ${overview.totalCostUsd.toFixed(4)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -155,6 +228,8 @@ function getFeatureLabel(featureType: string): string {
       return '임베딩';
     case 'rewrite':
       return '쿼리 재작성';
+    case 'context_generation':
+      return '컨텍스트 생성';
     default:
       return featureType;
   }
