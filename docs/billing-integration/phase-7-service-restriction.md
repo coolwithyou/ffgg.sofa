@@ -649,7 +649,7 @@ import {
 interface SubscriptionData {
   status: SubscriptionStatus;
   planName?: string;
-  nextBillingDate?: string;
+  nextPaymentDate?: string;
   billingKeyMasked?: string;
 }
 
@@ -669,8 +669,8 @@ export function useSubscription() {
       if (data.subscription) {
         setSubscription({
           status: data.subscription.status as SubscriptionStatus,
-          planName: data.plan?.name,
-          nextBillingDate: data.subscription.nextBillingDate,
+          planName: data.plan?.nameKo,
+          nextPaymentDate: data.subscription.nextPaymentDate,
           billingKeyMasked: data.subscription.billingKeyMasked,
         });
       } else {
@@ -800,24 +800,24 @@ export function MyComponent() {
 
 ## 완료
 
-이로써 토스 페이먼츠 정기결제 시스템 통합의 모든 Phase가 완료되었습니다.
+이로써 PortOne V2 기반 정기결제 시스템 통합의 모든 Phase가 완료되었습니다.
 
 ### 전체 구현 요약
 
 | Phase | 내용 |
 |-------|------|
-| Phase 1 | DB 스키마, 환경설정, 암호화 유틸리티 |
-| Phase 2 | 토스 API 클라이언트, 웹훅 보안 |
-| Phase 3 | 결제 API 엔드포인트 |
+| Phase 1 | DB 스키마, 환경설정, 플랜 시드 데이터 |
+| Phase 2 | PortOne 서버 SDK 클라이언트, 웹훅 보안 |
+| Phase 3 | 빌링 API 엔드포인트 |
 | Phase 4 | Inngest 비동기 결제 처리 |
 | Phase 5 | Vercel Cron 정기결제 트리거 |
-| Phase 6 | 클라이언트 UI |
+| Phase 6 | 클라이언트 UI (PortOne Browser SDK) |
 | Phase 7 | 서비스 제한 로직 |
 
 ### 다음 단계
 
 1. 각 Phase 순서대로 구현
 2. 단위 테스트 작성
-3. 토스 테스트 환경에서 통합 테스트
+3. PortOne 테스트 환경에서 통합 테스트
 4. 스테이징 환경 배포 및 QA
 5. 프로덕션 배포

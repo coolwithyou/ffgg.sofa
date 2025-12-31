@@ -2,12 +2,11 @@
 
 ## 개요
 
-이 Phase에서는 결제 관련 API 엔드포인트를 구현합니다:
-- 구독 관리 API (조회, 생성, 취소)
-- 빌링키 관리 API (발급, 삭제)
-- 플랜 변경 API
+이 Phase에서는 PortOne V2 기반 결제 관련 API 엔드포인트를 구현합니다:
+- 빌링키 발급 준비/저장 API
+- 구독 관리 API (조회, 변경, 취소)
 - 결제 내역 API
-- 웹훅 엔드포인트
+- PortOne 웹훅 엔드포인트
 
 ## 3.1 API 엔드포인트 목록
 
@@ -15,13 +14,13 @@
 |--------|------|------|------|
 | GET | `/api/billing/plans` | 플랜 목록 조회 | 인증 필요 |
 | GET | `/api/billing/subscription` | 현재 구독 조회 | admin |
-| POST | `/api/billing/subscription/create` | 구독 생성 | admin |
-| POST | `/api/billing/billing-key` | 빌링키 발급 완료 | admin |
+| POST | `/api/billing/billing-key/prepare` | 빌링키 발급 준비 | admin |
+| POST | `/api/billing/billing-key/save` | 빌링키 저장 및 구독 시작 | admin |
 | DELETE | `/api/billing/billing-key` | 결제 수단 삭제 | admin |
-| POST | `/api/billing/plan/change` | 플랜 변경 | admin |
-| POST | `/api/billing/cancel` | 구독 취소 | admin |
+| POST | `/api/billing/subscription/change` | 플랜 변경 | admin |
+| POST | `/api/billing/subscription/cancel` | 구독 취소 | admin |
 | GET | `/api/billing/payments` | 결제 내역 조회 | admin |
-| POST | `/api/webhooks/tosspayments` | 웹훅 수신 | 서명 검증 |
+| POST | `/api/billing/webhook` | PortOne 웹훅 수신 | 서명 검증 |
 
 ---
 
@@ -34,7 +33,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { plans } from '@/drizzle/schema';
-import { eq } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 
 export async function GET() {
@@ -53,15 +52,18 @@ export async function GET() {
       .select()
       .from(plans)
       .where(eq(plans.isActive, true))
-      .orderBy(plans.monthlyPrice);
+      .orderBy(asc(plans.sortOrder));
 
     return NextResponse.json({
       plans: activePlans.map(plan => ({
         id: plan.id,
         name: plan.name,
+        nameKo: plan.nameKo,
+        description: plan.description,
         monthlyPrice: plan.monthlyPrice,
-        tier: plan.tier,
+        yearlyPrice: plan.yearlyPrice,
         features: plan.features,
+        limits: plan.limits,
       })),
     });
   } catch (error) {
@@ -134,26 +136,28 @@ export async function GET() {
       subscription: {
         id: sub.subscription.id,
         status: sub.subscription.status,
+        billingCycle: sub.subscription.billingCycle,
         currentPeriodStart: sub.subscription.currentPeriodStart,
         currentPeriodEnd: sub.subscription.currentPeriodEnd,
-        nextBillingDate: sub.subscription.nextBillingDate,
+        nextPaymentDate: sub.subscription.nextPaymentDate,
         cancelAtPeriodEnd: sub.subscription.cancelAtPeriodEnd,
-        failedPaymentCount: sub.subscription.failedPaymentCount,
-        billingKeyMasked: sub.subscription.billingKeyMasked,
+        hasBillingKey: !!sub.subscription.billingKey,
       },
       plan: sub.plan ? {
         id: sub.plan.id,
         name: sub.plan.name,
+        nameKo: sub.plan.nameKo,
         monthlyPrice: sub.plan.monthlyPrice,
+        yearlyPrice: sub.plan.yearlyPrice,
         features: sub.plan.features,
       } : null,
       recentPayments: recentPayments.map(p => ({
         id: p.id,
         amount: p.amount,
         status: p.status,
+        payMethod: p.payMethod,
+        cardInfo: p.cardInfo,
         paidAt: p.paidAt,
-        cardCompany: p.cardCompany,
-        cardNumber: p.cardNumber,
       })),
     });
   } catch (error) {
@@ -168,26 +172,25 @@ export async function GET() {
 
 ---
 
-## 3.4 구독 생성 API
+## 3.4 빌링키 발급 준비 API
 
 ### 파일
-`app/api/billing/subscription/create/route.ts`
+`app/api/billing/billing-key/prepare/route.ts`
 
-구독을 생성하고 customerKey를 발급합니다. 빌링키는 아직 없는 상태입니다.
+프론트엔드에서 PortOne SDK를 호출하기 전에 필요한 설정 정보를 제공합니다.
 
 ```typescript
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { subscriptions, plans } from '@/drizzle/schema';
+import { tenants } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
-import { randomUUID } from 'crypto';
+import { billingEnv } from '@/lib/config/billing-env';
 
 export async function POST(request: Request) {
   try {
     const session = await getSession();
 
-    // admin 권한 확인
     if (!session.userId || session.role !== 'admin') {
       return NextResponse.json(
         { error: '결제 관리는 관리자만 가능합니다.' },
@@ -196,70 +199,48 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { planId } = body;
+    const { planId, billingCycle } = body;
 
-    if (!planId) {
+    if (!planId || !billingCycle) {
       return NextResponse.json(
-        { error: '플랜을 선택해주세요.' },
-        { status: 400 }
-      );
-    }
-
-    // 플랜 존재 확인
-    const plan = await db
-      .select()
-      .from(plans)
-      .where(eq(plans.id, planId))
-      .limit(1);
-
-    if (plan.length === 0) {
-      return NextResponse.json(
-        { error: '존재하지 않는 플랜입니다.' },
+        { error: '플랜과 결제 주기를 선택해주세요.' },
         { status: 400 }
       );
     }
 
     const tenantId = session.tenantId;
 
-    // 기존 구독 확인
-    const existing = await db
+    // 테넌트 정보 조회
+    const [tenant] = await db
       .select()
-      .from(subscriptions)
-      .where(eq(subscriptions.tenantId, tenantId))
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
       .limit(1);
 
-    if (existing.length > 0) {
-      // 기존 구독이 있으면 customerKey 반환
-      return NextResponse.json({
-        subscription: existing[0],
-        customerKey: existing[0].customerKey,
-        isExisting: true,
-      });
+    if (!tenant) {
+      return NextResponse.json(
+        { error: '테넌트 정보를 찾을 수 없습니다.' },
+        { status: 404 }
+      );
     }
 
-    // customerKey 생성 (테넌트 기반)
-    const customerKey = `cust_${tenantId}_${randomUUID().slice(0, 8)}`;
-
-    // 새 구독 생성 (pending 상태)
-    const [newSubscription] = await db
-      .insert(subscriptions)
-      .values({
-        tenantId,
-        planId,
-        status: 'pending',
-        customerKey,
-      })
-      .returning();
-
+    // PortOne SDK에 필요한 설정 반환
     return NextResponse.json({
-      subscription: newSubscription,
-      customerKey,
-      isExisting: false,
+      storeId: billingEnv.portone.storeId,
+      channelKey: billingEnv.portone.channelKey,
+      customer: {
+        customerId: tenantId,
+        fullName: tenant.name || session.userName,
+        email: session.userEmail,
+      },
+      // 선택된 플랜 정보 (프론트엔드에서 사용)
+      planId,
+      billingCycle,
     });
   } catch (error) {
-    console.error('[POST /api/billing/subscription/create]', error);
+    console.error('[POST /api/billing/billing-key/prepare]', error);
     return NextResponse.json(
-      { error: '구독 생성에 실패했습니다.' },
+      { error: '빌링키 발급 준비에 실패했습니다.' },
       { status: 500 }
     );
   }
@@ -268,21 +249,20 @@ export async function POST(request: Request) {
 
 ---
 
-## 3.5 빌링키 발급 API
+## 3.5 빌링키 저장 API
 
 ### 파일
-`app/api/billing/billing-key/route.ts`
+`app/api/billing/billing-key/save/route.ts`
 
-프론트엔드에서 토스 SDK로 인증 완료 후, authKey를 받아 빌링키를 발급합니다.
+프론트엔드에서 PortOne SDK로 빌링키 발급 완료 후 호출합니다.
 
 ```typescript
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { subscriptions, tenants } from '@/drizzle/schema';
+import { subscriptions, plans, tenants } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
-import { getTossClient } from '@/lib/toss/client';
-import { encryptBillingKey } from '@/lib/crypto/billing';
+import { getBillingKeyInfo } from '@/lib/portone/client';
 import { inngest } from '@/inngest/client';
 
 export async function POST(request: Request) {
@@ -297,113 +277,134 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { authKey, customerKey } = body;
+    const { billingKey, planId, billingCycle } = body;
 
-    if (!authKey || !customerKey) {
+    if (!billingKey || !planId || !billingCycle) {
       return NextResponse.json(
-        { error: '인증 정보가 누락되었습니다.' },
+        { error: '필수 정보가 누락되었습니다.' },
         { status: 400 }
       );
     }
 
     const tenantId = session.tenantId;
 
-    // 구독 확인
-    const [subscription] = await db
+    // 1. PortOne에서 빌링키 유효성 확인
+    const billingKeyInfo = await getBillingKeyInfo(billingKey);
+
+    if (!billingKeyInfo) {
+      return NextResponse.json(
+        { error: '유효하지 않은 빌링키입니다.' },
+        { status: 400 }
+      );
+    }
+
+    // 2. 플랜 확인
+    const [plan] = await db
+      .select()
+      .from(plans)
+      .where(eq(plans.id, planId))
+      .limit(1);
+
+    if (!plan) {
+      return NextResponse.json(
+        { error: '존재하지 않는 플랜입니다.' },
+        { status: 400 }
+      );
+    }
+
+    // 3. 기존 구독 확인
+    const [existingSubscription] = await db
       .select()
       .from(subscriptions)
       .where(eq(subscriptions.tenantId, tenantId))
       .limit(1);
 
-    if (!subscription) {
-      return NextResponse.json(
-        { error: '구독 정보를 찾을 수 없습니다.' },
-        { status: 404 }
-      );
-    }
-
-    // customerKey 일치 확인
-    if (subscription.customerKey !== customerKey) {
-      return NextResponse.json(
-        { error: '고객 정보가 일치하지 않습니다.' },
-        { status: 400 }
-      );
-    }
-
-    // 토스 API로 빌링키 발급
-    const toss = getTossClient();
-    const billingResult = await toss.issueBillingKey(authKey, customerKey);
-
-    // 빌링키 암호화
-    const encryptedBillingKey = encryptBillingKey(billingResult.billingKey);
-
-    // 마스킹된 카드 정보 생성
-    const maskedCard = `${billingResult.card.company} ${billingResult.card.number}`;
-
     // 결제 기간 계산
     const now = new Date();
     const periodEnd = new Date(now);
-    periodEnd.setMonth(periodEnd.getMonth() + 1);
+    if (billingCycle === 'yearly') {
+      periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+    } else {
+      periodEnd.setMonth(periodEnd.getMonth() + 1);
+    }
 
-    // 구독 업데이트
-    const [updatedSubscription] = await db
-      .update(subscriptions)
-      .set({
-        billingKey: encryptedBillingKey,
-        billingKeyMasked: maskedCard,
-        status: 'active',
-        currentPeriodStart: now,
-        currentPeriodEnd: periodEnd,
-        nextBillingDate: periodEnd,
-        updatedAt: new Date(),
-      })
-      .where(eq(subscriptions.id, subscription.id))
-      .returning();
+    let subscription;
 
-    // 테넌트 tier 업데이트
+    if (existingSubscription) {
+      // 기존 구독 업데이트
+      [subscription] = await db
+        .update(subscriptions)
+        .set({
+          planId,
+          billingCycle,
+          billingKey,
+          billingKeyIssuedAt: new Date(),
+          status: 'active',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          nextPaymentDate: periodEnd,
+          cancelAtPeriodEnd: false,
+          cancelledAt: null,
+          cancelReason: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.id, existingSubscription.id))
+        .returning();
+    } else {
+      // 새 구독 생성
+      [subscription] = await db
+        .insert(subscriptions)
+        .values({
+          tenantId,
+          planId,
+          billingCycle,
+          billingKey,
+          billingKeyIssuedAt: new Date(),
+          status: 'active',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          nextPaymentDate: periodEnd,
+        })
+        .returning();
+    }
+
+    // 4. 테넌트 플랜 업데이트
     await db
       .update(tenants)
       .set({
-        tier: subscription.planId,
+        tier: planId,
         updatedAt: new Date(),
       })
       .where(eq(tenants.id, tenantId));
 
-    // 첫 결제 이벤트 발송 (무료 첫 달이 아닌 경우)
-    await inngest.send({
-      name: 'billing/payment.process',
-      data: {
-        subscriptionId: subscription.id,
-        tenantId,
-        isFirstPayment: true,
-      },
-    });
+    // 5. 첫 결제 실행 (유료 플랜인 경우)
+    const amount = billingCycle === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice;
+
+    if (amount > 0) {
+      await inngest.send({
+        name: 'billing/payment.requested',
+        data: {
+          subscriptionId: subscription.id,
+          tenantId,
+          isFirstPayment: true,
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,
       subscription: {
-        id: updatedSubscription.id,
-        status: updatedSubscription.status,
-        billingKeyMasked: maskedCard,
-        currentPeriodEnd: periodEnd,
+        id: subscription.id,
+        status: subscription.status,
+        planId: subscription.planId,
+        billingCycle: subscription.billingCycle,
+        currentPeriodEnd: subscription.currentPeriodEnd,
       },
     });
   } catch (error) {
-    console.error('[POST /api/billing/billing-key]', error);
-
-    // 토스 에러 처리
-    if (error instanceof TossPaymentError) {
-      return NextResponse.json(
-        {
-          error: error.userMessage,
-          code: error.code,
-        },
-        { status: 400 }
-      );
-    }
-
+    console.error('[POST /api/billing/billing-key/save]', error);
     return NextResponse.json(
-      { error: '빌링키 발급에 실패했습니다.' },
+      { error: '빌링키 저장에 실패했습니다.' },
       { status: 500 }
     );
   }
@@ -437,12 +438,12 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // 빌링키 삭제 (DB에서만 - 토스에서는 자동 삭제되지 않음)
+    // 빌링키 삭제 (DB에서만)
     await db
       .update(subscriptions)
       .set({
         billingKey: null,
-        billingKeyMasked: null,
+        billingKeyIssuedAt: null,
         status: 'pending',
         updatedAt: new Date(),
       })
@@ -467,7 +468,7 @@ export async function DELETE(request: Request) {
 ## 3.6 플랜 변경 API
 
 ### 파일
-`app/api/billing/plan/change/route.ts`
+`app/api/billing/subscription/change/route.ts`
 
 ```typescript
 import { NextResponse } from 'next/server';
@@ -488,7 +489,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { newPlanId } = body;
+    const { newPlanId, newBillingCycle } = body;
 
     if (!newPlanId) {
       return NextResponse.json(
@@ -520,7 +521,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (subscription.planId === newPlanId) {
+    if (subscription.planId === newPlanId && subscription.billingCycle === (newBillingCycle || subscription.billingCycle)) {
       return NextResponse.json(
         { error: '현재 구독 중인 플랜입니다.' },
         { status: 400 }
@@ -542,11 +543,11 @@ export async function POST(request: Request) {
     }
 
     // 플랜 변경 (다음 결제일부터 적용)
-    // 즉시 적용을 원하면 비례 계산 로직 추가 필요
     await db
       .update(subscriptions)
       .set({
         planId: newPlanId,
+        billingCycle: newBillingCycle || subscription.billingCycle,
         updatedAt: new Date(),
       })
       .where(eq(subscriptions.id, subscription.id));
@@ -555,22 +556,24 @@ export async function POST(request: Request) {
     await db
       .update(tenants)
       .set({
-        tier: newPlan.tier,
+        tier: newPlanId,
         updatedAt: new Date(),
       })
       .where(eq(tenants.id, tenantId));
 
     return NextResponse.json({
       success: true,
-      message: `${newPlan.name} 플랜으로 변경되었습니다.`,
+      message: `${newPlan.nameKo} 플랜으로 변경되었습니다.`,
       newPlan: {
         id: newPlan.id,
         name: newPlan.name,
+        nameKo: newPlan.nameKo,
         monthlyPrice: newPlan.monthlyPrice,
+        yearlyPrice: newPlan.yearlyPrice,
       },
     });
   } catch (error) {
-    console.error('[POST /api/billing/plan/change]', error);
+    console.error('[POST /api/billing/subscription/change]', error);
     return NextResponse.json(
       { error: '플랜 변경에 실패했습니다.' },
       { status: 500 }
@@ -584,7 +587,7 @@ export async function POST(request: Request) {
 ## 3.7 구독 취소 API
 
 ### 파일
-`app/api/billing/cancel/route.ts`
+`app/api/billing/subscription/cancel/route.ts`
 
 ```typescript
 import { NextResponse } from 'next/server';
@@ -592,6 +595,7 @@ import { db } from '@/lib/db';
 import { subscriptions, tenants } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
+import { deleteBillingKey } from '@/lib/portone/client';
 
 export async function POST(request: Request) {
   try {
@@ -631,23 +635,33 @@ export async function POST(request: Request) {
     }
 
     if (cancelImmediately) {
+      // PortOne에서 빌링키 삭제 (선택적)
+      if (subscription.billingKey) {
+        try {
+          await deleteBillingKey(subscription.billingKey);
+        } catch (e) {
+          console.error('[Cancel] 빌링키 삭제 실패:', e);
+        }
+      }
+
       // 즉시 취소
       await db
         .update(subscriptions)
         .set({
           status: 'canceled',
+          cancelledAt: new Date(),
           cancelReason: reason,
           billingKey: null,
-          billingKeyMasked: null,
+          billingKeyIssuedAt: null,
           updatedAt: new Date(),
         })
         .where(eq(subscriptions.id, subscription.id));
 
-      // 테넌트 tier를 free로 변경
+      // 테넌트 tier를 basic으로 변경
       await db
         .update(tenants)
         .set({
-          tier: 'free',
+          tier: 'basic',
           updatedAt: new Date(),
         })
         .where(eq(tenants.id, tenantId));
@@ -670,12 +684,12 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         success: true,
-        message: `구독이 ${subscription.currentPeriodEnd?.toLocaleDateString()}에 취소됩니다.`,
+        message: `구독이 ${subscription.currentPeriodEnd?.toLocaleDateString('ko-KR')}에 취소됩니다.`,
         cancelAt: subscription.currentPeriodEnd,
       });
     }
   } catch (error) {
-    console.error('[POST /api/billing/cancel]', error);
+    console.error('[POST /api/billing/subscription/cancel]', error);
     return NextResponse.json(
       { error: '구독 취소에 실패했습니다.' },
       { status: 500 }
@@ -694,8 +708,8 @@ export async function POST(request: Request) {
 ```typescript
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { payments, subscriptions } from '@/drizzle/schema';
-import { eq, desc } from 'drizzle-orm';
+import { payments } from '@/drizzle/schema';
+import { eq, desc, sql } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 
 export async function GET(request: Request) {
@@ -731,22 +745,20 @@ export async function GET(request: Request) {
       .from(payments)
       .where(eq(payments.tenantId, tenantId));
 
-    const total = totalResult[0]?.count || 0;
+    const total = Number(totalResult[0]?.count || 0);
 
     return NextResponse.json({
       payments: paymentList.map(p => ({
         id: p.id,
-        orderId: p.orderId,
+        paymentId: p.paymentId,
         amount: p.amount,
+        currency: p.currency,
         status: p.status,
-        cardCompany: p.cardCompany,
-        cardNumber: p.cardNumber,
+        payMethod: p.payMethod,
+        cardInfo: p.cardInfo,
         receiptUrl: p.receiptUrl,
-        periodStart: p.periodStart,
-        periodEnd: p.periodEnd,
+        failReason: p.failReason,
         paidAt: p.paidAt,
-        failedAt: p.failedAt,
-        failureMessage: p.failureMessage,
         createdAt: p.createdAt,
       })),
       pagination: {
@@ -768,68 +780,73 @@ export async function GET(request: Request) {
 
 ---
 
-## 3.9 웹훅 엔드포인트
+## 3.9 PortOne 웹훅 엔드포인트
 
 ### 파일
-`app/api/webhooks/tosspayments/route.ts`
+`app/api/billing/webhook/route.ts`
 
 ```typescript
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { billingWebhookLogs } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
-import { validateTossWebhook } from '@/lib/toss/webhook-security';
+import { verifyWebhook, type WebhookEventType } from '@/lib/portone/webhook';
 import { inngest } from '@/inngest/client';
-import { TossWebhookPayload } from '@/lib/toss/types';
 
 export async function POST(request: Request) {
   try {
-    // 서명 검증
-    const validation = await validateTossWebhook(request);
+    // 1. 원본 바디 추출
+    const body = await request.text();
+    const headers = Object.fromEntries(request.headers.entries());
 
-    if (!validation.isValid) {
-      console.error('[Webhook] 검증 실패:', validation.error);
+    // 2. 웹훅 서명 검증
+    const verification = await verifyWebhook(body, headers);
+
+    if (!verification.success) {
+      console.error('[Webhook] 검증 실패:', verification.error);
       return NextResponse.json(
-        { error: validation.error },
+        { error: verification.error },
         { status: 401 }
       );
     }
 
-    const payload: TossWebhookPayload = JSON.parse(validation.body!);
+    const webhookData = verification.data!;
+    const eventType = webhookData.type as WebhookEventType;
 
-    // 이벤트 ID 생성 (멱등성 키)
-    const eventId = `${payload.eventType}_${payload.data.paymentKey || payload.data.billingKey}_${payload.createdAt}`;
+    // 3. 웹훅 ID로 멱등성 체크 (PortOne은 webhookId 제공)
+    const webhookId = webhookData.webhookId;
 
-    // 중복 체크
-    const existing = await db
-      .select()
-      .from(billingWebhookLogs)
-      .where(eq(billingWebhookLogs.eventId, eventId))
-      .limit(1);
+    if (webhookId) {
+      const existing = await db
+        .select()
+        .from(billingWebhookLogs)
+        .where(eq(billingWebhookLogs.webhookId, webhookId))
+        .limit(1);
 
-    if (existing.length > 0) {
-      console.log('[Webhook] 중복 이벤트 무시:', eventId);
-      return NextResponse.json({ status: 'already_processed' });
+      if (existing.length > 0) {
+        console.log('[Webhook] 중복 이벤트 무시:', webhookId);
+        return NextResponse.json({ status: 'already_processed' });
+      }
     }
 
-    // 웹훅 로그 저장
+    // 4. 웹훅 로그 저장
     const [log] = await db
       .insert(billingWebhookLogs)
       .values({
-        eventId,
-        eventType: payload.eventType,
-        status: 'received',
-        payload,
+        webhookId,
+        eventType,
+        payload: webhookData,
+        processed: false,
       })
       .returning();
 
-    // Inngest로 비동기 처리 위임
+    // 5. Inngest로 비동기 처리 위임
     await inngest.send({
       name: 'billing/webhook.process',
       data: {
         logId: log.id,
-        eventType: payload.eventType,
-        payload,
+        eventType,
+        payload: webhookData,
       },
     });
 
@@ -912,12 +929,13 @@ export function apiSuccess<T>(data: T, status: number = 200) {
 
 - [ ] `app/api/billing/plans/route.ts` - 플랜 목록 조회
 - [ ] `app/api/billing/subscription/route.ts` - 구독 조회
-- [ ] `app/api/billing/subscription/create/route.ts` - 구독 생성
-- [ ] `app/api/billing/billing-key/route.ts` - 빌링키 발급/삭제
-- [ ] `app/api/billing/plan/change/route.ts` - 플랜 변경
-- [ ] `app/api/billing/cancel/route.ts` - 구독 취소
+- [ ] `app/api/billing/billing-key/prepare/route.ts` - 빌링키 발급 준비
+- [ ] `app/api/billing/billing-key/save/route.ts` - 빌링키 저장
+- [ ] `app/api/billing/billing-key/route.ts` (DELETE) - 결제 수단 삭제
+- [ ] `app/api/billing/subscription/change/route.ts` - 플랜 변경
+- [ ] `app/api/billing/subscription/cancel/route.ts` - 구독 취소
 - [ ] `app/api/billing/payments/route.ts` - 결제 내역 조회
-- [ ] `app/api/webhooks/tosspayments/route.ts` - 웹훅 수신
+- [ ] `app/api/billing/webhook/route.ts` - PortOne 웹훅 수신
 - [ ] 모든 API에 admin 권한 검증 적용
 - [ ] 에러 핸들링 및 로깅
 - [ ] API 테스트

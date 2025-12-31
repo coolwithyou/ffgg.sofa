@@ -2,10 +2,9 @@
 
 ## 개요
 
-이 Phase에서는 토스 페이먼츠 정기결제 시스템의 기반을 구축합니다:
+이 Phase에서는 PortOne V2 기반 정기결제 시스템의 기반을 구축합니다:
 - 결제 관련 DB 테이블 설계 및 마이그레이션
-- 환경변수 설정
-- 빌링키 암호화 유틸리티 구현
+- 환경변수 설정 (PortOne V2)
 - 플랜 시드 데이터 생성
 
 ## 1.1 DB 마이그레이션
@@ -17,29 +16,47 @@
 
 #### plans 테이블
 
-플랜 정의를 저장합니다. 기존 `tenants.tier`와 매핑됩니다.
+플랜 정의를 저장합니다.
 
 ```typescript
-import { pgTable, text, integer, jsonb, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, jsonb, timestamp, boolean } from 'drizzle-orm/pg-core';
 
 export const plans = pgTable('plans', {
   // 플랜 ID - 'basic', 'standard', 'premium'
   id: text('id').primaryKey(),
 
-  // 표시 이름
+  // 표시 이름 (영문)
   name: text('name').notNull(),
+
+  // 표시 이름 (한글)
+  nameKo: text('name_ko').notNull(),
+
+  // 플랜 설명
+  description: text('description'),
 
   // 월간 가격 (원)
   monthlyPrice: integer('monthly_price').notNull(),
 
-  // tenants.tier와 매핑되는 값
-  tier: text('tier').notNull(),
+  // 연간 가격 (원, 할인 적용)
+  yearlyPrice: integer('yearly_price').notNull(),
 
   // 플랜 기능 목록 (마케팅용)
   features: jsonb('features').$type<string[]>().default([]),
 
+  // 플랜 제한 설정
+  limits: jsonb('limits').$type<{
+    maxChatbots: number;
+    maxDatasets: number;
+    maxDocuments: number;
+    maxStorageBytes: number;
+    maxMonthlyConversations: number;
+  }>(),
+
   // 플랜 활성화 여부
   isActive: boolean('is_active').default(true),
+
+  // 정렬 순서
+  sortOrder: integer('sort_order').default(0),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
@@ -51,7 +68,7 @@ export const plans = pgTable('plans', {
 테넌트별 구독 상태를 관리합니다. **테넌트당 1개의 구독만 존재**합니다.
 
 ```typescript
-import { pgTable, uuid, text, timestamp, integer, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, integer, boolean, pgEnum } from 'drizzle-orm/pg-core';
 import { tenants } from './tenants';
 import { plans } from './plans';
 
@@ -62,6 +79,11 @@ export const subscriptionStatusEnum = pgEnum('subscription_status', [
   'suspended',  // 서비스 일시 정지
   'canceled',   // 사용자 취소
   'expired',    // 유예기간 만료
+]);
+
+export const billingCycleEnum = pgEnum('billing_cycle', [
+  'monthly',
+  'yearly',
 ]);
 
 export const subscriptions = pgTable('subscriptions', {
@@ -81,21 +103,19 @@ export const subscriptions = pgTable('subscriptions', {
   // 구독 상태
   status: subscriptionStatusEnum('status').notNull().default('pending'),
 
-  // 토스 빌링키 (AES-256-GCM 암호화)
-  billingKey: text('billing_key'),
+  // 결제 주기
+  billingCycle: billingCycleEnum('billing_cycle').notNull().default('monthly'),
 
-  // 마스킹된 카드 정보 (표시용) - 예: "신한 **** **** **** 1234"
-  billingKeyMasked: text('billing_key_masked'),
-
-  // 토스 customerKey (고객 식별자)
-  customerKey: text('customer_key').unique(),
+  // PortOne 빌링키 정보
+  billingKey: text('billing_key'), // PortOne 발급 빌링키
+  billingKeyIssuedAt: timestamp('billing_key_issued_at', { withTimezone: true }),
 
   // 현재 결제 기간
   currentPeriodStart: timestamp('current_period_start', { withTimezone: true }),
   currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
 
   // 다음 결제 예정일
-  nextBillingDate: timestamp('next_billing_date', { withTimezone: true }),
+  nextPaymentDate: timestamp('next_payment_date', { withTimezone: true }),
 
   // 연속 결제 실패 횟수
   failedPaymentCount: integer('failed_payment_count').default(0),
@@ -103,7 +123,8 @@ export const subscriptions = pgTable('subscriptions', {
   // 기간 만료 시 취소 여부 (true면 갱신 안 함)
   cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false),
 
-  // 취소 사유 (선택)
+  // 취소 정보
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelReason: text('cancel_reason'),
 
   // 마지막 결제 성공 시간
@@ -120,11 +141,12 @@ export const subscriptions = pgTable('subscriptions', {
 
 ```typescript
 export const paymentStatusEnum = pgEnum('payment_status', [
-  'pending',   // 결제 대기
-  'paid',      // 결제 완료
-  'failed',    // 결제 실패
-  'canceled',  // 결제 취소
-  'refunded',  // 환불 완료
+  'pending',          // 결제 대기
+  'paid',             // 결제 완료
+  'failed',           // 결제 실패
+  'cancelled',        // 결제 취소
+  'partial_cancelled', // 부분 취소
+  'refunded',         // 환불 완료
 ]);
 
 export const payments = pgTable('payments', {
@@ -135,32 +157,36 @@ export const payments = pgTable('payments', {
     .notNull()
     .references(() => tenants.id, { onDelete: 'cascade' }),
   subscriptionId: uuid('subscription_id')
-    .notNull()
     .references(() => subscriptions.id, { onDelete: 'cascade' }),
 
-  // 주문 ID - 고유값, SOFA_{timestamp}_{random} 형식
-  orderId: text('order_id').notNull().unique(),
+  // PortOne 결제 정보
+  paymentId: text('payment_id').notNull().unique(), // PortOne paymentId
+  transactionId: text('transaction_id'), // PortOne transactionId (PG사 거래 ID)
 
-  // 토스 결제키 (결제 완료 후 발급)
-  paymentKey: text('payment_key'),
-
-  // 결제 금액
+  // 금액 정보
   amount: integer('amount').notNull(),
+  currency: text('currency').notNull().default('KRW'),
 
   // 결제 상태
   status: paymentStatusEnum('status').notNull().default('pending'),
+  failReason: text('fail_reason'),
 
-  // 카드 정보
-  cardCompany: text('card_company'),      // 카드사명
-  cardNumber: text('card_number'),        // 마스킹된 카드번호
-  cardType: text('card_type'),            // 신용/체크
+  // 결제 수단
+  payMethod: text('pay_method'), // CARD, EASY_PAY 등
+
+  // 카드 정보 (결제 완료 시)
+  cardInfo: jsonb('card_info').$type<{
+    issuer?: string;      // 발급사
+    acquirer?: string;    // 매입사
+    number?: string;      // 마스킹된 카드번호
+    type?: string;        // 카드 타입 (신용/체크)
+  }>(),
 
   // 영수증
   receiptUrl: text('receipt_url'),
 
-  // 실패 정보
-  failureCode: text('failure_code'),
-  failureMessage: text('failure_message'),
+  // 메타데이터
+  metadata: jsonb('metadata').$type<Record<string, unknown>>(),
 
   // 결제 기간 (해당 결제가 커버하는 기간)
   periodStart: timestamp('period_start', { withTimezone: true }),
@@ -180,40 +206,27 @@ export const payments = pgTable('payments', {
 웹훅 멱등성 보장을 위한 로그 테이블입니다.
 
 ```typescript
-export const webhookLogStatusEnum = pgEnum('webhook_log_status', [
-  'received',   // 수신됨
-  'processing', // 처리 중
-  'processed',  // 처리 완료
-  'failed',     // 처리 실패
-]);
-
 export const billingWebhookLogs = pgTable('billing_webhook_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
 
-  // 토스 웹훅 이벤트 ID (멱등성 키)
-  eventId: text('event_id').notNull().unique(),
+  // PortOne 웹훅 정보
+  webhookId: text('webhook_id'), // PortOne 웹훅 ID
+  eventType: text('event_type').notNull(), // Transaction.Paid, Transaction.Failed 등
 
-  // 이벤트 타입 - 'PAYMENT_STATUS_CHANGED', 'BILLING_KEY_DELETED' 등
-  eventType: text('event_type').notNull(),
+  // 페이로드
+  payload: jsonb('payload').notNull(),
 
-  // 처리 상태
-  status: webhookLogStatusEnum('status').notNull().default('received'),
-
-  // 원본 페이로드 (디버깅용)
-  payload: jsonb('payload'),
-
-  // 에러 메시지 (실패 시)
-  errorMessage: text('error_message'),
-
-  // 처리 완료 시간
+  // 처리 결과
+  processed: boolean('processed').default(false),
   processedAt: timestamp('processed_at', { withTimezone: true }),
+  error: text('error'),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
 // 인덱스 추가
-export const billingWebhookLogsEventIdIdx = index('billing_webhook_logs_event_id_idx')
-  .on(billingWebhookLogs.eventId);
+export const billingWebhookLogsWebhookIdIdx = index('billing_webhook_logs_webhook_id_idx')
+  .on(billingWebhookLogs.webhookId);
 ```
 
 ### Relations 설정
@@ -270,190 +283,110 @@ pnpm drizzle-kit push
 
 ```bash
 # ============================================
-# 토스페이먼츠 설정
+# PortOne V2 설정
 # ============================================
 
-# 클라이언트 키 (프론트엔드에서 사용)
-# 테스트: test_ck_xxx / 라이브: live_ck_xxx
-NEXT_PUBLIC_TOSS_CLIENT_KEY=test_ck_xxx
+# Store ID (PortOne 콘솔에서 확인)
+PORTONE_STORE_ID=store-xxxxx
 
-# 시크릿 키 (서버에서만 사용)
-# 테스트: test_sk_xxx / 라이브: live_sk_xxx
-TOSS_SECRET_KEY=test_sk_xxx
+# Channel Key (토스페이먼츠 채널)
+# PortOne 콘솔 > 결제 연동 > 채널 관리에서 확인
+PORTONE_CHANNEL_KEY=channel-key-xxxxx
 
-# 웹훅 시크릿 (토스 대시보드에서 발급)
-TOSS_WEBHOOK_SECRET=whsec_xxx
+# API Secret (V2 API 인증용)
+# PortOne 콘솔 > API 키 관리에서 발급
+PORTONE_API_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Webhook Secret (웹훅 서명 검증용)
+# PortOne 콘솔 > 웹훅 설정에서 확인
+PORTONE_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxx
 
 # ============================================
-# 빌링키 암호화 설정
+# Cron 인증
 # ============================================
 
-# AES-256-GCM 암호화 키 (32바이트 = 64자 hex)
-# 생성 방법: openssl rand -hex 32
-BILLING_ENCRYPTION_KEY=your_64_character_hex_key_here
+# Vercel Cron 인증용 시크릿
+CRON_SECRET=xxxxx
 ```
 
-### 환경변수 검증
+### 환경변수 검증 유틸리티
 
-`lib/env.ts`에 검증 로직 추가:
+`lib/config/billing-env.ts`
 
 ```typescript
 import { z } from 'zod';
 
+/**
+ * 빌링 환경변수 스키마
+ */
 const billingEnvSchema = z.object({
-  NEXT_PUBLIC_TOSS_CLIENT_KEY: z.string().min(1),
-  TOSS_SECRET_KEY: z.string().min(1),
-  TOSS_WEBHOOK_SECRET: z.string().min(1),
-  BILLING_ENCRYPTION_KEY: z.string().length(64),
+  PORTONE_STORE_ID: z.string().min(1, 'PORTONE_STORE_ID is required'),
+  PORTONE_CHANNEL_KEY: z.string().min(1, 'PORTONE_CHANNEL_KEY is required'),
+  PORTONE_API_SECRET: z.string().min(1, 'PORTONE_API_SECRET is required'),
+  PORTONE_WEBHOOK_SECRET: z.string().min(1, 'PORTONE_WEBHOOK_SECRET is required'),
+  CRON_SECRET: z.string().optional(),
 });
 
-export function validateBillingEnv() {
-  const result = billingEnvSchema.safeParse(process.env);
-  if (!result.success) {
-    console.error('❌ 결제 환경변수 오류:', result.error.format());
-    throw new Error('결제 환경변수가 올바르게 설정되지 않았습니다.');
-  }
-  return result.data;
-}
-```
+type BillingEnv = z.infer<typeof billingEnvSchema>;
 
----
-
-## 1.3 암호화 유틸리티
-
-### 신규 파일
-`lib/crypto/billing.ts`
-
-빌링키는 민감한 정보이므로 AES-256-GCM으로 암호화하여 저장합니다.
-
-```typescript
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
-
-const ALGORITHM = 'aes-256-gcm';
-const IV_LENGTH = 12;  // GCM 권장 IV 길이
-const TAG_LENGTH = 16; // 인증 태그 길이
+let cachedEnv: BillingEnv | null = null;
 
 /**
- * 빌링키를 암호화합니다.
+ * 빌링 환경변수를 검증하고 반환합니다.
  *
- * 형식: base64(iv + ciphertext + authTag)
+ * @throws {Error} 필수 환경변수가 누락된 경우
  */
-export function encryptBillingKey(billingKey: string): string {
-  const key = getEncryptionKey();
-  const iv = randomBytes(IV_LENGTH);
+export function validateBillingEnv(): BillingEnv {
+  if (cachedEnv) return cachedEnv;
 
-  const cipher = createCipheriv(ALGORITHM, key, iv);
+  const result = billingEnvSchema.safeParse(process.env);
 
-  let encrypted = cipher.update(billingKey, 'utf8');
-  encrypted = Buffer.concat([encrypted, cipher.final()]);
-
-  const authTag = cipher.getAuthTag();
-
-  // iv (12) + encrypted + authTag (16)을 합쳐서 base64 인코딩
-  const combined = Buffer.concat([iv, encrypted, authTag]);
-  return combined.toString('base64');
-}
-
-/**
- * 암호화된 빌링키를 복호화합니다.
- */
-export function decryptBillingKey(encryptedData: string): string {
-  const key = getEncryptionKey();
-  const combined = Buffer.from(encryptedData, 'base64');
-
-  // 데이터 분리
-  const iv = combined.subarray(0, IV_LENGTH);
-  const authTag = combined.subarray(combined.length - TAG_LENGTH);
-  const encrypted = combined.subarray(IV_LENGTH, combined.length - TAG_LENGTH);
-
-  const decipher = createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(authTag);
-
-  let decrypted = decipher.update(encrypted);
-  decrypted = Buffer.concat([decrypted, decipher.final()]);
-
-  return decrypted.toString('utf8');
-}
-
-/**
- * 환경변수에서 암호화 키를 가져옵니다.
- */
-function getEncryptionKey(): Buffer {
-  const keyHex = process.env.BILLING_ENCRYPTION_KEY;
-
-  if (!keyHex || keyHex.length !== 64) {
-    throw new Error(
-      'BILLING_ENCRYPTION_KEY must be a 64-character hex string (32 bytes)'
-    );
+  if (!result.success) {
+    const errors = result.error.format();
+    console.error('❌ 빌링 환경변수 오류:', JSON.stringify(errors, null, 2));
+    throw new Error('빌링 환경변수가 올바르게 설정되지 않았습니다.');
   }
 
-  return Buffer.from(keyHex, 'hex');
+  cachedEnv = result.data;
+  return cachedEnv;
 }
 
 /**
- * 빌링키 암호화가 정상 작동하는지 테스트합니다.
+ * 빌링 환경변수 헬퍼 객체
  */
-export function testEncryption(): boolean {
-  try {
-    const testData = 'test_billing_key_12345';
-    const encrypted = encryptBillingKey(testData);
-    const decrypted = decryptBillingKey(encrypted);
-    return testData === decrypted;
-  } catch {
-    return false;
-  }
+export const billingEnv = {
+  get portone() {
+    const env = validateBillingEnv();
+    return {
+      storeId: env.PORTONE_STORE_ID,
+      channelKey: env.PORTONE_CHANNEL_KEY,
+      apiSecret: env.PORTONE_API_SECRET,
+      webhookSecret: env.PORTONE_WEBHOOK_SECRET,
+    };
+  },
+
+  get billing() {
+    return {
+      retryAttempts: 3,
+      retryDelayDays: [1, 3, 7], // 재시도 간격
+      gracePeriodDays: 7,
+    };
+  },
+} as const;
+
+/**
+ * 빌링 환경변수가 설정되어 있는지 확인합니다.
+ * (에러를 던지지 않고 boolean 반환)
+ */
+export function isBillingConfigured(): boolean {
+  const result = billingEnvSchema.safeParse(process.env);
+  return result.success;
 }
-```
-
-### 테스트 코드
-
-`lib/crypto/__tests__/billing.test.ts`
-
-```typescript
-import { describe, it, expect, beforeEach } from 'vitest';
-import { encryptBillingKey, decryptBillingKey, testEncryption } from '../billing';
-
-describe('billing encryption', () => {
-  beforeEach(() => {
-    // 테스트용 키 설정
-    process.env.BILLING_ENCRYPTION_KEY =
-      'a'.repeat(64); // 32바이트 = 64자 hex
-  });
-
-  it('should encrypt and decrypt billing key correctly', () => {
-    const originalKey = 'billing_key_abc123xyz';
-
-    const encrypted = encryptBillingKey(originalKey);
-    const decrypted = decryptBillingKey(encrypted);
-
-    expect(decrypted).toBe(originalKey);
-    expect(encrypted).not.toBe(originalKey);
-  });
-
-  it('should produce different ciphertext for same input (random IV)', () => {
-    const originalKey = 'billing_key_abc123xyz';
-
-    const encrypted1 = encryptBillingKey(originalKey);
-    const encrypted2 = encryptBillingKey(originalKey);
-
-    expect(encrypted1).not.toBe(encrypted2);
-  });
-
-  it('should pass self-test', () => {
-    expect(testEncryption()).toBe(true);
-  });
-
-  it('should fail with invalid key length', () => {
-    process.env.BILLING_ENCRYPTION_KEY = 'short_key';
-
-    expect(() => encryptBillingKey('test')).toThrow();
-  });
-});
 ```
 
 ---
 
-## 1.4 플랜 시드 데이터
+## 1.3 플랜 시드 데이터
 
 ### 신규 파일
 `drizzle/seed/plans.ts`
@@ -466,44 +399,76 @@ const PLAN_DATA = [
   {
     id: 'basic',
     name: 'Basic',
-    monthlyPrice: 13000,
-    tier: 'basic',
+    nameKo: '베이직',
+    description: '개인 및 소규모 팀을 위한 플랜',
+    monthlyPrice: 0, // 무료
+    yearlyPrice: 0,
     features: [
       '챗봇 1개',
-      '데이터셋 5개',
-      '월 10만 토큰',
-      '이메일 지원',
+      '데이터셋 1개',
+      '문서 10개',
+      '저장공간 100MB',
+      '월 1,000회 대화',
     ],
+    limits: {
+      maxChatbots: 1,
+      maxDatasets: 1,
+      maxDocuments: 10,
+      maxStorageBytes: 104857600, // 100MB
+      maxMonthlyConversations: 1000,
+    },
+    sortOrder: 0,
     isActive: true,
   },
   {
     id: 'standard',
     name: 'Standard',
-    monthlyPrice: 65000,
-    tier: 'standard',
+    nameKo: '스탠다드',
+    description: '성장하는 비즈니스를 위한 플랜',
+    monthlyPrice: 29000,
+    yearlyPrice: 290000, // 2개월 할인
     features: [
-      '챗봇 5개',
-      '데이터셋 20개',
-      '월 50만 토큰',
-      '채팅 지원',
+      '챗봇 3개',
+      '데이터셋 5개',
+      '문서 100개',
+      '저장공간 1GB',
+      '월 10,000회 대화',
       'API 액세스',
     ],
+    limits: {
+      maxChatbots: 3,
+      maxDatasets: 5,
+      maxDocuments: 100,
+      maxStorageBytes: 1073741824, // 1GB
+      maxMonthlyConversations: 10000,
+    },
+    sortOrder: 1,
     isActive: true,
   },
   {
     id: 'premium',
     name: 'Premium',
-    monthlyPrice: 260000,
-    tier: 'premium',
+    nameKo: '프리미엄',
+    description: '대규모 비즈니스를 위한 플랜',
+    monthlyPrice: 99000,
+    yearlyPrice: 990000, // 2개월 할인
     features: [
-      '무제한 챗봇',
-      '무제한 데이터셋',
-      '월 200만 토큰',
-      '전담 지원',
+      '챗봇 10개',
+      '데이터셋 20개',
+      '문서 500개',
+      '저장공간 10GB',
+      '월 100,000회 대화',
       'API 액세스',
-      '커스텀 통합',
-      'SLA 보장',
+      '우선 지원',
     ],
+    limits: {
+      maxChatbots: 10,
+      maxDatasets: 20,
+      maxDocuments: 500,
+      maxStorageBytes: 10737418240, // 10GB
+      maxMonthlyConversations: 100000,
+    },
+    sortOrder: 2,
     isActive: true,
   },
 ] as const;
@@ -519,15 +484,22 @@ export async function seedPlans() {
         target: plans.id,
         set: {
           name: plan.name,
+          nameKo: plan.nameKo,
+          description: plan.description,
           monthlyPrice: plan.monthlyPrice,
-          tier: plan.tier,
+          yearlyPrice: plan.yearlyPrice,
           features: plan.features,
+          limits: plan.limits,
           isActive: plan.isActive,
+          sortOrder: plan.sortOrder,
           updatedAt: new Date(),
         },
       });
 
-    console.log(`  ✓ ${plan.name} (₩${plan.monthlyPrice.toLocaleString()}/월)`);
+    const priceStr = plan.monthlyPrice === 0
+      ? '무료'
+      : `₩${plan.monthlyPrice.toLocaleString()}/월`;
+    console.log(`  ✓ ${plan.nameKo} (${priceStr})`);
   }
 
   console.log('✅ Plans seeded successfully');
@@ -558,10 +530,10 @@ if (require.main === module) {
 
 ---
 
-## 1.5 타입 정의
+## 1.4 타입 정의
 
 ### 신규 파일
-`lib/toss/types.ts`
+`lib/billing/types.ts`
 
 ```typescript
 // ============================================
@@ -570,13 +542,27 @@ if (require.main === module) {
 
 export type PlanId = 'basic' | 'standard' | 'premium';
 
+export type BillingCycle = 'monthly' | 'yearly';
+
+export interface PlanLimits {
+  maxChatbots: number;
+  maxDatasets: number;
+  maxDocuments: number;
+  maxStorageBytes: number;
+  maxMonthlyConversations: number;
+}
+
 export interface Plan {
   id: PlanId;
   name: string;
+  nameKo: string;
+  description: string | null;
   monthlyPrice: number;
-  tier: string;
+  yearlyPrice: number;
   features: string[];
+  limits: PlanLimits | null;
   isActive: boolean;
+  sortOrder: number;
 }
 
 // ============================================
@@ -596,14 +582,16 @@ export interface Subscription {
   tenantId: string;
   planId: PlanId;
   status: SubscriptionStatus;
-  billingKeyMasked?: string;
-  customerKey?: string;
-  currentPeriodStart?: Date;
-  currentPeriodEnd?: Date;
-  nextBillingDate?: Date;
+  billingCycle: BillingCycle;
+  billingKey?: string | null;
+  billingKeyIssuedAt?: Date | null;
+  currentPeriodStart?: Date | null;
+  currentPeriodEnd?: Date | null;
+  nextPaymentDate?: Date | null;
   failedPaymentCount: number;
   cancelAtPeriodEnd: boolean;
-  cancelReason?: string;
+  cancelledAt?: Date | null;
+  cancelReason?: string | null;
 }
 
 // ============================================
@@ -614,108 +602,75 @@ export type PaymentStatus =
   | 'pending'
   | 'paid'
   | 'failed'
-  | 'canceled'
+  | 'cancelled'
+  | 'partial_cancelled'
   | 'refunded';
+
+export interface CardInfo {
+  issuer?: string;
+  acquirer?: string;
+  number?: string;
+  type?: string;
+}
 
 export interface Payment {
   id: string;
   tenantId: string;
-  subscriptionId: string;
-  orderId: string;
-  paymentKey?: string;
+  subscriptionId?: string | null;
+  paymentId: string;
+  transactionId?: string | null;
   amount: number;
+  currency: string;
   status: PaymentStatus;
-  cardCompany?: string;
-  cardNumber?: string;
-  cardType?: string;
+  failReason?: string | null;
+  payMethod?: string | null;
+  cardInfo?: CardInfo | null;
+  receiptUrl?: string | null;
+  periodStart?: Date | null;
+  periodEnd?: Date | null;
+  paidAt?: Date | null;
+  failedAt?: Date | null;
+}
+
+// ============================================
+// PortOne 관련 타입
+// ============================================
+
+export interface PortOnePaymentResult {
+  status: 'PAID' | 'FAILED' | 'CANCELLED';
+  paymentId: string;
+  transactionId?: string;
+  paidAt?: string;
+  failReason?: string;
   receiptUrl?: string;
-  failureCode?: string;
-  failureMessage?: string;
-  periodStart?: Date;
-  periodEnd?: Date;
-  paidAt?: Date;
-  failedAt?: Date;
-}
-
-// ============================================
-// 토스 API 응답 타입
-// ============================================
-
-export interface TossBillingKeyResponse {
-  mId: string;
-  customerKey: string;
-  authenticatedAt: string;
-  method: string;
-  billingKey: string;
-  card: {
-    issuerCode: string;
-    acquirerCode: string;
-    number: string;
-    cardType: string;
-    ownerType: string;
-    company: string;
+  card?: {
+    issuer?: string;
+    acquirer?: string;
+    number?: string;
+    type?: string;
   };
-}
-
-export interface TossPaymentResponse {
-  mId: string;
-  lastTransactionKey: string;
-  paymentKey: string;
-  orderId: string;
-  orderName: string;
-  taxExemptionAmount: number;
-  status: string;
-  requestedAt: string;
-  approvedAt: string;
-  useEscrow: boolean;
-  cultureExpense: boolean;
-  card: {
-    issuerCode: string;
-    acquirerCode: string;
-    number: string;
-    installmentPlanMonths: number;
-    isInterestFree: boolean;
-    interestPayer: string | null;
-    approveNo: string;
-    useCardPoint: boolean;
-    cardType: string;
-    ownerType: string;
-    acquireStatus: string;
-    receiptUrl: string;
-    amount: number;
-    company: string;
-  };
-  method: string;
-  totalAmount: number;
-  balanceAmount: number;
-  suppliedAmount: number;
-  vat: number;
-  type: string;
-  country: string;
-  isPartialCancelable: boolean;
-  receipt: {
-    url: string;
-  };
-}
-
-export interface TossErrorResponse {
-  code: string;
-  message: string;
 }
 
 // ============================================
 // 웹훅 관련 타입
 // ============================================
 
-export interface TossWebhookPayload {
-  eventType: string;
-  createdAt: string;
+export type WebhookEventType =
+  | 'Transaction.Paid'
+  | 'Transaction.Failed'
+  | 'Transaction.Cancelled'
+  | 'Transaction.PartialCancelled'
+  | 'BillingKey.Issued'
+  | 'BillingKey.Deleted';
+
+export interface WebhookPayload {
+  type: WebhookEventType;
+  timestamp: string;
   data: {
-    paymentKey?: string;
-    orderId?: string;
-    status?: string;
+    paymentId?: string;
+    transactionId?: string;
     billingKey?: string;
-    customerKey?: string;
+    [key: string]: unknown;
   };
 }
 ```
@@ -725,18 +680,17 @@ export interface TossWebhookPayload {
 ## 체크리스트
 
 - [ ] `drizzle/schema.ts`에 4개 테이블 추가 (plans, subscriptions, payments, billing_webhook_logs)
+- [ ] pgEnum 추가 (subscription_status, billing_cycle, payment_status)
 - [ ] Relations 설정 완료
 - [ ] 마이그레이션 생성 및 적용
-- [ ] `.env.example` 업데이트
-- [ ] 환경변수 검증 로직 추가
-- [ ] `lib/crypto/billing.ts` 암호화 유틸리티 구현
-- [ ] 암호화 테스트 작성 및 통과
+- [ ] `.env.example` 업데이트 (PortOne 환경변수)
+- [ ] `lib/config/billing-env.ts` 환경변수 검증 로직 추가
 - [ ] `drizzle/seed/plans.ts` 시드 스크립트 작성
 - [ ] 플랜 시드 실행 확인
-- [ ] `lib/toss/types.ts` 타입 정의 완료
+- [ ] `lib/billing/types.ts` 타입 정의 완료
 
 ---
 
 ## 다음 단계
 
-Phase 1 완료 후 [Phase 2: 토스 클라이언트](./phase-2-toss-client.md)로 진행합니다.
+Phase 1 완료 후 [Phase 2: PortOne 클라이언트](./phase-2-portone-client.md)로 진행합니다.

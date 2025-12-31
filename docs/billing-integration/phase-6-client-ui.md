@@ -3,81 +3,96 @@
 ## 개요
 
 이 Phase에서는 결제 관련 프론트엔드 UI를 구현합니다:
-- 토스 SDK 연동
+- PortOne Browser SDK 연동
 - 플랜 선택 페이지
 - 결제 콜백 페이지
 - 구독 관리 페이지 개선
 - 결제 내역 페이지
 
-## 6.1 토스 SDK 연동
-
-### 신규 파일
-`lib/toss/sdk.ts`
-
-```typescript
-'use client';
-
-import { loadTossPayments, TossPayments } from '@tosspayments/payment-sdk';
-
-let tossPayments: TossPayments | null = null;
-
-/**
- * 토스페이먼츠 SDK를 로드합니다.
- */
-export async function getTossPayments(): Promise<TossPayments> {
-  if (tossPayments) {
-    return tossPayments;
-  }
-
-  const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
-  if (!clientKey) {
-    throw new Error('NEXT_PUBLIC_TOSS_CLIENT_KEY가 설정되지 않았습니다.');
-  }
-
-  tossPayments = await loadTossPayments(clientKey);
-  return tossPayments;
-}
-
-/**
- * 빌링키 인증을 요청합니다.
- */
-export async function requestBillingAuth(params: {
-  customerKey: string;
-  successUrl: string;
-  failUrl: string;
-}) {
-  const toss = await getTossPayments();
-
-  await toss.requestBillingAuth({
-    method: 'CARD',
-    customerKey: params.customerKey,
-    successUrl: params.successUrl,
-    failUrl: params.failUrl,
-  });
-}
-
-/**
- * 결제창을 여는 훅 (React Hook)
- */
-export function useTossPayments() {
-  const requestBilling = async (customerKey: string) => {
-    const baseUrl = window.location.origin;
-
-    await requestBillingAuth({
-      customerKey,
-      successUrl: `${baseUrl}/billing/success`,
-      failUrl: `${baseUrl}/billing/fail`,
-    });
-  };
-
-  return { requestBilling };
-}
-```
+## 6.1 PortOne Browser SDK 연동
 
 ### 패키지 설치
 
 ```bash
-pnpm add @tosspayments/payment-sdk
+pnpm add @portone/browser-sdk
+```
+
+### 신규 파일
+`lib/portone/browser-sdk.ts`
+
+```typescript
+'use client';
+
+import PortOne from '@portone/browser-sdk/v2';
+
+/**
+ * PortOne 빌링키 발급 파라미터 타입
+ */
+interface IssueBillingKeyParams {
+  storeId: string;
+  channelKey: string;
+  billingKeyMethod: 'CARD' | 'EASY_PAY';
+  customer?: {
+    customerId?: string;
+    fullName?: string;
+    email?: string;
+    phoneNumber?: string;
+  };
+  redirectUrl?: string;
+}
+
+/**
+ * PortOne 빌링키 발급 결과 타입
+ */
+interface BillingKeyResponse {
+  code?: string;
+  message?: string;
+  billingKey?: string;
+}
+
+/**
+ * 빌링키 발급을 요청합니다.
+ * PortOne SDK를 통해 카드 등록 창을 띄웁니다.
+ */
+export async function requestIssueBillingKey(
+  params: IssueBillingKeyParams
+): Promise<BillingKeyResponse> {
+  const response = await PortOne.requestIssueBillingKey({
+    storeId: params.storeId,
+    channelKey: params.channelKey,
+    billingKeyMethod: params.billingKeyMethod,
+    customer: params.customer,
+    redirectUrl: params.redirectUrl,
+  });
+
+  return response as BillingKeyResponse;
+}
+
+/**
+ * 빌링키 발급 훅 (React Hook)
+ */
+export function usePortOnePayment() {
+  const requestBillingKey = async (config: {
+    storeId: string;
+    channelKey: string;
+    customerId: string;
+    customerName?: string;
+    customerEmail?: string;
+  }): Promise<BillingKeyResponse> => {
+    return requestIssueBillingKey({
+      storeId: config.storeId,
+      channelKey: config.channelKey,
+      billingKeyMethod: 'CARD',
+      customer: {
+        customerId: config.customerId,
+        fullName: config.customerName,
+        email: config.customerEmail,
+      },
+    });
+  };
+
+  return { requestBillingKey };
+}
 ```
 
 ---
@@ -92,25 +107,31 @@ pnpm add @tosspayments/payment-sdk
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTossPayments } from '@/lib/toss/sdk';
+import { usePortOnePayment } from '@/lib/portone/browser-sdk';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Check, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Plan {
   id: string;
   name: string;
+  nameKo: string;
   monthlyPrice: number;
+  yearlyPrice: number;
   features: string[];
 }
 
+type BillingCycle = 'monthly' | 'yearly';
+
 export default function BillingPage() {
   const router = useRouter();
-  const { requestBilling } = useTossPayments();
+  const { requestBillingKey } = usePortOnePayment();
 
   const [plans, setPlans] = useState<Plan[]>([]);
   const [currentPlanId, setCurrentPlanId] = useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
 
@@ -135,6 +156,7 @@ export default function BillingPage() {
       const data = await res.json();
       if (data.subscription) {
         setCurrentPlanId(data.plan?.id || null);
+        setBillingCycle(data.subscription.billingCycle || 'monthly');
       }
     } catch (error) {
       console.error('구독 조회 실패:', error);
@@ -148,24 +170,59 @@ export default function BillingPage() {
     setSelectedPlanId(planId);
 
     try {
-      // 구독 생성 (customerKey 발급)
-      const res = await fetch('/api/billing/subscription/create', {
+      // 1. 서버에서 빌링키 발급 준비 정보 가져오기
+      const prepareRes = await fetch('/api/billing/billing-key/prepare', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId }),
+        body: JSON.stringify({ planId, billingCycle }),
       });
 
-      const data = await res.json();
+      const prepareData = await prepareRes.json();
 
-      if (!res.ok) {
-        throw new Error(data.error);
+      if (!prepareRes.ok) {
+        throw new Error(prepareData.error);
       }
 
-      // 토스 결제창 열기
-      await requestBilling(data.customerKey);
+      // 2. PortOne SDK로 빌링키 발급 창 호출
+      const response = await requestBillingKey({
+        storeId: prepareData.storeId,
+        channelKey: prepareData.channelKey,
+        customerId: prepareData.customer.customerId,
+        customerName: prepareData.customer.fullName,
+        customerEmail: prepareData.customer.email,
+      });
+
+      // 3. 에러 처리
+      if (response.code) {
+        if (response.code === 'USER_CANCEL') {
+          toast.info('결제가 취소되었습니다.');
+          return;
+        }
+        throw new Error(response.message || '빌링키 발급에 실패했습니다.');
+      }
+
+      // 4. 빌링키 저장 및 구독 시작
+      const saveRes = await fetch('/api/billing/billing-key/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          billingKey: response.billingKey,
+          planId,
+          billingCycle,
+        }),
+      });
+
+      const saveData = await saveRes.json();
+
+      if (!saveRes.ok) {
+        throw new Error(saveData.error);
+      }
+
+      toast.success('구독이 시작되었습니다!');
+      router.push('/mypage/subscription');
     } catch (error) {
       console.error('구독 처리 실패:', error);
-      alert(error instanceof Error ? error.message : '구독 처리에 실패했습니다.');
+      toast.error(error instanceof Error ? error.message : '구독 처리에 실패했습니다.');
     } finally {
       setProcessing(false);
       setSelectedPlanId(null);
@@ -181,10 +238,10 @@ export default function BillingPage() {
     setSelectedPlanId(planId);
 
     try {
-      const res = await fetch('/api/billing/plan/change', {
+      const res = await fetch('/api/billing/subscription/change', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newPlanId: planId }),
+        body: JSON.stringify({ newPlanId: planId, billingCycle }),
       });
 
       const data = await res.json();
@@ -193,15 +250,23 @@ export default function BillingPage() {
         throw new Error(data.error);
       }
 
-      alert(data.message);
+      toast.success(data.message);
       router.refresh();
     } catch (error) {
       console.error('플랜 변경 실패:', error);
-      alert(error instanceof Error ? error.message : '플랜 변경에 실패했습니다.');
+      toast.error(error instanceof Error ? error.message : '플랜 변경에 실패했습니다.');
     } finally {
       setProcessing(false);
       setSelectedPlanId(null);
     }
+  };
+
+  const getPrice = (plan: Plan) => {
+    return billingCycle === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice;
+  };
+
+  const getPriceLabel = () => {
+    return billingCycle === 'yearly' ? '/년' : '/월';
   };
 
   if (loading) {
@@ -219,12 +284,38 @@ export default function BillingPage() {
         <p className="mt-2 text-muted-foreground">
           비즈니스에 맞는 플랜을 선택하세요
         </p>
+
+        {/* 빌링 주기 선택 */}
+        <div className="mt-6 inline-flex items-center gap-2 rounded-lg border border-border p-1">
+          <button
+            onClick={() => setBillingCycle('monthly')}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              billingCycle === 'monthly'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            월간 결제
+          </button>
+          <button
+            onClick={() => setBillingCycle('yearly')}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              billingCycle === 'yearly'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            연간 결제
+            <span className="ml-1 text-xs text-green-500">2개월 할인</span>
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
         {plans.map((plan) => {
           const isCurrent = plan.id === currentPlanId;
           const isSelected = plan.id === selectedPlanId;
+          const price = getPrice(plan);
 
           return (
             <Card
@@ -240,12 +331,14 @@ export default function BillingPage() {
               )}
 
               <CardHeader>
-                <CardTitle className="text-foreground">{plan.name}</CardTitle>
+                <CardTitle className="text-foreground">{plan.nameKo}</CardTitle>
                 <CardDescription>
                   <span className="text-2xl font-bold text-foreground">
-                    ₩{plan.monthlyPrice.toLocaleString()}
+                    {price === 0 ? '무료' : `₩${price.toLocaleString()}`}
                   </span>
-                  <span className="text-muted-foreground">/월</span>
+                  {price > 0 && (
+                    <span className="text-muted-foreground">{getPriceLabel()}</span>
+                  )}
                 </CardDescription>
               </CardHeader>
 
@@ -280,12 +373,12 @@ export default function BillingPage() {
                   <Button
                     className="w-full"
                     onClick={() => handleSubscribe(plan.id)}
-                    disabled={processing}
+                    disabled={processing || price === 0}
                   >
                     {isSelected && processing ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : null}
-                    구독하기
+                    {price === 0 ? '현재 플랜' : '구독하기'}
                   </Button>
                 )}
               </CardFooter>
@@ -300,10 +393,12 @@ export default function BillingPage() {
 
 ---
 
-## 6.3 결제 성공 콜백 페이지
+## 6.3 결제 콜백 페이지 (리다이렉트 방식용)
+
+PortOne SDK는 기본적으로 프로미스 기반이지만, 모바일 환경 등에서 리다이렉트 방식을 사용할 수 있습니다.
 
 ### 신규 파일
-`app/(portal)/billing/success/page.tsx`
+`app/(portal)/billing/callback/page.tsx`
 
 ```tsx
 'use client';
@@ -314,7 +409,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { CheckCircle, Loader2, XCircle } from 'lucide-react';
 
-export default function BillingSuccessPage() {
+export default function BillingCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -322,27 +417,40 @@ export default function BillingSuccessPage() {
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    const authKey = searchParams.get('authKey');
-    const customerKey = searchParams.get('customerKey');
+    const code = searchParams.get('code');
+    const message = searchParams.get('message');
+    const billingKey = searchParams.get('billingKey');
 
-    if (!authKey || !customerKey) {
+    // 에러 응답인 경우
+    if (code) {
       setStatus('error');
-      setErrorMessage('인증 정보가 누락되었습니다.');
+      setErrorMessage(message || '빌링키 발급에 실패했습니다.');
       return;
     }
 
-    completeBillingKeyRegistration(authKey, customerKey);
+    // 빌링키가 있는 경우 저장 처리
+    if (billingKey) {
+      saveBillingKey(billingKey);
+    } else {
+      setStatus('error');
+      setErrorMessage('빌링키 정보가 누락되었습니다.');
+    }
   }, [searchParams]);
 
-  const completeBillingKeyRegistration = async (
-    authKey: string,
-    customerKey: string
-  ) => {
+  const saveBillingKey = async (billingKey: string) => {
     try {
-      const res = await fetch('/api/billing/billing-key', {
+      // 세션에서 planId, billingCycle 가져오기 (prepare 단계에서 저장됨)
+      const pendingData = sessionStorage.getItem('pendingSubscription');
+      if (!pendingData) {
+        throw new Error('구독 정보가 없습니다. 다시 시도해주세요.');
+      }
+
+      const { planId, billingCycle } = JSON.parse(pendingData);
+
+      const res = await fetch('/api/billing/billing-key/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ authKey, customerKey }),
+        body: JSON.stringify({ billingKey, planId, billingCycle }),
       });
 
       const data = await res.json();
@@ -351,6 +459,7 @@ export default function BillingSuccessPage() {
         throw new Error(data.error);
       }
 
+      sessionStorage.removeItem('pendingSubscription');
       setStatus('success');
     } catch (error) {
       setStatus('error');
@@ -423,71 +532,7 @@ export default function BillingSuccessPage() {
 
 ---
 
-## 6.4 결제 실패 콜백 페이지
-
-### 신규 파일
-`app/(portal)/billing/fail/page.tsx`
-
-```tsx
-'use client';
-
-import { useSearchParams, useRouter } from 'next/navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { XCircle } from 'lucide-react';
-
-export default function BillingFailPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const code = searchParams.get('code');
-  const message = searchParams.get('message');
-
-  // 에러 메시지 한글화
-  const getErrorMessage = (code: string | null, message: string | null) => {
-    if (code === 'USER_CANCEL') {
-      return '결제가 취소되었습니다.';
-    }
-    return message || '결제 처리 중 문제가 발생했습니다.';
-  };
-
-  return (
-    <div className="container flex min-h-[60vh] max-w-md items-center justify-center py-8">
-      <Card className="w-full">
-        <CardHeader className="text-center">
-          <XCircle className="mx-auto h-12 w-12 text-destructive" />
-          <CardTitle className="mt-4 text-foreground">결제 실패</CardTitle>
-          <CardDescription className="text-destructive">
-            {getErrorMessage(code, message)}
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent className="text-center space-y-4">
-          <p className="text-sm text-muted-foreground">
-            문제가 지속되면 고객센터로 문의해주세요.
-          </p>
-
-          <div className="flex justify-center gap-2">
-            <Button onClick={() => router.push('/billing')} variant="default">
-              다시 시도
-            </Button>
-            <Button
-              onClick={() => router.push('/mypage/subscription')}
-              variant="ghost"
-            >
-              돌아가기
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-```
-
----
-
-## 6.5 결제 복구 페이지
+## 6.4 결제 복구 페이지
 
 ### 신규 파일
 `app/(portal)/billing/recovery/page.tsx`
@@ -499,24 +544,28 @@ export default function BillingFailPage() {
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTossPayments } from '@/lib/toss/sdk';
+import { usePortOnePayment } from '@/lib/portone/browser-sdk';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, CreditCard, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface SubscriptionData {
   status: string;
   failedPaymentCount: number;
   billingKeyMasked: string | null;
+  billingCycle: string;
   plan: {
     name: string;
+    nameKo: string;
     monthlyPrice: number;
+    yearlyPrice: number;
   };
 }
 
 export default function BillingRecoveryPage() {
   const router = useRouter();
-  const { requestBilling } = useTossPayments();
+  const { requestBillingKey } = usePortOnePayment();
 
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -534,8 +583,9 @@ export default function BillingRecoveryPage() {
       if (data.subscription) {
         setSubscription({
           status: data.subscription.status,
-          failedPaymentCount: data.subscription.failedPaymentCount,
+          failedPaymentCount: data.subscription.failedPaymentCount || 0,
           billingKeyMasked: data.subscription.billingKeyMasked,
+          billingCycle: data.subscription.billingCycle,
           plan: data.plan,
         });
       }
@@ -550,19 +600,64 @@ export default function BillingRecoveryPage() {
     setProcessing(true);
 
     try {
-      // 기존 카드 삭제
+      // 1. 기존 빌링키 삭제
       await fetch('/api/billing/billing-key', { method: 'DELETE' });
 
-      // 새 카드 등록
-      const res = await fetch('/api/billing/subscription');
-      const data = await res.json();
+      // 2. 새 빌링키 발급 준비
+      const prepareRes = await fetch('/api/billing/billing-key/prepare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planId: subscription?.plan.name,
+          billingCycle: subscription?.billingCycle || 'monthly',
+        }),
+      });
 
-      if (data.subscription?.customerKey) {
-        await requestBilling(data.subscription.customerKey);
+      const prepareData = await prepareRes.json();
+
+      if (!prepareRes.ok) {
+        throw new Error(prepareData.error);
       }
+
+      // 3. PortOne SDK로 빌링키 발급 창 호출
+      const response = await requestBillingKey({
+        storeId: prepareData.storeId,
+        channelKey: prepareData.channelKey,
+        customerId: prepareData.customer.customerId,
+        customerName: prepareData.customer.fullName,
+        customerEmail: prepareData.customer.email,
+      });
+
+      // 4. 에러 처리
+      if (response.code) {
+        if (response.code === 'USER_CANCEL') {
+          toast.info('카드 등록이 취소되었습니다.');
+          return;
+        }
+        throw new Error(response.message || '카드 등록에 실패했습니다.');
+      }
+
+      // 5. 새 빌링키 저장
+      const saveRes = await fetch('/api/billing/billing-key/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          billingKey: response.billingKey,
+          isRecovery: true,
+        }),
+      });
+
+      const saveData = await saveRes.json();
+
+      if (!saveRes.ok) {
+        throw new Error(saveData.error);
+      }
+
+      toast.success('결제 수단이 업데이트되었습니다.');
+      router.push('/mypage/subscription');
     } catch (error) {
       console.error('카드 변경 실패:', error);
-      alert('카드 변경에 실패했습니다.');
+      toast.error(error instanceof Error ? error.message : '카드 변경에 실패했습니다.');
     } finally {
       setProcessing(false);
     }
@@ -610,6 +705,9 @@ export default function BillingRecoveryPage() {
   };
 
   const statusInfo = statusMessages[subscription.status as keyof typeof statusMessages];
+  const price = subscription.billingCycle === 'yearly'
+    ? subscription.plan.yearlyPrice
+    : subscription.plan.monthlyPrice;
 
   return (
     <div className="container max-w-md py-8">
@@ -628,9 +726,9 @@ export default function BillingRecoveryPage() {
           <div className="rounded-lg border border-border bg-muted/50 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium text-foreground">{subscription.plan.name}</p>
+                <p className="font-medium text-foreground">{subscription.plan.nameKo}</p>
                 <p className="text-sm text-muted-foreground">
-                  ₩{subscription.plan.monthlyPrice.toLocaleString()}/월
+                  ₩{price.toLocaleString()}/{subscription.billingCycle === 'yearly' ? '년' : '월'}
                 </p>
               </div>
               <div className="text-right">
@@ -679,7 +777,7 @@ export default function BillingRecoveryPage() {
 
 ---
 
-## 6.6 구독 관리 페이지 개선
+## 6.5 구독 관리 페이지 개선
 
 ### 수정 파일
 `app/(portal)/mypage/subscription/page.tsx`
@@ -709,9 +807,10 @@ interface SubscriptionData {
   subscription: {
     id: string;
     status: string;
+    billingCycle: string;
     currentPeriodStart: string;
     currentPeriodEnd: string;
-    nextBillingDate: string;
+    nextPaymentDate: string | null;
     cancelAtPeriodEnd: boolean;
     failedPaymentCount: number;
     billingKeyMasked: string | null;
@@ -719,16 +818,20 @@ interface SubscriptionData {
   plan: {
     id: string;
     name: string;
+    nameKo: string;
     monthlyPrice: number;
+    yearlyPrice: number;
     features: string[];
   } | null;
   recentPayments: Array<{
     id: string;
     amount: number;
     status: string;
-    paidAt: string;
-    cardCompany: string;
-    cardNumber: string;
+    paidAt: string | null;
+    cardInfo: {
+      issuer?: string;
+      number?: string;
+    } | null;
   }>;
 }
 
@@ -767,7 +870,7 @@ export default function SubscriptionPage() {
     setCancelling(true);
 
     try {
-      const res = await fetch('/api/billing/cancel', {
+      const res = await fetch('/api/billing/subscription/cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -823,6 +926,10 @@ export default function SubscriptionPage() {
 
   const status = statusConfig[subscription.status] || statusConfig.pending;
   const needsRecovery = ['past_due', 'suspended'].includes(subscription.status);
+  const price = subscription.billingCycle === 'yearly'
+    ? plan?.yearlyPrice || 0
+    : plan?.monthlyPrice || 0;
+  const priceLabel = subscription.billingCycle === 'yearly' ? '/년' : '/월';
 
   return (
     <div className="container max-w-2xl space-y-6 py-8">
@@ -856,7 +963,7 @@ export default function SubscriptionPage() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-foreground">현재 플랜</CardTitle>
-              <CardDescription>{plan?.name}</CardDescription>
+              <CardDescription>{plan?.nameKo}</CardDescription>
             </div>
             <Badge variant={status.variant}>{status.label}</Badge>
           </div>
@@ -865,9 +972,9 @@ export default function SubscriptionPage() {
           <div className="flex items-center justify-between rounded-lg border border-border p-4">
             <div>
               <p className="text-2xl font-bold text-foreground">
-                ₩{plan?.monthlyPrice.toLocaleString()}
+                ₩{price.toLocaleString()}
               </p>
-              <p className="text-sm text-muted-foreground">/월</p>
+              <p className="text-sm text-muted-foreground">{priceLabel}</p>
             </div>
             <Button variant="outline" onClick={() => router.push('/billing')}>
               플랜 변경
@@ -880,6 +987,15 @@ export default function SubscriptionPage() {
               <span>
                 현재 기간: {new Date(subscription.currentPeriodStart).toLocaleDateString()} ~{' '}
                 {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+              </span>
+            </div>
+          )}
+
+          {subscription.nextPaymentDate && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CreditCard className="h-4 w-4" />
+              <span>
+                다음 결제일: {new Date(subscription.nextPaymentDate).toLocaleDateString()}
               </span>
             </div>
           )}
@@ -948,18 +1064,20 @@ export default function SubscriptionPage() {
                       ₩{payment.amount.toLocaleString()}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {payment.cardCompany} {payment.cardNumber}
+                      {payment.cardInfo?.issuer} {payment.cardInfo?.number}
                     </p>
                   </div>
                   <div className="text-right">
                     <Badge
-                      variant={payment.status === 'paid' ? 'default' : 'destructive'}
+                      variant={payment.status === 'PAID' ? 'default' : 'destructive'}
                     >
-                      {payment.status === 'paid' ? '완료' : '실패'}
+                      {payment.status === 'PAID' ? '완료' : '실패'}
                     </Badge>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(payment.paidAt).toLocaleDateString()}
-                    </p>
+                    {payment.paidAt && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {new Date(payment.paidAt).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1016,7 +1134,7 @@ export default function SubscriptionPage() {
 
 ---
 
-## 6.7 결제 내역 페이지
+## 6.6 결제 내역 페이지
 
 ### 신규 파일
 `app/(portal)/mypage/payments/page.tsx`
@@ -1028,21 +1146,24 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, Receipt, Download } from 'lucide-react';
+import { Loader2, Receipt } from 'lucide-react';
 
 interface Payment {
   id: string;
-  orderId: string;
+  paymentId: string;
   amount: number;
+  currency: string;
   status: string;
-  cardCompany: string;
-  cardNumber: string;
+  payMethod: string | null;
+  cardInfo: {
+    issuer?: string;
+    acquirer?: string;
+    number?: string;
+    type?: string;
+  } | null;
   receiptUrl: string | null;
-  periodStart: string;
-  periodEnd: string;
+  failReason: string | null;
   paidAt: string | null;
-  failedAt: string | null;
-  failureMessage: string | null;
   createdAt: string;
 }
 
@@ -1078,11 +1199,12 @@ export default function PaymentsPage() {
   };
 
   const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-    pending: { label: '처리 중', variant: 'secondary' },
-    paid: { label: '완료', variant: 'default' },
-    failed: { label: '실패', variant: 'destructive' },
-    canceled: { label: '취소', variant: 'outline' },
-    refunded: { label: '환불', variant: 'outline' },
+    READY: { label: '대기', variant: 'secondary' },
+    PAID: { label: '완료', variant: 'default' },
+    FAILED: { label: '실패', variant: 'destructive' },
+    CANCELLED: { label: '취소', variant: 'outline' },
+    REFUNDED: { label: '환불', variant: 'outline' },
+    PARTIAL_REFUNDED: { label: '부분환불', variant: 'outline' },
   };
 
   if (loading && payments.length === 0) {
@@ -1107,7 +1229,7 @@ export default function PaymentsPage() {
           ) : (
             <div className="space-y-4">
               {payments.map((payment) => {
-                const status = statusConfig[payment.status] || statusConfig.pending;
+                const status = statusConfig[payment.status] || statusConfig.READY;
 
                 return (
                   <div
@@ -1122,12 +1244,13 @@ export default function PaymentsPage() {
                           </span>
                           <Badge variant={status.variant}>{status.label}</Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {payment.cardCompany} {payment.cardNumber}
-                        </p>
+                        {payment.cardInfo && (
+                          <p className="text-sm text-muted-foreground">
+                            {payment.cardInfo.issuer} {payment.cardInfo.number}
+                          </p>
+                        )}
                         <p className="text-xs text-muted-foreground">
-                          결제 기간: {new Date(payment.periodStart).toLocaleDateString()} ~{' '}
-                          {new Date(payment.periodEnd).toLocaleDateString()}
+                          주문번호: {payment.paymentId}
                         </p>
                       </div>
 
@@ -1152,9 +1275,9 @@ export default function PaymentsPage() {
                       </div>
                     </div>
 
-                    {payment.failureMessage && (
+                    {payment.failReason && (
                       <div className="mt-3 rounded bg-destructive/10 p-2 text-sm text-destructive">
-                        실패 사유: {payment.failureMessage}
+                        실패 사유: {payment.failReason}
                       </div>
                     )}
                   </div>
@@ -1198,16 +1321,54 @@ export default function PaymentsPage() {
 
 ## 체크리스트
 
-- [ ] 토스 SDK 패키지 설치 (`@tosspayments/payment-sdk`)
-- [ ] `lib/toss/sdk.ts` 클라이언트 SDK 래퍼 구현
+- [ ] PortOne Browser SDK 패키지 설치 (`@portone/browser-sdk`)
+- [ ] `lib/portone/browser-sdk.ts` 클라이언트 SDK 래퍼 구현
 - [ ] `app/(portal)/billing/page.tsx` 플랜 선택 페이지
-- [ ] `app/(portal)/billing/success/page.tsx` 결제 성공 콜백
-- [ ] `app/(portal)/billing/fail/page.tsx` 결제 실패 콜백
+- [ ] `app/(portal)/billing/callback/page.tsx` 결제 콜백 (리다이렉트용)
 - [ ] `app/(portal)/billing/recovery/page.tsx` 결제 복구 페이지
 - [ ] `app/(portal)/mypage/subscription/page.tsx` 구독 관리 개선
 - [ ] `app/(portal)/mypage/payments/page.tsx` 결제 내역 페이지
 - [ ] 다크모드 호환성 확인
 - [ ] 반응형 디자인 확인
+- [ ] 모바일 환경 테스트 (리다이렉트 플로우)
+
+---
+
+## PortOne SDK 사용 패턴
+
+### 프로미스 기반 (권장)
+
+```tsx
+// 데스크톱에서 기본으로 사용
+const response = await PortOne.requestIssueBillingKey({
+  storeId: 'store-xxxxx',
+  channelKey: 'channel-xxxxx',
+  billingKeyMethod: 'CARD',
+  customer: { customerId: 'user-123' },
+});
+
+if (response.code) {
+  // 에러 처리
+  console.error(response.message);
+} else {
+  // 성공 - response.billingKey 사용
+  await saveBillingKey(response.billingKey);
+}
+```
+
+### 리다이렉트 기반 (모바일용)
+
+```tsx
+// 모바일에서 redirectUrl 사용
+await PortOne.requestIssueBillingKey({
+  storeId: 'store-xxxxx',
+  channelKey: 'channel-xxxxx',
+  billingKeyMethod: 'CARD',
+  customer: { customerId: 'user-123' },
+  redirectUrl: `${window.location.origin}/billing/callback`,
+});
+// 페이지가 리다이렉트됨 → /billing/callback에서 처리
+```
 
 ---
 

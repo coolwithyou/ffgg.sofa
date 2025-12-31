@@ -8,9 +8,10 @@
 
 import { useState, useEffect, useTransition, useMemo } from 'react';
 import Link from 'next/link';
-import { FileText, Trash2, RotateCcw, ExternalLink, Search, X } from 'lucide-react';
+import { FileText, Trash2, RotateCcw, ExternalLink, Search, X, Unlink } from 'lucide-react';
 import { DocumentProgressModal } from '@/components/document-progress-modal';
 import { DocumentChunks } from './document-chunks';
+import { unassignDocumentFromDataset } from '@/app/(portal)/library/actions';
 
 interface DocumentItem {
   id: string;
@@ -36,6 +37,7 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
   const [isPending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [unassigningId, setUnassigningId] = useState<string | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [progressModalDocId, setProgressModalDocId] = useState<string | null>(null);
   const [documentSearch, setDocumentSearch] = useState('');
@@ -145,6 +147,35 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
         alert('재처리 요청 중 오류가 발생했습니다.');
       } finally {
         setReprocessingId(null);
+      }
+    });
+  };
+
+  const handleUnassign = async (documentId: string) => {
+    if (!confirm('이 문서를 데이터셋에서 배치 해제하시겠습니까?\n문서는 삭제되지 않고 라이브러리로 이동됩니다.')) {
+      return;
+    }
+
+    setUnassigningId(documentId);
+
+    startTransition(async () => {
+      try {
+        const result = await unassignDocumentFromDataset(documentId);
+
+        if (result.success) {
+          setDocuments((prev) => prev.filter((d) => d.id !== documentId));
+          if (selectedDocumentId === documentId) {
+            setSelectedDocumentId(null);
+          }
+          onUpdate();
+        } else {
+          alert(result.error || '배치 해제에 실패했습니다.');
+        }
+      } catch (err) {
+        console.error('Unassign error:', err);
+        alert('배치 해제 중 오류가 발생했습니다.');
+      } finally {
+        setUnassigningId(null);
       }
     });
   };
@@ -288,6 +319,21 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
                         )}
                       </button>
                     )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleUnassign(doc.id);
+                      }}
+                      disabled={isPending || unassigningId === doc.id}
+                      className="rounded p-1.5 text-muted-foreground hover:bg-yellow-500/10 hover:text-yellow-500 disabled:opacity-50"
+                      title="배치 해제"
+                    >
+                      {unassigningId === doc.id ? (
+                        <LoadingSpinner className="h-4 w-4" />
+                      ) : (
+                        <Unlink className="h-4 w-4" />
+                      )}
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

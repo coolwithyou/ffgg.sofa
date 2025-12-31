@@ -2,7 +2,7 @@
 
 ## 개요
 
-이 Phase에서는 비동기 결제 처리를 위한 Inngest 함수를 구현합니다:
+이 Phase에서는 PortOne V2 기반 비동기 결제 처리를 위한 Inngest 함수를 구현합니다:
 - 결제 처리 함수
 - 결제 재시도 함수
 - 웹훅 처리 함수
@@ -14,16 +14,25 @@
 `inngest/client.ts`
 
 ```typescript
-import { Inngest } from 'inngest';
+import { Inngest, EventSchemas } from 'inngest';
 
-// 기존 이벤트 타입에 빌링 이벤트 추가
+// 빌링 이벤트 타입
 type BillingEvents = {
   // 결제 처리 요청
-  'billing/payment.process': {
+  'billing/payment.requested': {
     data: {
       subscriptionId: string;
       tenantId: string;
       isFirstPayment?: boolean;
+    };
+  };
+
+  // 결제 완료
+  'billing/payment.completed': {
+    data: {
+      paymentId: string;
+      subscriptionId: string;
+      tenantId: string;
     };
   };
 
@@ -72,16 +81,15 @@ export const inngest = new Inngest({
 ## 4.2 결제 처리 함수
 
 ### 신규 파일
-`inngest/functions/process-billing-payment.ts`
+`inngest/functions/billing/process-payment.ts`
 
 ```typescript
-import { inngest } from '../client';
+import { inngest } from '../../client';
 import { db } from '@/lib/db';
 import { subscriptions, plans, payments } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
-import { getTossClient, TossPaymentError } from '@/lib/toss/client';
-import { decryptBillingKey } from '@/lib/crypto/billing';
-import { generateOrderId, generateOrderName } from '@/lib/billing/order-id';
+import { payWithBillingKey } from '@/lib/portone/client';
+import { generatePaymentId } from '@/lib/billing/order-id';
 
 export const processBillingPayment = inngest.createFunction(
   {
@@ -94,7 +102,7 @@ export const processBillingPayment = inngest.createFunction(
       });
     },
   },
-  { event: 'billing/payment.process' },
+  { event: 'billing/payment.requested' },
   async ({ event, step }) => {
     const { subscriptionId, tenantId, isFirstPayment } = event.data;
 
@@ -132,55 +140,58 @@ export const processBillingPayment = inngest.createFunction(
 
     const { subscription, plan } = subscriptionData;
 
+    // 결제 금액 계산
+    const amount = subscription.billingCycle === 'yearly'
+      ? plan.yearlyPrice
+      : plan.monthlyPrice;
+
+    // 무료 플랜인 경우 결제 스킵
+    if (amount === 0) {
+      return { status: 'skipped', reason: 'free_plan' };
+    }
+
     // Step 2: 결제 레코드 생성
     const paymentRecord = await step.run('create-payment-record', async () => {
-      const orderId = generateOrderId();
-      const periodStart = new Date();
-      const periodEnd = new Date(periodStart);
-      periodEnd.setMonth(periodEnd.getMonth() + 1);
+      const paymentId = generatePaymentId();
 
       const [payment] = await db
         .insert(payments)
         .values({
           tenantId,
           subscriptionId,
-          orderId,
-          amount: plan.monthlyPrice,
-          status: 'pending',
-          periodStart,
-          periodEnd,
+          paymentId,
+          amount,
+          currency: 'KRW',
+          status: 'PENDING',
         })
         .returning();
 
       return payment;
     });
 
-    // Step 3: 토스 API 결제 실행
+    // Step 3: PortOne API 결제 실행
     const paymentResult = await step.run('charge-billing-key', async () => {
-      const toss = getTossClient();
-      const billingKey = decryptBillingKey(subscription.billingKey!);
-
       try {
-        const result = await toss.chargeBillingKey({
-          billingKey,
-          orderId: paymentRecord.orderId,
-          orderName: generateOrderName(plan.name, paymentRecord.periodStart!),
-          amount: plan.monthlyPrice,
+        const result = await payWithBillingKey({
+          paymentId: paymentRecord.paymentId,
+          billingKey: subscription.billingKey!,
+          orderName: `${plan.nameKo} ${subscription.billingCycle === 'yearly' ? '연간' : '월간'} 구독`,
+          amount,
+          currency: 'KRW',
+          customer: {
+            id: tenantId,
+          },
         });
 
         return { success: true, data: result };
-      } catch (error) {
-        if (error instanceof TossPaymentError) {
-          return {
-            success: false,
-            error: {
-              code: error.code,
-              message: error.message,
-              isRetryable: error.isRetryable,
-            },
-          };
-        }
-        throw error;
+      } catch (error: any) {
+        return {
+          success: false,
+          error: {
+            code: error.code || 'UNKNOWN_ERROR',
+            message: error.message || '결제 처리 중 오류가 발생했습니다.',
+          },
+        };
       }
     });
 
@@ -188,34 +199,42 @@ export const processBillingPayment = inngest.createFunction(
     if (paymentResult.success) {
       // 결제 성공
       await step.run('update-payment-success', async () => {
-        const tossData = paymentResult.data;
+        const portoneData = paymentResult.data;
 
         // 결제 레코드 업데이트
         await db
           .update(payments)
           .set({
-            status: 'paid',
-            paymentKey: tossData.paymentKey,
-            cardCompany: tossData.card.company,
-            cardNumber: tossData.card.number,
-            cardType: tossData.card.cardType,
-            receiptUrl: tossData.receipt.url,
-            paidAt: new Date(tossData.approvedAt),
+            status: 'PAID',
+            transactionId: portoneData.transactionId,
+            payMethod: portoneData.method?.type,
+            cardInfo: portoneData.method?.card ? {
+              issuer: portoneData.method.card.issuer,
+              acquirer: portoneData.method.card.acquirer,
+              number: portoneData.method.card.number,
+              type: portoneData.method.card.type,
+            } : null,
+            receiptUrl: portoneData.receiptUrl,
+            paidAt: new Date(),
             updatedAt: new Date(),
           })
           .where(eq(payments.id, paymentRecord.id));
 
         // 구독 상태 업데이트
-        const nextBillingDate = new Date(paymentRecord.periodEnd!);
+        const nextPaymentDate = new Date(subscription.currentPeriodEnd!);
+        if (subscription.billingCycle === 'yearly') {
+          nextPaymentDate.setFullYear(nextPaymentDate.getFullYear() + 1);
+        } else {
+          nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
+        }
+
         await db
           .update(subscriptions)
           .set({
             status: 'active',
-            currentPeriodStart: paymentRecord.periodStart,
-            currentPeriodEnd: paymentRecord.periodEnd,
-            nextBillingDate,
-            failedPaymentCount: 0,
-            lastPaymentAt: new Date(),
+            currentPeriodStart: subscription.currentPeriodEnd,
+            currentPeriodEnd: nextPaymentDate,
+            nextPaymentDate,
             updatedAt: new Date(),
           })
           .where(eq(subscriptions.id, subscriptionId));
@@ -228,9 +247,9 @@ export const processBillingPayment = inngest.createFunction(
           tenantId,
           type: 'payment_success',
           metadata: {
-            amount: plan.monthlyPrice,
-            planName: plan.name,
-            receiptUrl: paymentResult.data.receipt.url,
+            amount,
+            planName: plan.nameKo,
+            receiptUrl: paymentResult.data.receiptUrl,
           },
         },
       });
@@ -245,52 +264,25 @@ export const processBillingPayment = inngest.createFunction(
         await db
           .update(payments)
           .set({
-            status: 'failed',
-            failureCode: error.code,
-            failureMessage: error.message,
-            failedAt: new Date(),
+            status: 'FAILED',
+            failReason: `${error.code}: ${error.message}`,
             updatedAt: new Date(),
           })
           .where(eq(payments.id, paymentRecord.id));
-
-        // 실패 횟수 증가
-        await db
-          .update(subscriptions)
-          .set({
-            failedPaymentCount: subscription.failedPaymentCount + 1,
-            updatedAt: new Date(),
-          })
-          .where(eq(subscriptions.id, subscriptionId));
       });
 
-      // 재시도 가능한 경우 재시도 이벤트 발송
-      if (paymentResult.error.isRetryable) {
-        await step.sendEvent('schedule-retry', {
-          name: 'billing/payment.failed',
-          data: {
-            subscriptionId,
-            tenantId,
-            paymentId: paymentRecord.id,
-            failureCode: paymentResult.error.code,
-            failureMessage: paymentResult.error.message,
-            retryCount: 0,
-          },
-        });
-      } else {
-        // 재시도 불가능한 실패 알림
-        await step.sendEvent('send-failure-notification', {
-          name: 'billing/notification.send',
-          data: {
-            tenantId,
-            type: 'payment_failed',
-            metadata: {
-              failureCode: paymentResult.error.code,
-              failureMessage: paymentResult.error.message,
-              isRetryable: false,
-            },
-          },
-        });
-      }
+      // 재시도 이벤트 발송
+      await step.sendEvent('schedule-retry', {
+        name: 'billing/payment.failed',
+        data: {
+          subscriptionId,
+          tenantId,
+          paymentId: paymentRecord.id,
+          failureCode: paymentResult.error.code,
+          failureMessage: paymentResult.error.message,
+          retryCount: 0,
+        },
+      });
 
       return {
         status: 'failed',
@@ -307,22 +299,14 @@ export const processBillingPayment = inngest.createFunction(
 ## 4.3 결제 재시도 함수
 
 ### 신규 파일
-`inngest/functions/billing-retry.ts`
+`inngest/functions/billing/retry-payment.ts`
 
 ```typescript
-import { inngest } from '../client';
+import { inngest } from '../../client';
 import { db } from '@/lib/db';
 import { subscriptions } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
-
-// 재시도 딜레이 (밀리초)
-const RETRY_DELAYS = [
-  4 * 60 * 60 * 1000,    // 1차: 4시간
-  24 * 60 * 60 * 1000,   // 2차: 24시간 (1일)
-  72 * 60 * 60 * 1000,   // 3차: 72시간 (3일)
-];
-
-const MAX_RETRIES = 3;
+import { billingEnv } from '@/lib/config/billing-env';
 
 export const billingRetry = inngest.createFunction(
   {
@@ -333,8 +317,11 @@ export const billingRetry = inngest.createFunction(
   async ({ event, step }) => {
     const { subscriptionId, tenantId, paymentId, retryCount, failureCode, failureMessage } = event.data;
 
+    const maxRetries = billingEnv.billing.retryAttempts;
+    const retryDelays = billingEnv.billing.retryDelayDays;
+
     // 최대 재시도 횟수 초과
-    if (retryCount >= MAX_RETRIES) {
+    if (retryCount >= maxRetries) {
       await step.run('mark-suspended', async () => {
         await db
           .update(subscriptions)
@@ -362,9 +349,9 @@ export const billingRetry = inngest.createFunction(
       return { status: 'suspended', retryCount };
     }
 
-    // 딜레이 대기
-    const delay = RETRY_DELAYS[retryCount];
-    await step.sleep('wait-for-retry', delay);
+    // 딜레이 대기 (1일, 3일, 7일)
+    const delayDays = retryDelays[retryCount] || 1;
+    await step.sleep('wait-for-retry', `${delayDays}d`);
 
     // 구독 상태 확인 (취소되었을 수 있음)
     const currentSubscription = await step.run('check-subscription', async () => {
@@ -400,7 +387,7 @@ export const billingRetry = inngest.createFunction(
 
     // 재시도 결제 이벤트 발송
     await step.sendEvent('retry-payment', {
-      name: 'billing/payment.process',
+      name: 'billing/payment.requested',
       data: {
         subscriptionId,
         tenantId,
@@ -418,14 +405,14 @@ export const billingRetry = inngest.createFunction(
 ## 4.4 웹훅 처리 함수
 
 ### 신규 파일
-`inngest/functions/process-billing-webhook.ts`
+`inngest/functions/billing/process-webhook.ts`
 
 ```typescript
-import { inngest } from '../client';
+import { inngest } from '../../client';
 import { db } from '@/lib/db';
 import { billingWebhookLogs, subscriptions, payments } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
-import { TossWebhookPayload } from '@/lib/toss/types';
+import type { WebhookEventType } from '@/lib/portone/webhook';
 
 export const processBillingWebhook = inngest.createFunction(
   {
@@ -435,28 +422,39 @@ export const processBillingWebhook = inngest.createFunction(
   { event: 'billing/webhook.process' },
   async ({ event, step }) => {
     const { logId, eventType, payload } = event.data;
-    const webhookPayload = payload as TossWebhookPayload;
 
     try {
       // 처리 상태 업데이트
       await step.run('mark-processing', async () => {
         await db
           .update(billingWebhookLogs)
-          .set({ status: 'processing' })
+          .set({ processed: false })
           .where(eq(billingWebhookLogs.id, logId));
       });
 
       // 이벤트 타입별 처리
-      switch (eventType) {
-        case 'PAYMENT_STATUS_CHANGED':
-          await step.run('handle-payment-status', async () => {
-            await handlePaymentStatusChanged(webhookPayload);
+      switch (eventType as WebhookEventType) {
+        case 'Transaction.Paid':
+          await step.run('handle-transaction-paid', async () => {
+            await handleTransactionPaid(payload);
           });
           break;
 
-        case 'BILLING_KEY_DELETED':
+        case 'Transaction.Failed':
+          await step.run('handle-transaction-failed', async () => {
+            await handleTransactionFailed(payload);
+          });
+          break;
+
+        case 'Transaction.Cancelled':
+          await step.run('handle-transaction-cancelled', async () => {
+            await handleTransactionCancelled(payload);
+          });
+          break;
+
+        case 'BillingKey.Deleted':
           await step.run('handle-billing-key-deleted', async () => {
-            await handleBillingKeyDeleted(webhookPayload);
+            await handleBillingKeyDeleted(payload);
           });
           break;
 
@@ -469,7 +467,7 @@ export const processBillingWebhook = inngest.createFunction(
         await db
           .update(billingWebhookLogs)
           .set({
-            status: 'processed',
+            processed: true,
             processedAt: new Date(),
           })
           .where(eq(billingWebhookLogs.id, logId));
@@ -481,8 +479,8 @@ export const processBillingWebhook = inngest.createFunction(
       await db
         .update(billingWebhookLogs)
         .set({
-          status: 'failed',
-          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          processed: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
         })
         .where(eq(billingWebhookLogs.id, logId));
 
@@ -492,78 +490,110 @@ export const processBillingWebhook = inngest.createFunction(
 );
 
 /**
- * 결제 상태 변경 처리
+ * 결제 성공 처리 (Transaction.Paid)
  */
-async function handlePaymentStatusChanged(payload: TossWebhookPayload) {
-  const { paymentKey, status } = payload.data;
+async function handleTransactionPaid(payload: any) {
+  const { paymentId, transactionId } = payload.data || {};
 
-  if (!paymentKey || !status) return;
+  if (!paymentId) return;
 
-  // 결제 레코드 조회
+  // 결제 레코드 업데이트
   const [payment] = await db
     .select()
     .from(payments)
-    .where(eq(payments.paymentKey, paymentKey))
+    .where(eq(payments.paymentId, paymentId))
     .limit(1);
 
   if (!payment) {
-    console.log(`[Webhook] 결제 레코드 없음: ${paymentKey}`);
+    console.log(`[Webhook] 결제 레코드 없음: ${paymentId}`);
     return;
   }
 
-  // 상태에 따른 처리
-  switch (status) {
-    case 'DONE':
-      await db
-        .update(payments)
-        .set({
-          status: 'paid',
-          paidAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(payments.id, payment.id));
-      break;
-
-    case 'CANCELED':
-      await db
-        .update(payments)
-        .set({
-          status: 'canceled',
-          updatedAt: new Date(),
-        })
-        .where(eq(payments.id, payment.id));
-      break;
-
-    case 'PARTIAL_CANCELED':
-      // 부분 취소는 환불로 처리
-      await db
-        .update(payments)
-        .set({
-          status: 'refunded',
-          updatedAt: new Date(),
-        })
-        .where(eq(payments.id, payment.id));
-      break;
-  }
+  await db
+    .update(payments)
+    .set({
+      status: 'PAID',
+      transactionId,
+      paidAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(payments.id, payment.id));
 }
 
 /**
- * 빌링키 삭제 처리
+ * 결제 실패 처리 (Transaction.Failed)
  */
-async function handleBillingKeyDeleted(payload: TossWebhookPayload) {
-  const { customerKey } = payload.data;
+async function handleTransactionFailed(payload: any) {
+  const { paymentId, failReason } = payload.data || {};
 
-  if (!customerKey) return;
+  if (!paymentId) return;
 
-  // customerKey로 구독 조회
+  const [payment] = await db
+    .select()
+    .from(payments)
+    .where(eq(payments.paymentId, paymentId))
+    .limit(1);
+
+  if (!payment) {
+    console.log(`[Webhook] 결제 레코드 없음: ${paymentId}`);
+    return;
+  }
+
+  await db
+    .update(payments)
+    .set({
+      status: 'FAILED',
+      failReason,
+      updatedAt: new Date(),
+    })
+    .where(eq(payments.id, payment.id));
+}
+
+/**
+ * 결제 취소 처리 (Transaction.Cancelled)
+ */
+async function handleTransactionCancelled(payload: any) {
+  const { paymentId } = payload.data || {};
+
+  if (!paymentId) return;
+
+  const [payment] = await db
+    .select()
+    .from(payments)
+    .where(eq(payments.paymentId, paymentId))
+    .limit(1);
+
+  if (!payment) {
+    console.log(`[Webhook] 결제 레코드 없음: ${paymentId}`);
+    return;
+  }
+
+  await db
+    .update(payments)
+    .set({
+      status: 'CANCELLED',
+      updatedAt: new Date(),
+    })
+    .where(eq(payments.id, payment.id));
+}
+
+/**
+ * 빌링키 삭제 처리 (BillingKey.Deleted)
+ */
+async function handleBillingKeyDeleted(payload: any) {
+  const { billingKey } = payload.data || {};
+
+  if (!billingKey) return;
+
+  // 빌링키로 구독 조회
   const [subscription] = await db
     .select()
     .from(subscriptions)
-    .where(eq(subscriptions.customerKey, customerKey))
+    .where(eq(subscriptions.billingKey, billingKey))
     .limit(1);
 
   if (!subscription) {
-    console.log(`[Webhook] 구독 없음: ${customerKey}`);
+    console.log(`[Webhook] 구독 없음: billingKey=${billingKey}`);
     return;
   }
 
@@ -572,7 +602,7 @@ async function handleBillingKeyDeleted(payload: TossWebhookPayload) {
     .update(subscriptions)
     .set({
       billingKey: null,
-      billingKeyMasked: null,
+      billingKeyIssuedAt: null,
       status: 'pending',
       updatedAt: new Date(),
     })
@@ -585,10 +615,10 @@ async function handleBillingKeyDeleted(payload: TossWebhookPayload) {
 ## 4.5 알림 발송 함수
 
 ### 신규 파일
-`inngest/functions/billing-notification.ts`
+`inngest/functions/billing/notification.ts`
 
 ```typescript
-import { inngest } from '../client';
+import { inngest } from '../../client';
 import { db } from '@/lib/db';
 import { tenants, users } from '@/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
@@ -652,11 +682,6 @@ async function sendNotification(
   type: string,
   metadata: Record<string, unknown>
 ) {
-  // TODO: 실제 알림 발송 구현
-  // - 이메일: Resend, SendGrid 등
-  // - 슬랙: Slack Webhook
-  // - 인앱: 알림 테이블에 저장
-
   const templates: Record<string, { subject: string; body: string }> = {
     payment_success: {
       subject: '[SOFA] 결제가 완료되었습니다',
@@ -688,7 +713,7 @@ async function sendNotification(
     body: template.body,
   });
 
-  // 실제 구현 시:
+  // TODO: 실제 알림 발송 구현
   // await resend.emails.send({
   //   from: 'noreply@sofa.app',
   //   to: email,
@@ -702,6 +727,28 @@ async function sendNotification(
 
 ## 4.6 함수 등록
 
+### 신규 파일
+`inngest/functions/billing/index.ts`
+
+```typescript
+export { processBillingPayment } from './process-payment';
+export { billingRetry } from './retry-payment';
+export { processBillingWebhook } from './process-webhook';
+export { billingNotification } from './notification';
+```
+
+### 수정 파일
+`inngest/functions/index.ts`
+
+```typescript
+// 기존 함수들
+export * from './process-document';
+// ... 기타 기존 함수
+
+// 빌링 함수들
+export * from './billing';
+```
+
 ### 수정 파일
 `app/api/inngest/route.ts`
 
@@ -714,10 +761,12 @@ import { processDocument } from '@/inngest/functions/process-document';
 // ... 기타 기존 함수
 
 // 빌링 함수들
-import { processBillingPayment } from '@/inngest/functions/process-billing-payment';
-import { billingRetry } from '@/inngest/functions/billing-retry';
-import { processBillingWebhook } from '@/inngest/functions/process-billing-webhook';
-import { billingNotification } from '@/inngest/functions/billing-notification';
+import {
+  processBillingPayment,
+  billingRetry,
+  processBillingWebhook,
+  billingNotification,
+} from '@/inngest/functions/billing';
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
@@ -740,18 +789,21 @@ export const { GET, POST, PUT } = serve({
 ## 체크리스트
 
 - [ ] `inngest/client.ts` 빌링 이벤트 타입 추가
-- [ ] `inngest/functions/process-billing-payment.ts` 구현
+- [ ] `inngest/functions/billing/process-payment.ts` 구현
   - [ ] 구독/플랜 정보 조회
   - [ ] 결제 레코드 생성
-  - [ ] 토스 API 결제 호출
+  - [ ] PortOne API 결제 호출
   - [ ] 성공/실패 처리
-- [ ] `inngest/functions/billing-retry.ts` 구현
+- [ ] `inngest/functions/billing/retry-payment.ts` 구현
   - [ ] 재시도 딜레이 로직
   - [ ] 상태 전환 (past_due, suspended)
-- [ ] `inngest/functions/process-billing-webhook.ts` 구현
-  - [ ] PAYMENT_STATUS_CHANGED 처리
-  - [ ] BILLING_KEY_DELETED 처리
-- [ ] `inngest/functions/billing-notification.ts` 구현
+- [ ] `inngest/functions/billing/process-webhook.ts` 구현
+  - [ ] Transaction.Paid 처리
+  - [ ] Transaction.Failed 처리
+  - [ ] Transaction.Cancelled 처리
+  - [ ] BillingKey.Deleted 처리
+- [ ] `inngest/functions/billing/notification.ts` 구현
+- [ ] `inngest/functions/billing/index.ts` 생성
 - [ ] `app/api/inngest/route.ts` 함수 등록
 - [ ] Inngest Dev Server에서 테스트
 

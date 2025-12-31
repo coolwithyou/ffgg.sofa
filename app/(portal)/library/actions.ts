@@ -42,6 +42,12 @@ export interface DuplicateResult {
   error?: string;
 }
 
+// 배치 해제 결과 타입
+export interface UnassignResult {
+  success: boolean;
+  error?: string;
+}
+
 export interface DatasetOption {
   id: string;
   name: string;
@@ -332,5 +338,81 @@ export async function duplicateDocumentToDataset(
   } catch (error) {
     console.error('Document duplicate error:', error);
     return { success: false, error: '문서 복제 중 오류가 발생했습니다.' };
+  }
+}
+
+/**
+ * 문서를 데이터셋에서 배치 해제 (데이터셋 → 라이브러리)
+ * moveDocumentToDataset()의 반대 동작
+ * 문서와 청크는 삭제되지 않고 라이브러리(미배치 상태)로 이동
+ */
+export async function unassignDocumentFromDataset(
+  documentId: string
+): Promise<UnassignResult> {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  const tenantId = session.tenantId;
+
+  try {
+    // 문서 조회 및 데이터셋 소속 여부 확인
+    const [doc] = await db
+      .select({
+        id: documents.id,
+        datasetId: documents.datasetId,
+      })
+      .from(documents)
+      .where(and(eq(documents.id, documentId), eq(documents.tenantId, tenantId)));
+
+    if (!doc) {
+      return { success: false, error: '문서를 찾을 수 없습니다.' };
+    }
+
+    if (doc.datasetId === null) {
+      return { success: false, error: '이미 미배치 상태인 문서입니다.' };
+    }
+
+    const sourceDatasetId = doc.datasetId;
+
+    // 문서의 청크 수 조회 (통계 감소용)
+    const [chunkStats] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(chunks)
+      .where(eq(chunks.documentId, documentId));
+
+    const chunkCount = chunkStats?.count || 0;
+
+    // 문서의 datasetId를 null로 업데이트
+    await db
+      .update(documents)
+      .set({ datasetId: null, updatedAt: new Date() })
+      .where(eq(documents.id, documentId));
+
+    // 해당 문서의 모든 청크 datasetId를 null로 업데이트
+    await db
+      .update(chunks)
+      .set({ datasetId: null, updatedAt: new Date() })
+      .where(eq(chunks.documentId, documentId));
+
+    // 원래 데이터셋 통계 감소
+    await db
+      .update(datasets)
+      .set({
+        documentCount: sql`GREATEST(${datasets.documentCount} - 1, 0)`,
+        chunkCount: sql`GREATEST(${datasets.chunkCount} - ${chunkCount}, 0)`,
+        updatedAt: new Date(),
+      })
+      .where(eq(datasets.id, sourceDatasetId));
+
+    revalidatePath('/library');
+    revalidatePath('/datasets');
+    revalidatePath(`/datasets/${sourceDatasetId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Document unassign error:', error);
+    return { success: false, error: '문서 배치 해제 중 오류가 발생했습니다.' };
   }
 }
