@@ -1,4 +1,4 @@
-# SOFA - 기업용 RAG 챗봇 SaaS
+# sofa - 기업용 RAG 챗봇 SaaS 
 
 기업 고객을 위한 멀티테넌트 RAG(Retrieval-Augmented Generation) 챗봇 서비스입니다.
 
@@ -14,12 +14,12 @@
 - **테스트**: Vitest
 
 ### AI 모델 (2025년 12월 기준)
-| 용도 | 모델 | 비고 |
-|------|------|------|
-| **LLM (메인)** | Gemini 2.5 Flash-Lite | 가성비 최고 |
-| **LLM (폴백)** | GPT-4o-mini | 안정성 |
-| **임베딩** | BGE-m3-ko | 한국어 최적화, 1024차원 |
-| **FTS** | Nori + BM25 | Hybrid Retrieval |
+| 용도           | 모델                  | 비고                    |
+| -------------- | --------------------- | ----------------------- |
+| **LLM (메인)** | Gemini 2.5 Flash-Lite | 가성비 최고             |
+| **LLM (폴백)** | GPT-4o-mini           | 안정성                  |
+| **임베딩**     | BGE-m3-ko             | 한국어 최적화, 1024차원 |
+| **FTS**        | Nori + BM25           | Hybrid Retrieval        |
 
 ## 주요 기능
 
@@ -169,37 +169,37 @@ ffgg.sofa/
 
 ## 스크립트
 
-| 명령어 | 설명 |
-|--------|------|
-| `pnpm dev` | 개발 서버 실행 |
-| `pnpm build` | 프로덕션 빌드 |
-| `pnpm start` | 프로덕션 서버 실행 |
-| `pnpm lint` | ESLint 실행 |
-| `pnpm test` | 테스트 실행 (watch 모드) |
-| `pnpm test:run` | 테스트 1회 실행 |
-| `pnpm test:coverage` | 커버리지 포함 테스트 |
-| `pnpm db:push` | DB 스키마 푸시 |
-| `pnpm db:generate` | 마이그레이션 생성 |
-| `pnpm db:migrate` | 마이그레이션 실행 |
-| `pnpm db:studio` | Drizzle Studio 실행 |
-| `pnpm db:seed:admin` | 초기 어드민 생성 |
-| `pnpm db:enable-vector` | pgvector 확장 활성화 |
+| 명령어                  | 설명                     |
+| ----------------------- | ------------------------ |
+| `pnpm dev`              | 개발 서버 실행           |
+| `pnpm build`            | 프로덕션 빌드            |
+| `pnpm start`            | 프로덕션 서버 실행       |
+| `pnpm lint`             | ESLint 실행              |
+| `pnpm test`             | 테스트 실행 (watch 모드) |
+| `pnpm test:run`         | 테스트 1회 실행          |
+| `pnpm test:coverage`    | 커버리지 포함 테스트     |
+| `pnpm db:push`          | DB 스키마 푸시           |
+| `pnpm db:generate`      | 마이그레이션 생성        |
+| `pnpm db:migrate`       | 마이그레이션 실행        |
+| `pnpm db:studio`        | Drizzle Studio 실행      |
+| `pnpm db:seed:admin`    | 초기 어드민 생성         |
+| `pnpm db:enable-vector` | pgvector 확장 활성화     |
 
 ## API 엔드포인트
 
 ### 인증
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| POST | `/api/auth/login` | 로그인 |
-| POST | `/api/auth/logout` | 로그아웃 |
-| GET | `/api/auth/me` | 현재 사용자 정보 |
+| 메서드 | 경로               | 설명             |
+| ------ | ------------------ | ---------------- |
+| POST   | `/api/auth/login`  | 로그인           |
+| POST   | `/api/auth/logout` | 로그아웃         |
+| GET    | `/api/auth/me`     | 현재 사용자 정보 |
 
 ### 문서
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| POST | `/api/documents/upload` | 문서 업로드 |
+| 메서드 | 경로                    | 설명        |
+| ------ | ----------------------- | ----------- |
+| POST   | `/api/documents/upload` | 문서 업로드 |
 
 ## 보안 기능
 
