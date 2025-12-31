@@ -1,8 +1,11 @@
 /**
- * Next.js Middleware
+ * Next.js Proxy (formerly Middleware)
  * - 인증이 필요한 경로 보호
  * - 보안 헤더 설정
  * - 공개 경로 및 정적 파일 제외
+ *
+ * Note: Next.js 16부터 middleware.ts → proxy.ts로 변경됨
+ * https://nextjs.org/docs/app/api-reference/file-conventions/proxy
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -98,7 +101,7 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
   return response;
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 정적 파일 및 내부 경로 무시
