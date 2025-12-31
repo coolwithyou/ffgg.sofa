@@ -179,7 +179,8 @@ onFailure: async ({ event, error }) => {
         async (current, total) => {
           const progress = Math.round((current / total) * 100);
           await updateDocumentProgress(documentId, 'context_generation', progress);
-        }
+        },
+        { tenantId } // 토큰 사용량 추적
       );
 
       await updateDocumentProgress(documentId, 'context_generation', 100);
@@ -218,7 +219,8 @@ onFailure: async ({ event, error }) => {
         const context = contextResults?.find((c: ContextResult) => c.chunkIndex === chunk.index);
         return buildContextualContent(chunk.content, context?.contextPrefix);
       });
-      const embeddingVectors = await embedTexts(texts);
+      // 토큰 사용량 추적을 위해 trackingContext 전달
+      const embeddingVectors = await embedTexts(texts, { tenantId });
 
       await updateDocumentProgress(documentId, 'embedding', 100);
 

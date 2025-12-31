@@ -4,7 +4,8 @@
  * 토큰 추적 기능이 작동하려면 llm_models 테이블에 가격 정보가 있어야 합니다.
  * 이 스크립트는 사용 중인 모델들의 가격 정보를 추가합니다.
  */
-import 'dotenv/config';
+import * as dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
 import { db } from '../lib/db';
 import { llmModels } from '../drizzle/schema';
 
@@ -36,6 +37,16 @@ const MODELS = [
     inputPricePerMillion: 0.02, // $0.02 per 1M tokens
     outputPricePerMillion: 0.0, // 임베딩은 output 없음
     isEmbedding: true,
+    isActive: true,
+    isDefault: false,
+  },
+  {
+    provider: 'anthropic',
+    modelId: 'claude-3-haiku-20240307',
+    displayName: 'Claude 3 Haiku',
+    inputPricePerMillion: 0.25, // $0.25 per 1M input tokens
+    outputPricePerMillion: 1.25, // $1.25 per 1M output tokens
+    isEmbedding: false,
     isActive: true,
     isDefault: false,
   },

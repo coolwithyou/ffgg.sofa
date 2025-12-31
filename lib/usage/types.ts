@@ -2,14 +2,15 @@
  * 토큰 사용량 추적 관련 타입 정의
  */
 
-export type ModelProvider = 'google' | 'openai';
+export type ModelProvider = 'google' | 'openai' | 'anthropic';
 
 export type ModelId =
   | 'gemini-2.5-flash-lite'
   | 'gpt-4o-mini'
-  | 'text-embedding-3-small';
+  | 'text-embedding-3-small'
+  | 'claude-3-haiku-20240307';
 
-export type FeatureType = 'chat' | 'embedding' | 'rewrite';
+export type FeatureType = 'chat' | 'embedding' | 'rewrite' | 'context_generation';
 
 export interface TokenUsageParams {
   tenantId: string;

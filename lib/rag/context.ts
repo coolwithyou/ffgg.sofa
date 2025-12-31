@@ -8,6 +8,11 @@
 import { generateText } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { logger } from '@/lib/logger';
+import { trackTokenUsage } from '@/lib/usage/token-tracker';
+
+export interface ContextTrackingContext {
+  tenantId: string;
+}
 
 export interface ContextResult {
   chunkIndex: number;
@@ -119,7 +124,7 @@ export async function generateChunkContext(
   fullDocument: string,
   chunkContent: string,
   options: ContextGenerationOptions = {}
-): Promise<{ contextPrefix: string; prompt: string }> {
+): Promise<{ contextPrefix: string; prompt: string; inputTokens: number; outputTokens: number }> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const prompt = buildPrompt(fullDocument, chunkContent, opts.maxDocumentLength);
 
@@ -138,13 +143,15 @@ export async function generateChunkContext(
     return {
       contextPrefix: result.text.trim(),
       prompt: opts.savePrompt ? prompt : '',
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
     };
   } catch (error) {
     logger.warn('Context generation failed', {
       error: error instanceof Error ? error.message : 'Unknown',
       chunkPreview: chunkContent.slice(0, 100),
     });
-    return { contextPrefix: '', prompt: opts.savePrompt ? prompt : '' };
+    return { contextPrefix: '', prompt: opts.savePrompt ? prompt : '', inputTokens: 0, outputTokens: 0 };
   }
 }
 
@@ -155,10 +162,13 @@ export async function generateContextsBatch(
   fullDocument: string,
   chunks: Array<{ index: number; content: string }>,
   options: ContextGenerationOptions = {},
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number) => void,
+  trackingContext?: ContextTrackingContext
 ): Promise<ContextResult[]> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const results: ContextResult[] = [];
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
 
   logger.info('Starting context generation batch', {
     totalChunks: chunks.length,
@@ -172,11 +182,13 @@ export async function generateContextsBatch(
 
     const batchResults = await Promise.all(
       batch.map(async (chunk) => {
-        const { contextPrefix, prompt } = await generateChunkContext(
+        const { contextPrefix, prompt, inputTokens, outputTokens } = await generateChunkContext(
           fullDocument,
           chunk.content,
           opts
         );
+        totalInputTokens += inputTokens;
+        totalOutputTokens += outputTokens;
         return {
           chunkIndex: chunk.index,
           contextPrefix,
@@ -208,7 +220,23 @@ export async function generateContextsBatch(
     successCount,
     failureCount: chunks.length - successCount,
     avgContextLength: avgLength,
+    totalInputTokens,
+    totalOutputTokens,
   });
+
+  // 토큰 사용량 추적 (비동기, 배치 완료 후)
+  if (trackingContext?.tenantId && (totalInputTokens > 0 || totalOutputTokens > 0)) {
+    trackTokenUsage({
+      tenantId: trackingContext.tenantId,
+      modelProvider: 'anthropic',
+      modelId: CONTEXT_MODEL,
+      featureType: 'context_generation',
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+    }).catch((err) => {
+      logger.warn('Failed to track context generation token usage', { error: err });
+    });
+  }
 
   return results;
 }
