@@ -1,12 +1,14 @@
 /**
- * 데이터셋 문서 목록 컴포넌트
+ * 데이터셋 문서 목록 컴포넌트 (2열 레이아웃)
+ * 1열: 문서 목록 + 검색
+ * 2열: 선택된 문서의 청크 목록 + 검색
  */
 
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useMemo } from 'react';
 import Link from 'next/link';
-import { FileText, Trash2, RotateCcw, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { FileText, Trash2, RotateCcw, ExternalLink, Search, X } from 'lucide-react';
 import { DocumentProgressModal } from '@/components/document-progress-modal';
 import { DocumentChunks } from './document-chunks';
 
@@ -35,7 +37,8 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
-  const [expandedDocumentId, setExpandedDocumentId] = useState<string | null>(null);
+  const [progressModalDocId, setProgressModalDocId] = useState<string | null>(null);
+  const [documentSearch, setDocumentSearch] = useState('');
 
   useEffect(() => {
     fetchDocuments();
@@ -56,6 +59,13 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
     return () => clearInterval(interval);
   }, [documents]);
 
+  // 첫 번째 문서 자동 선택
+  useEffect(() => {
+    if (documents.length > 0 && !selectedDocumentId) {
+      setSelectedDocumentId(documents[0].id);
+    }
+  }, [documents, selectedDocumentId]);
+
   const fetchDocuments = async () => {
     try {
       const response = await fetch(`/api/datasets/${datasetId}/documents`);
@@ -69,6 +79,15 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
       setIsLoading(false);
     }
   };
+
+  // 문서 검색 필터링
+  const filteredDocuments = useMemo(() => {
+    if (!documentSearch.trim()) return documents;
+    const search = documentSearch.toLowerCase();
+    return documents.filter((doc) =>
+      doc.filename.toLowerCase().includes(search)
+    );
+  }, [documents, documentSearch]);
 
   const handleDelete = async (documentId: string) => {
     if (!confirm('이 문서를 삭제하시겠습니까? 관련된 모든 청크도 함께 삭제됩니다.')) {
@@ -85,6 +104,9 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
 
         if (response.ok) {
           setDocuments((prev) => prev.filter((d) => d.id !== documentId));
+          if (selectedDocumentId === documentId) {
+            setSelectedDocumentId(null);
+          }
           onUpdate();
         } else {
           alert('삭제에 실패했습니다.');
@@ -127,6 +149,8 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
     });
   };
 
+  const selectedDocument = documents.find((d) => d.id === selectedDocumentId);
+
   if (isLoading) {
     return (
       <div className="rounded-lg border border-border bg-card p-8">
@@ -157,130 +181,178 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border px-6 py-4">
-        <h2 className="text-lg font-semibold text-foreground">
-          문서 목록 ({documents.length})
-        </h2>
-        <Link
-          href={`/documents?datasetId=${datasetId}`}
-          className="flex items-center gap-1 text-sm text-primary hover:underline"
-        >
-          문서 업로드
-          <ExternalLink className="h-3 w-3" />
-        </Link>
-      </div>
+    <div className="grid gap-6 lg:grid-cols-2">
+      {/* 1열: 문서 목록 */}
+      <div className="rounded-lg border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <h2 className="text-base font-semibold text-foreground">
+            문서 목록 ({documents.length})
+          </h2>
+          <Link
+            href={`/documents?datasetId=${datasetId}`}
+            className="flex items-center gap-1 text-sm text-primary hover:underline"
+          >
+            업로드
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+        </div>
 
-      <div className="divide-y divide-border">
-        {documents.map((doc) => (
-          <div key={doc.id}>
-            <div className="flex items-center justify-between px-6 py-4 hover:bg-muted/50">
-              <div className="flex items-center gap-4">
-                {/* 청크 확장/접기 버튼 */}
-                <button
-                  onClick={() =>
-                    setExpandedDocumentId(expandedDocumentId === doc.id ? null : doc.id)
-                  }
-                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  title={expandedDocumentId === doc.id ? '청크 목록 닫기' : '청크 목록 보기'}
-                >
-                  {expandedDocumentId === doc.id ? (
-                    <ChevronUp className="h-5 w-5" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5" />
-                  )}
-                </button>
-
-                <FileTypeIcon fileType={doc.fileType} />
-                <div>
-                  <p className="font-medium text-foreground">{doc.filename}</p>
-                  <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-                    <span>{formatFileSize(doc.fileSize)}</span>
-                    <span>•</span>
-                    <span>청크 {doc.chunkCount}개</span>
-                    {doc.approvedCount > 0 && (
-                      <>
-                        <span>•</span>
-                        <span className="text-green-500">승인 {doc.approvedCount}개</span>
-                      </>
-                    )}
-                    <span>•</span>
-                    <span>{formatDate(doc.createdAt)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                {/* 클릭하면 진행 상태 모달 표시 */}
-                <button
-                  onClick={() => setSelectedDocumentId(doc.id)}
-                  className="cursor-pointer hover:opacity-80"
-                  title="처리 상태 상세 보기"
-                >
-                  <StatusBadge
-                    status={doc.status}
-                    progressPercent={doc.progressPercent}
-                    errorMessage={doc.errorMessage}
-                  />
-                </button>
-
-                {/* 재처리 버튼 */}
-                {['uploaded', 'failed'].includes(doc.status) && (
-                  <button
-                    onClick={() => handleReprocess(doc.id)}
-                    disabled={isPending || reprocessingId === doc.id}
-                    className="rounded p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50"
-                    title="재처리"
-                  >
-                    {reprocessingId === doc.id ? (
-                      <LoadingSpinner className="h-5 w-5" />
-                    ) : (
-                      <RotateCcw className="h-5 w-5" />
-                    )}
-                  </button>
-                )}
-
-                {/* 삭제 버튼 */}
-                <button
-                  onClick={() => handleDelete(doc.id)}
-                  disabled={isPending || deletingId === doc.id}
-                  className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                  title="삭제"
-                >
-                  {deletingId === doc.id ? (
-                    <LoadingSpinner className="h-5 w-5" />
-                  ) : (
-                    <Trash2 className="h-5 w-5" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* 청크 목록 (확장 시) */}
-            {expandedDocumentId === doc.id && (
-              <div className="border-t border-border bg-muted/30 px-6 py-4">
-                <DocumentChunks
-                  documentId={doc.id}
-                  onChunkUpdate={() => {
-                    fetchDocuments();
-                    onUpdate();
-                  }}
-                />
-              </div>
+        {/* 문서 검색 */}
+        <div className="border-b border-border px-4 py-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="파일명으로 검색..."
+              value={documentSearch}
+              onChange={(e) => setDocumentSearch(e.target.value)}
+              className="w-full rounded-md border border-border bg-background py-2 pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            {documentSearch && (
+              <button
+                onClick={() => setDocumentSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
             )}
           </div>
-        ))}
+        </div>
+
+        {/* 문서 목록 */}
+        <div className="max-h-[600px] divide-y divide-border overflow-y-auto">
+          {filteredDocuments.length === 0 ? (
+            <div className="px-4 py-8 text-center text-muted-foreground">
+              {documentSearch ? '검색 결과가 없습니다.' : '문서가 없습니다.'}
+            </div>
+          ) : (
+            filteredDocuments.map((doc) => (
+              <button
+                key={doc.id}
+                onClick={() => setSelectedDocumentId(doc.id)}
+                className={`w-full px-4 py-3 text-left transition-colors ${
+                  selectedDocumentId === doc.id
+                    ? 'bg-primary/10'
+                    : 'hover:bg-muted/50'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <FileTypeIcon fileType={doc.fileType} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-foreground">{doc.filename}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <span>{formatFileSize(doc.fileSize)}</span>
+                      <span>•</span>
+                      <span>청크 {doc.chunkCount}개</span>
+                      {doc.approvedCount > 0 && (
+                        <>
+                          <span>•</span>
+                          <span className="text-green-500">승인 {doc.approvedCount}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setProgressModalDocId(doc.id);
+                        }}
+                        className="hover:opacity-80"
+                        title="처리 상태 상세 보기"
+                      >
+                        <StatusBadge
+                          status={doc.status}
+                          progressPercent={doc.progressPercent}
+                          errorMessage={doc.errorMessage}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 액션 버튼 */}
+                  <div className="flex flex-shrink-0 items-center gap-1">
+                    {['uploaded', 'failed'].includes(doc.status) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleReprocess(doc.id);
+                        }}
+                        disabled={isPending || reprocessingId === doc.id}
+                        className="rounded p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+                        title="재처리"
+                      >
+                        {reprocessingId === doc.id ? (
+                          <LoadingSpinner className="h-4 w-4" />
+                        ) : (
+                          <RotateCcw className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(doc.id);
+                      }}
+                      disabled={isPending || deletingId === doc.id}
+                      className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                      title="삭제"
+                    >
+                      {deletingId === doc.id ? (
+                        <LoadingSpinner className="h-4 w-4" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* 2열: 청크 목록 */}
+      <div className="rounded-lg border border-border bg-card">
+        {selectedDocument ? (
+          <>
+            <div className="border-b border-border px-4 py-3">
+              <h2 className="text-base font-semibold text-foreground">
+                청크 목록
+              </h2>
+              <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                {selectedDocument.filename}
+              </p>
+            </div>
+            <div className="max-h-[600px] overflow-y-auto p-4">
+              <DocumentChunks
+                documentId={selectedDocumentId!}
+                onChunkUpdate={() => {
+                  fetchDocuments();
+                  onUpdate();
+                }}
+                showSearch
+              />
+            </div>
+          </>
+        ) : (
+          <div className="flex h-full items-center justify-center p-12 text-center text-muted-foreground">
+            <div>
+              <FileText className="mx-auto h-12 w-12 opacity-50" />
+              <p className="mt-4">문서를 선택하면 청크 목록이 표시됩니다</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 문서 처리 상태 모달 */}
-      {selectedDocumentId && (
+      {progressModalDocId && (
         <DocumentProgressModal
-          documentId={selectedDocumentId}
-          isOpen={!!selectedDocumentId}
-          onClose={() => setSelectedDocumentId(null)}
+          documentId={progressModalDocId}
+          isOpen={!!progressModalDocId}
+          onClose={() => setProgressModalDocId(null)}
           onReprocess={() => {
-            handleReprocess(selectedDocumentId);
-            setSelectedDocumentId(null);
+            handleReprocess(progressModalDocId);
+            setProgressModalDocId(null);
           }}
         />
       )}
@@ -313,9 +385,9 @@ function StatusBadge({
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1">
       <span
-        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${className}`}
+        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${className}`}
         title={errorMessage || undefined}
       >
         {label}
@@ -338,7 +410,7 @@ function FileTypeIcon({ fileType }: { fileType: string | null }) {
 
   return (
     <div
-      className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+      className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${
         isPdf ? 'bg-red-500/10' : 'bg-primary/10'
       }`}
     >
@@ -357,15 +429,6 @@ function formatFileSize(bytes: number | null): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
 }
 
 // 로딩 스피너

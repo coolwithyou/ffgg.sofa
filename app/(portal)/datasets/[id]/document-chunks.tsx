@@ -3,10 +3,11 @@
 /**
  * 문서별 청크 목록 컴포넌트
  * 청크 조회 및 활성화/비활성화/삭제 기능 제공
+ * 청크 내용으로 검색 가능
  */
 
-import { useState, useEffect, useTransition } from 'react';
-import { ChevronDown, ChevronUp, Eye, EyeOff, Trash2 } from 'lucide-react';
+import { useState, useEffect, useTransition, useMemo } from 'react';
+import { ChevronDown, ChevronUp, Eye, EyeOff, Trash2, Search, X } from 'lucide-react';
 
 interface ChunkItem {
   id: string;
@@ -23,11 +24,12 @@ interface ChunkItem {
 interface DocumentChunksProps {
   documentId: string;
   onChunkUpdate?: () => void;
+  showSearch?: boolean;
 }
 
 type FilterType = 'all' | 'active' | 'inactive';
 
-export function DocumentChunks({ documentId, onChunkUpdate }: DocumentChunksProps) {
+export function DocumentChunks({ documentId, onChunkUpdate, showSearch = false }: DocumentChunksProps) {
   const [chunks, setChunks] = useState<ChunkItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,9 +37,13 @@ export function DocumentChunks({ documentId, onChunkUpdate }: DocumentChunksProp
   const [expandedChunkId, setExpandedChunkId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [processingChunkId, setProcessingChunkId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchChunks();
+    // 새 문서 선택 시 검색어 초기화
+    setSearchQuery('');
+    setExpandedChunkId(null);
   }, [documentId]);
 
   const fetchChunks = async () => {
@@ -116,23 +122,52 @@ export function DocumentChunks({ documentId, onChunkUpdate }: DocumentChunksProp
     });
   };
 
-  // 필터링된 청크 목록
-  const filteredChunks = chunks.filter((chunk) => {
+  // 필터링 및 검색된 청크 목록
+  const filteredChunks = useMemo(() => {
+    let result = chunks;
+
+    // 활성화 상태 필터
     switch (filter) {
       case 'active':
-        return chunk.isActive;
+        result = result.filter((chunk) => chunk.isActive);
+        break;
       case 'inactive':
-        return !chunk.isActive;
-      default:
-        return true;
+        result = result.filter((chunk) => !chunk.isActive);
+        break;
     }
-  });
+
+    // 검색어 필터
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter((chunk) =>
+        chunk.content.toLowerCase().includes(query)
+      );
+    }
+
+    return result;
+  }, [chunks, filter, searchQuery]);
 
   // 통계
   const stats = {
     total: chunks.length,
     active: chunks.filter((c) => c.isActive).length,
     inactive: chunks.filter((c) => !c.isActive).length,
+  };
+
+  // 검색어 하이라이트 함수
+  const highlightText = (text: string, query: string) => {
+    if (!query.trim()) return text;
+
+    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+    return parts.map((part, i) =>
+      part.toLowerCase() === query.toLowerCase() ? (
+        <mark key={i} className="bg-yellow-500/30 text-foreground rounded px-0.5">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
   };
 
   if (isLoading) {
@@ -167,7 +202,29 @@ export function DocumentChunks({ documentId, onChunkUpdate }: DocumentChunksProp
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      {/* 검색창 */}
+      {showSearch && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="청크 내용 검색..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded-md border border-border bg-background py-2 pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* 필터 및 통계 */}
       <div className="flex items-center justify-between">
         <div className="flex gap-2">
@@ -187,14 +244,24 @@ export function DocumentChunks({ documentId, onChunkUpdate }: DocumentChunksProp
             onClick={() => setFilter('inactive')}
           />
         </div>
+        {searchQuery && (
+          <span className="text-xs text-muted-foreground">
+            {filteredChunks.length}건 검색됨
+          </span>
+        )}
       </div>
 
       {/* 청크 목록 */}
       <div className="space-y-2">
         {filteredChunks.length === 0 ? (
           <p className="py-4 text-center text-muted-foreground">
-            {filter === 'active' && '활성 청크가 없습니다.'}
-            {filter === 'inactive' && '비활성 청크가 없습니다.'}
+            {searchQuery
+              ? '검색 결과가 없습니다.'
+              : filter === 'active'
+                ? '활성 청크가 없습니다.'
+                : filter === 'inactive'
+                  ? '비활성 청크가 없습니다.'
+                  : '청크가 없습니다.'}
           </p>
         ) : (
           filteredChunks.map((chunk) => (
@@ -207,13 +274,13 @@ export function DocumentChunks({ documentId, onChunkUpdate }: DocumentChunksProp
               }`}
             >
               {/* 청크 헤더 */}
-              <div className="flex items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-3">
+              <div className="flex items-center justify-between px-3 py-2">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() =>
                       setExpandedChunkId(expandedChunkId === chunk.id ? null : chunk.id)
                     }
-                    className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary"
+                    className="flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-primary"
                   >
                     {expandedChunkId === chunk.id ? (
                       <ChevronUp className="h-4 w-4" />
@@ -230,7 +297,7 @@ export function DocumentChunks({ documentId, onChunkUpdate }: DocumentChunksProp
 
                   {/* 비활성 표시 */}
                   {!chunk.isActive && (
-                    <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                       비활성
                     </span>
                   )}
@@ -244,11 +311,11 @@ export function DocumentChunks({ documentId, onChunkUpdate }: DocumentChunksProp
                 </div>
 
                 {/* 액션 버튼 */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <button
                     onClick={() => handleToggleActive(chunk.id, chunk.isActive)}
                     disabled={isPending || processingChunkId === chunk.id}
-                    className={`rounded p-1.5 transition-colors disabled:opacity-50 ${
+                    className={`rounded p-1 transition-colors disabled:opacity-50 ${
                       chunk.isActive
                         ? 'text-muted-foreground hover:bg-yellow-500/10 hover:text-yellow-500'
                         : 'text-muted-foreground hover:bg-green-500/10 hover:text-green-500'
@@ -267,7 +334,7 @@ export function DocumentChunks({ documentId, onChunkUpdate }: DocumentChunksProp
                   <button
                     onClick={() => handleDelete(chunk.id)}
                     disabled={isPending || processingChunkId === chunk.id}
-                    className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                    className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
                     title="삭제"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -277,18 +344,18 @@ export function DocumentChunks({ documentId, onChunkUpdate }: DocumentChunksProp
 
               {/* 청크 미리보기 (접힌 상태) */}
               {expandedChunkId !== chunk.id && (
-                <div className="border-t border-border/50 px-4 py-2">
+                <div className="border-t border-border/50 px-3 py-2">
                   <p className="line-clamp-2 text-sm text-muted-foreground">
-                    {chunk.preview}
+                    {searchQuery ? highlightText(chunk.preview, searchQuery) : chunk.preview}
                   </p>
                 </div>
               )}
 
               {/* 청크 전체 내용 (펼친 상태) */}
               {expandedChunkId === chunk.id && (
-                <div className="border-t border-border/50 px-4 py-3">
+                <div className="border-t border-border/50 px-3 py-2">
                   <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap text-sm text-foreground">
-                    {chunk.content}
+                    {searchQuery ? highlightText(chunk.content, searchQuery) : chunk.content}
                   </pre>
                 </div>
               )}
@@ -313,7 +380,7 @@ function FilterButton({
   return (
     <button
       onClick={onClick}
-      className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
         isActive
           ? 'bg-primary text-primary-foreground'
           : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -338,7 +405,7 @@ function ChunkStatusBadge({ status }: { status: string }) {
   };
 
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>
+    <span className={`rounded-full px-1.5 py-0.5 text-xs font-medium ${className}`}>
       {label}
     </span>
   );
