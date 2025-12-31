@@ -1,0 +1,366 @@
+'use client';
+
+/**
+ * 문서별 청크 목록 컴포넌트
+ * 청크 조회 및 활성화/비활성화/삭제 기능 제공
+ */
+
+import { useState, useEffect, useTransition } from 'react';
+import { ChevronDown, ChevronUp, Eye, EyeOff, Trash2 } from 'lucide-react';
+
+interface ChunkItem {
+  id: string;
+  content: string;
+  preview: string;
+  chunkIndex: number | null;
+  qualityScore: number | null;
+  status: string;
+  isActive: boolean;
+  autoApproved: boolean;
+  createdAt: string;
+}
+
+interface DocumentChunksProps {
+  documentId: string;
+  onChunkUpdate?: () => void;
+}
+
+type FilterType = 'all' | 'active' | 'inactive';
+
+export function DocumentChunks({ documentId, onChunkUpdate }: DocumentChunksProps) {
+  const [chunks, setChunks] = useState<ChunkItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterType>('all');
+  const [expandedChunkId, setExpandedChunkId] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const [processingChunkId, setProcessingChunkId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchChunks();
+  }, [documentId]);
+
+  const fetchChunks = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await fetch(`/api/documents/${documentId}/chunks?includeInactive=true`);
+      if (!response.ok) {
+        throw new Error('청크 목록을 불러오는데 실패했습니다.');
+      }
+      const data = await response.json();
+      setChunks(data.chunks);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggleActive = async (chunkId: string, currentActive: boolean) => {
+    setProcessingChunkId(chunkId);
+
+    startTransition(async () => {
+      try {
+        const response = await fetch(`/api/chunks/${chunkId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isActive: !currentActive }),
+        });
+
+        if (!response.ok) {
+          throw new Error('상태 변경에 실패했습니다.');
+        }
+
+        // 로컬 상태 업데이트
+        setChunks((prev) =>
+          prev.map((chunk) =>
+            chunk.id === chunkId ? { ...chunk, isActive: !currentActive } : chunk
+          )
+        );
+
+        onChunkUpdate?.();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      } finally {
+        setProcessingChunkId(null);
+      }
+    });
+  };
+
+  const handleDelete = async (chunkId: string) => {
+    if (!confirm('이 청크를 삭제하시겠습니까? 삭제된 청크는 복구할 수 없습니다.')) {
+      return;
+    }
+
+    setProcessingChunkId(chunkId);
+
+    startTransition(async () => {
+      try {
+        const response = await fetch(`/api/chunks/${chunkId}`, {
+          method: 'DELETE',
+        });
+
+        if (!response.ok) {
+          throw new Error('삭제에 실패했습니다.');
+        }
+
+        // 로컬 상태 업데이트
+        setChunks((prev) => prev.filter((chunk) => chunk.id !== chunkId));
+        onChunkUpdate?.();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      } finally {
+        setProcessingChunkId(null);
+      }
+    });
+  };
+
+  // 필터링된 청크 목록
+  const filteredChunks = chunks.filter((chunk) => {
+    switch (filter) {
+      case 'active':
+        return chunk.isActive;
+      case 'inactive':
+        return !chunk.isActive;
+      default:
+        return true;
+    }
+  });
+
+  // 통계
+  const stats = {
+    total: chunks.length,
+    active: chunks.filter((c) => c.isActive).length,
+    inactive: chunks.filter((c) => !c.isActive).length,
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <LoadingSpinner className="h-6 w-6 text-primary" />
+        <span className="ml-2 text-muted-foreground">청크 로딩 중...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-center">
+        <p className="text-destructive">{error}</p>
+        <button
+          onClick={fetchChunks}
+          className="mt-2 text-sm text-primary hover:underline"
+        >
+          다시 시도
+        </button>
+      </div>
+    );
+  }
+
+  if (chunks.length === 0) {
+    return (
+      <div className="py-8 text-center text-muted-foreground">
+        청크가 없습니다.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 필터 및 통계 */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          <FilterButton
+            label={`전체 (${stats.total})`}
+            isActive={filter === 'all'}
+            onClick={() => setFilter('all')}
+          />
+          <FilterButton
+            label={`활성 (${stats.active})`}
+            isActive={filter === 'active'}
+            onClick={() => setFilter('active')}
+          />
+          <FilterButton
+            label={`비활성 (${stats.inactive})`}
+            isActive={filter === 'inactive'}
+            onClick={() => setFilter('inactive')}
+          />
+        </div>
+      </div>
+
+      {/* 청크 목록 */}
+      <div className="space-y-2">
+        {filteredChunks.length === 0 ? (
+          <p className="py-4 text-center text-muted-foreground">
+            {filter === 'active' && '활성 청크가 없습니다.'}
+            {filter === 'inactive' && '비활성 청크가 없습니다.'}
+          </p>
+        ) : (
+          filteredChunks.map((chunk) => (
+            <div
+              key={chunk.id}
+              className={`rounded-lg border transition-colors ${
+                chunk.isActive
+                  ? 'border-border bg-card'
+                  : 'border-border/50 bg-muted/30'
+              }`}
+            >
+              {/* 청크 헤더 */}
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() =>
+                      setExpandedChunkId(expandedChunkId === chunk.id ? null : chunk.id)
+                    }
+                    className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary"
+                  >
+                    {expandedChunkId === chunk.id ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                    <span>
+                      #{chunk.chunkIndex !== null ? chunk.chunkIndex + 1 : '?'}
+                    </span>
+                  </button>
+
+                  {/* 상태 배지 */}
+                  <ChunkStatusBadge status={chunk.status} />
+
+                  {/* 비활성 표시 */}
+                  {!chunk.isActive && (
+                    <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                      비활성
+                    </span>
+                  )}
+
+                  {/* 품질 점수 */}
+                  {chunk.qualityScore !== null && (
+                    <span className="text-xs text-muted-foreground">
+                      품질: {chunk.qualityScore.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+
+                {/* 액션 버튼 */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleToggleActive(chunk.id, chunk.isActive)}
+                    disabled={isPending || processingChunkId === chunk.id}
+                    className={`rounded p-1.5 transition-colors disabled:opacity-50 ${
+                      chunk.isActive
+                        ? 'text-muted-foreground hover:bg-yellow-500/10 hover:text-yellow-500'
+                        : 'text-muted-foreground hover:bg-green-500/10 hover:text-green-500'
+                    }`}
+                    title={chunk.isActive ? '비활성화' : '활성화'}
+                  >
+                    {processingChunkId === chunk.id ? (
+                      <LoadingSpinner className="h-4 w-4" />
+                    ) : chunk.isActive ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => handleDelete(chunk.id)}
+                    disabled={isPending || processingChunkId === chunk.id}
+                    className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                    title="삭제"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* 청크 미리보기 (접힌 상태) */}
+              {expandedChunkId !== chunk.id && (
+                <div className="border-t border-border/50 px-4 py-2">
+                  <p className="line-clamp-2 text-sm text-muted-foreground">
+                    {chunk.preview}
+                  </p>
+                </div>
+              )}
+
+              {/* 청크 전체 내용 (펼친 상태) */}
+              {expandedChunkId === chunk.id && (
+                <div className="border-t border-border/50 px-4 py-3">
+                  <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap text-sm text-foreground">
+                    {chunk.content}
+                  </pre>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// 필터 버튼
+function FilterButton({
+  label,
+  isActive,
+  onClick,
+}: {
+  label: string;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+        isActive
+          ? 'bg-primary text-primary-foreground'
+          : 'bg-muted text-muted-foreground hover:bg-muted/80'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+// 청크 상태 배지
+function ChunkStatusBadge({ status }: { status: string }) {
+  const config: Record<string, { label: string; className: string }> = {
+    pending: { label: '대기', className: 'bg-muted text-muted-foreground' },
+    approved: { label: '승인됨', className: 'bg-green-500/10 text-green-500' },
+    rejected: { label: '거부됨', className: 'bg-destructive/10 text-destructive' },
+  };
+
+  const { label, className } = config[status] || {
+    label: status,
+    className: 'bg-muted text-muted-foreground',
+  };
+
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>
+      {label}
+    </span>
+  );
+}
+
+// 로딩 스피너
+function LoadingSpinner({ className }: { className?: string }) {
+  return (
+    <svg className={`animate-spin ${className}`} fill="none" viewBox="0 0 24 24">
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
+    </svg>
+  );
+}

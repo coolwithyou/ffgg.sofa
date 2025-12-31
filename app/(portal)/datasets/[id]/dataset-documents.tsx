@@ -6,8 +6,9 @@
 
 import { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
-import { FileText, Trash2, RotateCcw, ExternalLink } from 'lucide-react';
+import { FileText, Trash2, RotateCcw, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import { DocumentProgressModal } from '@/components/document-progress-modal';
+import { DocumentChunks } from './document-chunks';
 
 interface DocumentItem {
   id: string;
@@ -34,6 +35,7 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
+  const [expandedDocumentId, setExpandedDocumentId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDocuments();
@@ -171,74 +173,101 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
 
       <div className="divide-y divide-border">
         {documents.map((doc) => (
-          <div
-            key={doc.id}
-            className="flex items-center justify-between px-6 py-4 hover:bg-muted/50"
-          >
-            <div className="flex items-center gap-4">
-              <FileTypeIcon fileType={doc.fileType} />
-              <div>
-                <p className="font-medium text-foreground">{doc.filename}</p>
-                <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-                  <span>{formatFileSize(doc.fileSize)}</span>
-                  <span>•</span>
-                  <span>청크 {doc.chunkCount}개</span>
-                  {doc.approvedCount > 0 && (
-                    <>
-                      <span>•</span>
-                      <span className="text-green-500">승인 {doc.approvedCount}개</span>
-                    </>
+          <div key={doc.id}>
+            <div className="flex items-center justify-between px-6 py-4 hover:bg-muted/50">
+              <div className="flex items-center gap-4">
+                {/* 청크 확장/접기 버튼 */}
+                <button
+                  onClick={() =>
+                    setExpandedDocumentId(expandedDocumentId === doc.id ? null : doc.id)
+                  }
+                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  title={expandedDocumentId === doc.id ? '청크 목록 닫기' : '청크 목록 보기'}
+                >
+                  {expandedDocumentId === doc.id ? (
+                    <ChevronUp className="h-5 w-5" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5" />
                   )}
-                  <span>•</span>
-                  <span>{formatDate(doc.createdAt)}</span>
+                </button>
+
+                <FileTypeIcon fileType={doc.fileType} />
+                <div>
+                  <p className="font-medium text-foreground">{doc.filename}</p>
+                  <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+                    <span>{formatFileSize(doc.fileSize)}</span>
+                    <span>•</span>
+                    <span>청크 {doc.chunkCount}개</span>
+                    {doc.approvedCount > 0 && (
+                      <>
+                        <span>•</span>
+                        <span className="text-green-500">승인 {doc.approvedCount}개</span>
+                      </>
+                    )}
+                    <span>•</span>
+                    <span>{formatDate(doc.createdAt)}</span>
+                  </div>
                 </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                {/* 클릭하면 진행 상태 모달 표시 */}
+                <button
+                  onClick={() => setSelectedDocumentId(doc.id)}
+                  className="cursor-pointer hover:opacity-80"
+                  title="처리 상태 상세 보기"
+                >
+                  <StatusBadge
+                    status={doc.status}
+                    progressPercent={doc.progressPercent}
+                    errorMessage={doc.errorMessage}
+                  />
+                </button>
+
+                {/* 재처리 버튼 */}
+                {['uploaded', 'failed'].includes(doc.status) && (
+                  <button
+                    onClick={() => handleReprocess(doc.id)}
+                    disabled={isPending || reprocessingId === doc.id}
+                    className="rounded p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+                    title="재처리"
+                  >
+                    {reprocessingId === doc.id ? (
+                      <LoadingSpinner className="h-5 w-5" />
+                    ) : (
+                      <RotateCcw className="h-5 w-5" />
+                    )}
+                  </button>
+                )}
+
+                {/* 삭제 버튼 */}
+                <button
+                  onClick={() => handleDelete(doc.id)}
+                  disabled={isPending || deletingId === doc.id}
+                  className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                  title="삭제"
+                >
+                  {deletingId === doc.id ? (
+                    <LoadingSpinner className="h-5 w-5" />
+                  ) : (
+                    <Trash2 className="h-5 w-5" />
+                  )}
+                </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
-              {/* 클릭하면 진행 상태 모달 표시 */}
-              <button
-                onClick={() => setSelectedDocumentId(doc.id)}
-                className="cursor-pointer hover:opacity-80"
-                title="처리 상태 상세 보기"
-              >
-                <StatusBadge
-                  status={doc.status}
-                  progressPercent={doc.progressPercent}
-                  errorMessage={doc.errorMessage}
+            {/* 청크 목록 (확장 시) */}
+            {expandedDocumentId === doc.id && (
+              <div className="border-t border-border bg-muted/30 px-6 py-4">
+                <DocumentChunks
+                  documentId={doc.id}
+                  onChunkUpdate={() => {
+                    fetchDocuments();
+                    onUpdate();
+                  }}
                 />
-              </button>
-
-              {/* 재처리 버튼 */}
-              {['uploaded', 'failed'].includes(doc.status) && (
-                <button
-                  onClick={() => handleReprocess(doc.id)}
-                  disabled={isPending || reprocessingId === doc.id}
-                  className="rounded p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50"
-                  title="재처리"
-                >
-                  {reprocessingId === doc.id ? (
-                    <LoadingSpinner className="h-5 w-5" />
-                  ) : (
-                    <RotateCcw className="h-5 w-5" />
-                  )}
-                </button>
-              )}
-
-              {/* 삭제 버튼 */}
-              <button
-                onClick={() => handleDelete(doc.id)}
-                disabled={isPending || deletingId === doc.id}
-                className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                title="삭제"
-              >
-                {deletingId === doc.id ? (
-                  <LoadingSpinner className="h-5 w-5" />
-                ) : (
-                  <Trash2 className="h-5 w-5" />
-                )}
-              </button>
-            </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

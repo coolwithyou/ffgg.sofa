@@ -1,6 +1,6 @@
 /**
  * 라이브러리 페이지
- * 모든 문서를 중앙에서 관리하고 청크를 데이터셋에 복사
+ * 모든 문서를 중앙에서 관리하고 데이터셋에 맵핑
  */
 
 import { Suspense } from 'react';
@@ -19,7 +19,7 @@ export default async function LibraryPage() {
       <div>
         <h1 className="text-2xl font-bold text-foreground">라이브러리</h1>
         <p className="text-muted-foreground">
-          업로드된 모든 문서를 관리합니다. 청크를 선택하여 데이터셋에 복사할 수 있습니다.
+          업로드된 모든 문서를 관리합니다. 문서를 선택하여 데이터셋에 맵핑할 수 있습니다.
         </p>
       </div>
 
@@ -32,8 +32,9 @@ export default async function LibraryPage() {
             <ul className="mt-2 list-disc pl-5 text-muted-foreground space-y-1">
               <li><strong>배치됨</strong>: 데이터셋에 포함된 문서로, 챗봇 검색에 사용됩니다.</li>
               <li><strong>미배치</strong>: 아직 데이터셋에 포함되지 않은 문서입니다.</li>
-              <li>문서의 청크를 선택하여 원하는 데이터셋에 복사할 수 있습니다.</li>
-              <li>하나의 청크를 여러 데이터셋에 복사할 수 있습니다.</li>
+              <li>미배치 문서를 데이터셋에 <strong>이동</strong>하면 해당 데이터셋에서 관리됩니다.</li>
+              <li>이미 배치된 문서는 다른 데이터셋으로 <strong>복제</strong>할 수 있습니다.</li>
+              <li>청크 관리는 데이터셋 상세 페이지에서 진행할 수 있습니다.</li>
             </ul>
           </div>
         </div>

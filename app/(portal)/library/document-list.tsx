@@ -6,9 +6,9 @@
  */
 
 import { useState, useMemo } from 'react';
-import type { LibraryDocument, LibraryChunk, DatasetOption } from './actions';
-import { getLibraryChunks } from './actions';
-import { ChunkSelector } from './chunk-selector';
+import { useRouter } from 'next/navigation';
+import type { LibraryDocument, DatasetOption } from './actions';
+import { DocumentMapper } from './document-mapper';
 
 type FilterType = 'all' | 'assigned' | 'unassigned';
 
@@ -18,10 +18,9 @@ interface LibraryDocumentListProps {
 }
 
 export function LibraryDocumentList({ documents: initialDocuments, datasets }: LibraryDocumentListProps) {
+  const router = useRouter();
   const [documents] = useState(initialDocuments);
   const [selectedDocument, setSelectedDocument] = useState<LibraryDocument | null>(null);
-  const [chunks, setChunks] = useState<LibraryChunk[]>([]);
-  const [isLoadingChunks, setIsLoadingChunks] = useState(false);
   const [filter, setFilter] = useState<FilterType>('all');
 
   // 필터링된 문서 목록
@@ -43,25 +42,17 @@ export function LibraryDocumentList({ documents: initialDocuments, datasets }: L
     unassigned: documents.filter((doc) => doc.datasetId === null).length,
   }), [documents]);
 
-  const handleDocumentClick = async (doc: LibraryDocument) => {
+  const handleDocumentClick = (doc: LibraryDocument) => {
     if (selectedDocument?.id === doc.id) {
       setSelectedDocument(null);
-      setChunks([]);
       return;
     }
-
     setSelectedDocument(doc);
-    setIsLoadingChunks(true);
+  };
 
-    try {
-      const chunkList = await getLibraryChunks(doc.id);
-      setChunks(chunkList);
-    } catch (error) {
-      console.error('청크 로딩 실패:', error);
-      alert('청크를 불러오는데 실패했습니다.');
-    } finally {
-      setIsLoadingChunks(false);
-    }
+  const handleMappingSuccess = () => {
+    setSelectedDocument(null);
+    router.refresh();
   };
 
   if (documents.length === 0) {
@@ -156,28 +147,13 @@ export function LibraryDocumentList({ documents: initialDocuments, datasets }: L
         </div>
       </div>
 
-      {/* 청크 선택 패널 */}
+      {/* 문서 맵핑 패널 */}
       <div className="rounded-lg border border-border bg-card">
-        {!selectedDocument ? (
-          <div className="flex h-full min-h-[400px] items-center justify-center p-8 text-center">
-            <div>
-              <DocumentIcon className="mx-auto h-12 w-12 text-muted-foreground" />
-              <p className="mt-4 text-muted-foreground">
-                왼쪽에서 문서를 선택하면 청크가 표시됩니다
-              </p>
-            </div>
-          </div>
-        ) : isLoadingChunks ? (
-          <div className="flex h-full min-h-[400px] items-center justify-center">
-            <LoadingSpinner className="h-8 w-8 text-primary" />
-          </div>
-        ) : (
-          <ChunkSelector
-            document={selectedDocument}
-            chunks={chunks}
-            datasets={datasets}
-          />
-        )}
+        <DocumentMapper
+          document={selectedDocument}
+          datasets={datasets}
+          onSuccess={handleMappingSuccess}
+        />
       </div>
     </div>
   );
@@ -289,43 +265,10 @@ function LibraryIcon({ className }: { className?: string }) {
   );
 }
 
-function DocumentIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-      />
-    </svg>
-  );
-}
-
 function ChevronIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-    </svg>
-  );
-}
-
-function LoadingSpinner({ className }: { className?: string }) {
-  return (
-    <svg className={`animate-spin ${className}`} fill="none" viewBox="0 0 24 24">
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
     </svg>
   );
 }

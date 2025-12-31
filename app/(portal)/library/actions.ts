@@ -7,7 +7,7 @@
 
 import { db } from '@/lib/db';
 import { documents, chunks, datasets } from '@/drizzle/schema';
-import { eq, and, inArray, desc, sql, asc } from 'drizzle-orm';
+import { eq, and, desc, sql, asc } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 import { revalidatePath } from 'next/cache';
 
@@ -29,16 +29,17 @@ export interface LibraryDocument {
   datasetName: string | null;
 }
 
-export interface LibraryChunk {
-  id: string;
-  content: string;
-  preview: string;
-  chunkIndex: number | null;
-  qualityScore: number | null;
-  status: string;
-  autoApproved: boolean;
-  metadata: Record<string, unknown> | null;
-  createdAt: string;
+// 문서 이동/복제 결과 타입
+export interface MoveResult {
+  success: boolean;
+  error?: string;
+}
+
+export interface DuplicateResult {
+  success: boolean;
+  newDocumentId?: string;
+  copiedChunkCount?: number;
+  error?: string;
 }
 
 export interface DatasetOption {
@@ -108,53 +109,7 @@ export async function getLibraryDocuments(): Promise<LibraryDocument[]> {
   return result;
 }
 
-// 문서의 청크 목록 조회
-export async function getLibraryChunks(documentId: string): Promise<LibraryChunk[]> {
-  const session = await getSession();
-  if (!session?.tenantId) {
-    throw new Error('인증이 필요합니다.');
-  }
-
-  // 문서 존재 확인
-  const [doc] = await db
-    .select({ id: documents.id })
-    .from(documents)
-    .where(and(eq(documents.id, documentId), eq(documents.tenantId, session.tenantId)));
-
-  if (!doc) {
-    throw new Error('문서를 찾을 수 없습니다.');
-  }
-
-  // 청크 목록 조회
-  const chunkList = await db
-    .select({
-      id: chunks.id,
-      content: chunks.content,
-      chunkIndex: chunks.chunkIndex,
-      qualityScore: chunks.qualityScore,
-      status: chunks.status,
-      autoApproved: chunks.autoApproved,
-      metadata: chunks.metadata,
-      createdAt: chunks.createdAt,
-    })
-    .from(chunks)
-    .where(and(eq(chunks.documentId, documentId), eq(chunks.tenantId, session.tenantId)))
-    .orderBy(asc(chunks.chunkIndex));
-
-  return chunkList.map((chunk) => ({
-    id: chunk.id,
-    content: chunk.content,
-    preview: chunk.content.length > 200 ? chunk.content.substring(0, 200) + '...' : chunk.content,
-    chunkIndex: chunk.chunkIndex,
-    qualityScore: chunk.qualityScore,
-    status: chunk.status || 'pending',
-    autoApproved: chunk.autoApproved || false,
-    metadata: chunk.metadata as Record<string, unknown> | null,
-    createdAt: chunk.createdAt?.toISOString() || new Date().toISOString(),
-  }));
-}
-
-// 데이터셋 목록 조회 (복사 대상 선택용)
+// 데이터셋 목록 조회 (맵핑 대상 선택용)
 export async function getDatasets(): Promise<DatasetOption[]> {
   const session = await getSession();
   if (!session?.tenantId) {
@@ -178,14 +133,17 @@ export async function getDatasets(): Promise<DatasetOption[]> {
   }));
 }
 
-// 청크를 데이터셋으로 복사
-export async function copyChunksToDataset(
-  chunkIds: string[],
+/**
+ * 문서를 데이터셋으로 이동 (라이브러리 → 데이터셋)
+ * 라이브러리에 있는 문서(datasetId=null)만 이동 가능
+ */
+export async function moveDocumentToDataset(
+  documentId: string,
   targetDatasetId: string
-): Promise<{ success: boolean; copiedCount: number; error?: string }> {
+): Promise<MoveResult> {
   const session = await getSession();
   if (!session?.tenantId) {
-    return { success: false, copiedCount: 0, error: '인증이 필요합니다.' };
+    return { success: false, error: '인증이 필요합니다.' };
   }
 
   const tenantId = session.tenantId;
@@ -198,33 +156,144 @@ export async function copyChunksToDataset(
       .where(and(eq(datasets.id, targetDatasetId), eq(datasets.tenantId, tenantId)));
 
     if (!targetDataset) {
-      return { success: false, copiedCount: 0, error: '데이터셋을 찾을 수 없습니다.' };
+      return { success: false, error: '데이터셋을 찾을 수 없습니다.' };
     }
 
-    // 원본 청크 조회 (테넌트 소유 확인)
+    // 문서 조회 및 라이브러리 문서인지 확인
+    const [doc] = await db
+      .select({
+        id: documents.id,
+        datasetId: documents.datasetId,
+      })
+      .from(documents)
+      .where(and(eq(documents.id, documentId), eq(documents.tenantId, tenantId)));
+
+    if (!doc) {
+      return { success: false, error: '문서를 찾을 수 없습니다.' };
+    }
+
+    if (doc.datasetId !== null) {
+      return { success: false, error: '이미 데이터셋에 속한 문서입니다. 복제 기능을 사용하세요.' };
+    }
+
+    // 문서의 청크 수 조회
+    const [chunkStats] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(chunks)
+      .where(eq(chunks.documentId, documentId));
+
+    const chunkCount = chunkStats?.count || 0;
+
+    // 문서의 datasetId 업데이트
+    await db
+      .update(documents)
+      .set({ datasetId: targetDatasetId, updatedAt: new Date() })
+      .where(eq(documents.id, documentId));
+
+    // 해당 문서의 모든 청크 datasetId 업데이트
+    await db
+      .update(chunks)
+      .set({ datasetId: targetDatasetId, updatedAt: new Date() })
+      .where(eq(chunks.documentId, documentId));
+
+    // 대상 데이터셋 통계 업데이트
+    await db
+      .update(datasets)
+      .set({
+        documentCount: sql`${datasets.documentCount} + 1`,
+        chunkCount: sql`${datasets.chunkCount} + ${chunkCount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(datasets.id, targetDatasetId));
+
+    revalidatePath('/library');
+    revalidatePath('/datasets');
+    revalidatePath(`/datasets/${targetDatasetId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Document move error:', error);
+    return { success: false, error: '문서 이동 중 오류가 발생했습니다.' };
+  }
+}
+
+/**
+ * 문서를 다른 데이터셋으로 복제
+ * 이미 데이터셋에 속한 문서를 다른 데이터셋으로 복제
+ * 임베딩은 재계산 없이 복사
+ */
+export async function duplicateDocumentToDataset(
+  documentId: string,
+  targetDatasetId: string
+): Promise<DuplicateResult> {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  const tenantId = session.tenantId;
+
+  try {
+    // 대상 데이터셋 존재 및 권한 확인
+    const [targetDataset] = await db
+      .select({ id: datasets.id })
+      .from(datasets)
+      .where(and(eq(datasets.id, targetDatasetId), eq(datasets.tenantId, tenantId)));
+
+    if (!targetDataset) {
+      return { success: false, error: '데이터셋을 찾을 수 없습니다.' };
+    }
+
+    // 원본 문서 조회
+    const [sourceDoc] = await db
+      .select()
+      .from(documents)
+      .where(and(eq(documents.id, documentId), eq(documents.tenantId, tenantId)));
+
+    if (!sourceDoc) {
+      return { success: false, error: '문서를 찾을 수 없습니다.' };
+    }
+
+    // 같은 데이터셋으로 복제 시도 방지
+    if (sourceDoc.datasetId === targetDatasetId) {
+      return { success: false, error: '같은 데이터셋으로는 복제할 수 없습니다.' };
+    }
+
+    // 새 문서 생성
+    const [newDoc] = await db
+      .insert(documents)
+      .values({
+        tenantId: sourceDoc.tenantId,
+        datasetId: targetDatasetId,
+        filename: sourceDoc.filename,
+        filePath: sourceDoc.filePath,
+        fileSize: sourceDoc.fileSize,
+        fileType: sourceDoc.fileType,
+        status: sourceDoc.status,
+        progressStep: sourceDoc.progressStep,
+        progressPercent: sourceDoc.progressPercent,
+        metadata: {
+          ...(typeof sourceDoc.metadata === 'object' && sourceDoc.metadata !== null
+            ? sourceDoc.metadata
+            : {}),
+          duplicatedFrom: sourceDoc.id,
+          duplicatedAt: new Date().toISOString(),
+        },
+      })
+      .returning({ id: documents.id });
+
+    // 원본 청크 조회
     const sourceChunks = await db
       .select()
       .from(chunks)
-      .where(and(inArray(chunks.id, chunkIds), eq(chunks.tenantId, tenantId)));
+      .where(and(eq(chunks.documentId, documentId), eq(chunks.tenantId, tenantId)));
 
-    if (sourceChunks.length === 0) {
-      return { success: false, copiedCount: 0, error: '유효한 청크를 찾을 수 없습니다.' };
-    }
-
-    // 이미 대상 데이터셋에 있는 청크 필터링
-    const chunksToProcess = sourceChunks.filter((chunk) => chunk.datasetId !== targetDatasetId);
-
-    if (chunksToProcess.length === 0) {
-      return { success: false, copiedCount: 0, error: '모든 청크가 이미 해당 데이터셋에 있습니다.' };
-    }
-
-    // 청크 복사 실행
-    let copiedCount = 0;
-
-    for (const chunk of chunksToProcess) {
+    // 청크 복제
+    let copiedChunkCount = 0;
+    for (const chunk of sourceChunks) {
       await db.insert(chunks).values({
         tenantId: chunk.tenantId,
-        documentId: chunk.documentId,
+        documentId: newDoc.id,
         datasetId: targetDatasetId,
         sourceChunkId: chunk.id,
         content: chunk.content,
@@ -242,24 +311,26 @@ export async function copyChunksToDataset(
           copiedAt: new Date().toISOString(),
         },
       });
-      copiedCount++;
+      copiedChunkCount++;
     }
 
-    // 데이터셋 통계 업데이트
+    // 대상 데이터셋 통계 업데이트
     await db
       .update(datasets)
       .set({
-        chunkCount: sql`${datasets.chunkCount} + ${copiedCount}`,
+        documentCount: sql`${datasets.documentCount} + 1`,
+        chunkCount: sql`${datasets.chunkCount} + ${copiedChunkCount}`,
         updatedAt: new Date(),
       })
       .where(eq(datasets.id, targetDatasetId));
 
     revalidatePath('/library');
     revalidatePath('/datasets');
+    revalidatePath(`/datasets/${targetDatasetId}`);
 
-    return { success: true, copiedCount };
+    return { success: true, newDocumentId: newDoc.id, copiedChunkCount };
   } catch (error) {
-    console.error('Chunk copy error:', error);
-    return { success: false, copiedCount: 0, error: '청크 복사 중 오류가 발생했습니다.' };
+    console.error('Document duplicate error:', error);
+    return { success: false, error: '문서 복제 중 오류가 발생했습니다.' };
   }
 }
