@@ -49,7 +49,12 @@ export default function LoginPage() {
         }
 
         if (!response.ok) {
-          setError(data.error || '로그인에 실패했습니다.');
+          // AppError.toSafeResponse()는 { error: { code, message } } 형태 반환
+          const errorMessage =
+            typeof data.error === 'object'
+              ? data.error?.message
+              : data.error;
+          setError(errorMessage || '로그인에 실패했습니다.');
           return;
         }
 
@@ -86,7 +91,12 @@ export default function LoginPage() {
         const data = await response.json();
 
         if (!response.ok) {
-          setError(data.error || '인증에 실패했습니다.');
+          // AppError.toSafeResponse()는 { error: { code, message } } 형태 반환
+          const errorMessage =
+            typeof data.error === 'object'
+              ? data.error?.message
+              : data.error;
+          setError(errorMessage || '인증에 실패했습니다.');
           return;
         }
 
