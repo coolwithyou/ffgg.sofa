@@ -30,6 +30,8 @@ export interface ChatResponse {
     score: number;
   }>;
   cached?: boolean;
+  /** Intent 분류 결과 (새로운 Intent-Aware RAG 시스템) */
+  intent?: 'CHITCHAT' | 'DOMAIN_QUERY' | 'OUT_OF_SCOPE';
 }
 
 export interface ConversationContext {

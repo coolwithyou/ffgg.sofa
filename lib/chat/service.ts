@@ -1,10 +1,10 @@
 /**
  * 채팅 서비스
- * RAG 기반 대화 처리
+ * Intent-Aware RAG 기반 대화 처리
  */
 
 import { logger } from '@/lib/logger';
-import { hybridSearch, hybridSearchMultiDataset } from '@/lib/rag/retrieval';
+import { hybridSearch, hybridSearchMultiDataset, type SearchResult } from '@/lib/rag/retrieval';
 import { generateResponse, type GenerateOptions } from '@/lib/rag/generator';
 import { rewriteQuery } from '@/lib/rag/query-rewriter';
 import {
@@ -16,6 +16,8 @@ import {
 } from './conversation';
 import { findCachedResponse, cacheResponse } from './cache';
 import { getChatbotDatasetIds, getDefaultChatbot, getChatbot } from './chatbot';
+import { classifyIntent, DEFAULT_PERSONA } from './intent-classifier';
+import { routeQuery } from './query-router';
 import { trackResponseTime, trackCacheHitResponseTime } from '@/lib/performance/response-tracker';
 import type { ChatMessage, ChatRequest, ChatResponse, ChatOptions } from './types';
 
@@ -131,91 +133,135 @@ export async function processChat(
     }
     timings['4_history_lookup'] = Date.now() - stepStart;
 
-    // 5. Query Rewriting (후속 질문인 경우 맥락 반영)
-    // 대화 맥락을 반영한 검색 쿼리 생성 (예: "아들 이름은?" → "성문희의 아들 이름은?")
     const isFirstTurn = contextMessages.length === 0;
-    let searchQuery = request.message;
 
-    if (!isFirstTurn) {
-      stepStart = Date.now();
-      try {
-        searchQuery = await rewriteQuery(request.message, contextMessages, {
-          maxHistoryMessages: historyLimit,
-          temperature: 0.3,
-          maxTokens: 150,
-          trackingContext: {
-            tenantId,
-            chatbotId: chatbotId ?? undefined,
-            conversationId: conversation.id, // UUID 사용
-            featureType: 'rewrite',
-          },
-        });
+    // 5. 병렬 실행: Intent Classification + (Query Rewriting + RAG Search)
+    // Intent 분류와 RAG 파이프라인을 동시에 실행하여 지연 최소화
+    stepStart = Date.now();
 
-        if (searchQuery !== request.message) {
-          logger.debug('Query rewritten for search', {
+    // RAG 파이프라인 실행 함수
+    const executeRAGPipeline = async (): Promise<{
+      searchQuery: string;
+      searchResults: SearchResult[];
+    }> => {
+      let searchQuery = request.message;
+
+      // Query Rewriting (후속 질문인 경우 맥락 반영)
+      if (!isFirstTurn) {
+        try {
+          searchQuery = await rewriteQuery(request.message, contextMessages, {
+            maxHistoryMessages: historyLimit,
+            temperature: 0.3,
+            maxTokens: 150,
+            trackingContext: {
+              tenantId,
+              chatbotId: chatbotId ?? undefined,
+              conversationId: conversation.id,
+              featureType: 'rewrite',
+            },
+          });
+
+          if (searchQuery !== request.message) {
+            logger.debug('Query rewritten for search', {
+              tenantId,
+              sessionId: conversation.sessionId,
+              original: request.message,
+              rewritten: searchQuery,
+            });
+          }
+        } catch (error) {
+          logger.warn('Query rewriting failed, using original', {
+            error: error instanceof Error ? error.message : String(error),
             tenantId,
             sessionId: conversation.sessionId,
-            original: request.message,
-            rewritten: searchQuery,
           });
+          searchQuery = request.message;
         }
-      } catch (error) {
-        logger.warn('Query rewriting failed, using original', {
-          error: error instanceof Error ? error.message : String(error),
-          tenantId,
-          sessionId: conversation.sessionId,
-        });
-        searchQuery = request.message;
       }
-      timings['5_query_rewriting'] = Date.now() - stepStart;
-    }
 
-    // 6. Hybrid Search로 관련 청크 검색 (재작성된 쿼리 사용)
-    // 챗봇이 있으면 연결된 데이터셋에서만 검색, 없으면 전체 검색
-    stepStart = Date.now();
-    const embeddingTrackingContext = { tenantId, chatbotId: chatbotId ?? undefined };
-    let searchResults;
-    if (chatbotId) {
-      const datasetIds = await getChatbotDatasetIds(chatbotId);
-      if (datasetIds.length > 0) {
-        searchResults = await hybridSearchMultiDataset(tenantId, datasetIds, searchQuery, maxChunks, embeddingTrackingContext);
+      // Hybrid Search로 관련 청크 검색
+      const embeddingTrackingContext = { tenantId, chatbotId: chatbotId ?? undefined };
+      let searchResults: SearchResult[];
+
+      if (chatbotId) {
+        const datasetIds = await getChatbotDatasetIds(chatbotId);
+        if (datasetIds.length > 0) {
+          searchResults = await hybridSearchMultiDataset(tenantId, datasetIds, searchQuery, maxChunks, embeddingTrackingContext);
+        } else {
+          logger.warn('Chatbot has no linked datasets, falling back to tenant search', { chatbotId });
+          searchResults = await hybridSearch(tenantId, searchQuery, maxChunks, embeddingTrackingContext);
+        }
       } else {
-        logger.warn('Chatbot has no linked datasets, falling back to tenant search', { chatbotId });
         searchResults = await hybridSearch(tenantId, searchQuery, maxChunks, embeddingTrackingContext);
       }
-    } else {
-      searchResults = await hybridSearch(tenantId, searchQuery, maxChunks, embeddingTrackingContext);
-    }
-    timings['6_hybrid_search'] = Date.now() - stepStart;
 
-    // 7. 히스토리 컨텍스트를 LLM 프롬프트에 포함 (원본 메시지 사용)
-    let queryWithContext = request.message;
-    if (contextMessages.length > 0) {
-      const historyContext = contextMessages
-        .map((m) => `${m.role === 'user' ? '사용자' : '어시스턴트'}: ${m.content}`)
-        .join('\n');
-      queryWithContext = `[이전 대화]\n${historyContext}\n\n[현재 질문]\n${request.message}`;
-    }
-
-    // 8. LLM 응답 생성
-    stepStart = Date.now();
-    const generateOptions: GenerateOptions = {
-      temperature,
-      maxTokens: maxTokens || (channel === 'kakao' ? 300 : 1024),
-      channel,
-      isFirstTurn, // 첫 턴 여부 전달 (응답 스타일 조절)
-      trackingContext: {
-        tenantId,
-        chatbotId: chatbotId ?? undefined,
-        conversationId: conversation.id, // UUID 사용
-        featureType: 'chat',
-      },
+      return { searchQuery, searchResults };
     };
 
-    const responseText = await generateResponse(queryWithContext, searchResults, generateOptions);
-    timings['8_llm_generation'] = Date.now() - stepStart;
+    // 병렬 실행
+    const [intentResult, ragPipelineResult] = await Promise.all([
+      classifyIntent(request.message, contextMessages, DEFAULT_PERSONA),
+      executeRAGPipeline(),
+    ]);
+    const { searchResults } = ragPipelineResult;
+    timings['5_parallel_intent_rag'] = Date.now() - stepStart;
 
-    // 9. 메시지 저장
+    logger.debug('Intent classification result', {
+      tenantId,
+      sessionId: conversation.sessionId,
+      message: request.message.slice(0, 50),
+      intent: intentResult.intent,
+      confidence: intentResult.confidence,
+      rulesMatch: intentResult.rulesMatch,
+    });
+
+    // 6. Query Router - Intent와 RAG 결과를 기반으로 응답 전략 결정
+    stepStart = Date.now();
+    const routerResult = await routeQuery(request.message, intentResult, searchResults, DEFAULT_PERSONA);
+    timings['6_query_routing'] = Date.now() - stepStart;
+
+    // 7. 응답 생성 (Intent 기반 또는 RAG 기반)
+    stepStart = Date.now();
+    let responseText: string;
+
+    if (!routerResult.shouldUseRAG && routerResult.response) {
+      // Intent 기반 응답 (CHITCHAT 또는 OUT_OF_SCOPE)
+      responseText = routerResult.response;
+      logger.info('Response generated by intent router', {
+        tenantId,
+        sessionId: conversation.sessionId,
+        intent: routerResult.intent,
+        reasoning: routerResult.reasoning,
+      });
+    } else {
+      // RAG 기반 응답 생성 (DOMAIN_QUERY)
+      // 히스토리 컨텍스트를 LLM 프롬프트에 포함 (원본 메시지 사용)
+      let queryWithContext = request.message;
+      if (contextMessages.length > 0) {
+        const historyContext = contextMessages
+          .map((m) => `${m.role === 'user' ? '사용자' : '어시스턴트'}: ${m.content}`)
+          .join('\n');
+        queryWithContext = `[이전 대화]\n${historyContext}\n\n[현재 질문]\n${request.message}`;
+      }
+
+      const generateOptions: GenerateOptions = {
+        temperature,
+        maxTokens: maxTokens || (channel === 'kakao' ? 300 : 1024),
+        channel,
+        isFirstTurn,
+        trackingContext: {
+          tenantId,
+          chatbotId: chatbotId ?? undefined,
+          conversationId: conversation.id,
+          featureType: 'chat',
+        },
+      };
+
+      responseText = await generateResponse(queryWithContext, searchResults, generateOptions);
+    }
+    timings['7_response_generation'] = Date.now() - stepStart;
+
+    // 8. 메시지 저장
     stepStart = Date.now();
     const userMessage: ChatMessage = {
       role: 'user',
@@ -234,9 +280,9 @@ export async function processChat(
 
     await addMessageToConversation(tenantId, conversation.sessionId, userMessage);
     await addMessageToConversation(tenantId, conversation.sessionId, assistantMessage);
-    timings['9_message_save'] = Date.now() - stepStart;
+    timings['8_message_save'] = Date.now() - stepStart;
 
-    // 10. 사용량 기록 (토큰 추정)
+    // 9. 사용량 기록 (토큰 추정)
     stepStart = Date.now();
     const estimatedTokens = Math.ceil(responseText.length / 4);
     await updateUsageLog(tenantId, estimatedTokens);
@@ -244,20 +290,22 @@ export async function processChat(
     if (isNewConversation) {
       await incrementConversationCount(tenantId);
     }
-    timings['10_usage_log'] = Date.now() - stepStart;
+    timings['9_usage_log'] = Date.now() - stepStart;
 
-    // 11. 응답 캐싱 (좋은 품질의 응답만)
+    // 10. 응답 캐싱 (DOMAIN_QUERY이고 RAG 품질이 좋은 경우만)
     stepStart = Date.now();
-    if (searchResults.length > 0 && searchResults[0].score > 0.7) {
+    if (routerResult.shouldUseRAG && searchResults.length > 0 && searchResults[0].score > 0.7) {
       await cacheResponse(tenantId, request.message, responseText);
     }
-    timings['11_cache_save'] = Date.now() - stepStart;
+    timings['10_cache_save'] = Date.now() - stepStart;
 
     const duration = Date.now() - startTime;
     logger.info('Chat response generated', {
       tenantId,
       sessionId: conversation.sessionId,
       channel,
+      intent: routerResult.intent,
+      usedRAG: routerResult.shouldUseRAG,
       chunksUsed: searchResults.length,
       estimatedTokens,
       duration,
@@ -280,13 +328,16 @@ export async function processChat(
     return {
       message: responseText,
       sessionId: conversation.sessionId,
-      sources: searchResults.map((r) => ({
-        documentId: r.documentId,
-        chunkId: r.chunkId,
-        content: r.content.slice(0, 200) + (r.content.length > 200 ? '...' : ''),
-        score: r.score,
-      })),
+      sources: routerResult.shouldUseRAG
+        ? searchResults.map((r) => ({
+            documentId: r.documentId,
+            chunkId: r.chunkId,
+            content: r.content.slice(0, 200) + (r.content.length > 200 ? '...' : ''),
+            score: r.score,
+          }))
+        : undefined,
       cached: false,
+      intent: routerResult.intent,
     };
   } catch (error) {
     logger.error('Chat processing failed', error as Error, {
