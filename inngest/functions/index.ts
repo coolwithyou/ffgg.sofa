@@ -4,3 +4,11 @@
 
 export { processDocument } from './process-document';
 export { sendNotification } from './send-notification';
+
+// 빌링 함수
+export {
+  processRecurringPayment,
+  retryFailedPayment,
+  handleSubscriptionExpired,
+  handlePaymentCompleted,
+} from './billing';

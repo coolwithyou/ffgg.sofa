@@ -84,11 +84,69 @@ export interface ChunkApprovedEvent {
 export interface NotificationEvent {
   name: 'notification/send';
   data: {
-    type: 'review_needed' | 'processing_complete' | 'processing_failed';
+    type: 'review_needed' | 'processing_complete' | 'processing_failed' | 'payment_failed' | 'subscription_expired';
     tenantId: string;
     documentId?: string;
     message: string;
     recipientEmail?: string;
+  };
+}
+
+// ============================================
+// 빌링 이벤트 타입
+// ============================================
+
+/**
+ * 정기 결제 요청 이벤트
+ * Cron에서 결제일이 도래한 구독에 대해 발송
+ */
+export interface BillingPaymentRequestedEvent {
+  name: 'billing/payment.requested';
+  data: {
+    subscriptionId: string;
+    tenantId: string;
+    attempt?: number; // 재시도 횟수 (기본 1)
+  };
+}
+
+/**
+ * 결제 완료 이벤트
+ * 결제 성공 시 발송 (구독 기간 연장 처리)
+ */
+export interface BillingPaymentCompletedEvent {
+  name: 'billing/payment.completed';
+  data: {
+    subscriptionId: string;
+    paymentId: string;
+    tenantId: string;
+    amount: number;
+  };
+}
+
+/**
+ * 결제 실패 이벤트
+ * 결제 실패 시 재시도 스케줄링
+ */
+export interface BillingPaymentFailedEvent {
+  name: 'billing/payment.failed';
+  data: {
+    subscriptionId: string;
+    tenantId: string;
+    reason: string;
+    attempt: number;
+  };
+}
+
+/**
+ * 구독 만료 이벤트
+ * 모든 결제 재시도 실패 후 구독 만료 처리
+ */
+export interface BillingSubscriptionExpiredEvent {
+  name: 'billing/subscription.expired';
+  data: {
+    subscriptionId: string;
+    tenantId: string;
+    reason: string;
   };
 }
 
@@ -97,4 +155,8 @@ export type InngestEvents =
   | DocumentUploadedEvent
   | DocumentProcessingEvent
   | ChunkApprovedEvent
-  | NotificationEvent;
+  | NotificationEvent
+  | BillingPaymentRequestedEvent
+  | BillingPaymentCompletedEvent
+  | BillingPaymentFailedEvent
+  | BillingSubscriptionExpiredEvent;

@@ -5,10 +5,27 @@
 
 import { serve } from 'inngest/next';
 import { inngestClient } from '@/inngest/client';
-import { processDocument, sendNotification } from '@/inngest/functions';
+import {
+  processDocument,
+  sendNotification,
+  // 빌링 함수
+  processRecurringPayment,
+  retryFailedPayment,
+  handleSubscriptionExpired,
+  handlePaymentCompleted,
+} from '@/inngest/functions';
 
 // Inngest 함수들을 서빙 (실제 클라이언트 사용)
 export const { GET, POST, PUT } = serve({
   client: inngestClient,
-  functions: [processDocument, sendNotification],
+  functions: [
+    // 문서 처리
+    processDocument,
+    sendNotification,
+    // 빌링
+    processRecurringPayment,
+    retryFailedPayment,
+    handleSubscriptionExpired,
+    handlePaymentCompleted,
+  ],
 });

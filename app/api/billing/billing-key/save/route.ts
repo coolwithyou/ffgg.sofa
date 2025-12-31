@@ -24,9 +24,7 @@ import { inngest } from '@/inngest/client';
 const saveBillingKeySchema = z.object({
   billingKey: z.string().min(1, '빌링키가 필요합니다'),
   planId: z.string().min(1, '플랜 ID가 필요합니다'),
-  billingCycle: z.enum(['monthly', 'yearly'], {
-    errorMap: () => ({ message: '결제 주기는 monthly 또는 yearly여야 합니다' }),
-  }),
+  billingCycle: z.enum(['monthly', 'yearly']),
 });
 
 export async function POST(request: NextRequest) {
@@ -55,12 +53,15 @@ export async function POST(request: NextRequest) {
     // 3. PortOne에서 빌링키 유효성 확인
     try {
       await getBillingKeyInfo(billingKey);
-    } catch (error) {
-      logger.error('Billing key verification failed', {
-        tenantId,
-        billingKey: maskBillingKey(billingKey),
-        error,
-      });
+    } catch (verifyError) {
+      logger.error(
+        'Billing key verification failed',
+        verifyError instanceof Error ? verifyError : undefined,
+        {
+          tenantId,
+          billingKey: maskBillingKey(billingKey),
+        }
+      );
       return NextResponse.json(
         { error: '유효하지 않은 빌링키입니다' },
         { status: 400 }

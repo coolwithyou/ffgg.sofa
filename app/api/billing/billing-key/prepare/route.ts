@@ -40,11 +40,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '테넌트 정보를 찾을 수 없습니다' }, { status: 404 });
     }
 
-    // 3. 사용자 정보 조회 (이름, 전화번호)
+    // 3. 사용자 정보 조회 (이름)
     const [user] = await db
       .select({
         name: users.name,
-        phoneNumber: users.phoneNumber,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -67,7 +66,6 @@ export async function POST(request: NextRequest) {
         customerId: tenant.id, // 테넌트 ID를 고객 ID로 사용
         customerName: user?.name || tenant.name,
         customerEmail: email || tenant.email,
-        customerPhone: user?.phoneNumber || undefined,
       },
     });
   } catch (error) {
