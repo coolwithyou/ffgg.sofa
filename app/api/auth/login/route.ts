@@ -164,12 +164,15 @@ export async function POST(request: NextRequest) {
     // 8. 로그인 성공 처리
     await recordLoginAttempt(email, true, ipAddress);
 
-    // 9. 세션 생성
+    // 9. 세션 생성 (플랫폼 관리자 필드 포함)
     await createSession({
       userId: user.id,
       email: user.email,
       tenantId: user.tenantId || '',
       role: (user.role || 'user') as 'user' | 'admin' | 'internal_operator',
+      adminRole: user.adminRole as 'SUPER_ADMIN' | 'ADMIN' | 'SUPPORT' | 'VIEWER' | undefined,
+      isPlatformAdmin: user.isPlatformAdmin ?? undefined,
+      mustChangePassword: user.mustChangePassword ?? undefined,
     });
 
     // 10. 접속기록 로깅
