@@ -6,8 +6,8 @@
 
 import { useState, useTransition, useRef } from 'react';
 import { createOperator } from '../actions';
-import type { AdminRole } from '@/lib/auth/admin-permissions';
-import { ADMIN_ROLE_LABELS, ADMIN_ROLE_DESCRIPTIONS } from '@/lib/auth/admin-permissions';
+import type { AdminRole } from '@/lib/auth/admin-types';
+import { ADMIN_ROLE_LABELS, ADMIN_ROLE_DESCRIPTIONS } from '@/lib/auth/admin-types';
 
 export function CreateOperatorButton() {
   const [isOpen, setIsOpen] = useState(false);

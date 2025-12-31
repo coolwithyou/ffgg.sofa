@@ -13,8 +13,8 @@ import {
   deleteOperator,
   resetOperatorPassword,
 } from '../actions';
-import type { AdminRole } from '@/lib/auth/admin-permissions';
-import { ADMIN_ROLE_LABELS } from '@/lib/auth/admin-permissions';
+import type { AdminRole } from '@/lib/auth/admin-types';
+import { ADMIN_ROLE_LABELS } from '@/lib/auth/admin-types';
 
 interface OperatorTableProps {
   operators: OperatorListItem[];

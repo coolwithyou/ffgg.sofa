@@ -93,7 +93,7 @@ export async function getOperatorList(): Promise<OperatorListItem[]> {
         u.name,
         u.admin_role,
         u.is_platform_admin,
-        u.status,
+        u.deleted_at,
         u.totp_enabled,
         u.last_login_at,
         u.created_at,
@@ -113,7 +113,7 @@ export async function getOperatorList(): Promise<OperatorListItem[]> {
       name: string | null;
       admin_role: string | null;
       is_platform_admin: boolean | null;
-      status: string | null;
+      deleted_at: Date | string | null;
       totp_enabled: boolean | null;
       last_login_at: Date | string | null;
       created_at: Date | string;
@@ -126,7 +126,7 @@ export async function getOperatorList(): Promise<OperatorListItem[]> {
       name: row.name || row.email.split('@')[0],
       adminRole: (row.admin_role as AdminRole) || 'VIEWER',
       isPlatformAdmin: row.is_platform_admin ?? false,
-      isActive: row.status === 'active',
+      isActive: row.deleted_at === null,
       has2FA: row.totp_enabled ?? false,
       lastLoginAt: row.last_login_at
         ? (row.last_login_at instanceof Date
@@ -165,8 +165,8 @@ export async function getOperatorStats(): Promise<OperatorStats | null> {
         COUNT(*) FILTER (WHERE admin_role = 'ADMIN') as admin_count,
         COUNT(*) FILTER (WHERE admin_role = 'SUPPORT') as support_count,
         COUNT(*) FILTER (WHERE admin_role = 'VIEWER') as viewer_count,
-        COUNT(*) FILTER (WHERE status = 'active') as active_count,
-        COUNT(*) FILTER (WHERE status != 'active' OR status IS NULL) as inactive_count,
+        COUNT(*) FILTER (WHERE deleted_at IS NULL) as active_count,
+        COUNT(*) FILTER (WHERE deleted_at IS NOT NULL) as inactive_count,
         COUNT(*) FILTER (WHERE totp_enabled = true) as with_2fa,
         COUNT(*) FILTER (WHERE totp_enabled = false OR totp_enabled IS NULL) as without_2fa
       FROM users
@@ -236,7 +236,7 @@ export async function createOperator(formData: FormData): Promise<ActionResult<{
     if (!parseResult.success) {
       return {
         success: false,
-        error: parseResult.error.errors[0]?.message || '입력값이 올바르지 않습니다.',
+        error: parseResult.error.issues[0]?.message || '입력값이 올바르지 않습니다.',
       };
     }
 
@@ -263,14 +263,13 @@ export async function createOperator(formData: FormData): Promise<ActionResult<{
       .values({
         email,
         name,
-        password: hashedPassword,
+        passwordHash: hashedPassword,
         adminRole: adminRole as AdminRole,
         isPlatformAdmin: true,
         invitedBy: session.userId,
         invitedAt: new Date(),
         adminNotes: adminNotes || null,
         mustChangePassword: true,
-        status: 'active',
         role: 'admin', // 기본 역할
       })
       .returning({ id: users.id });
@@ -397,7 +396,7 @@ export async function deactivateOperator(operatorId: string): Promise<ActionResu
 
     // 대상 확인
     const [target] = await db
-      .select({ adminRole: users.adminRole, status: users.status })
+      .select({ adminRole: users.adminRole, deletedAt: users.deletedAt })
       .from(users)
       .where(eq(users.id, operatorId))
       .limit(1);
@@ -410,7 +409,7 @@ export async function deactivateOperator(operatorId: string): Promise<ActionResu
     if (target.adminRole === 'SUPER_ADMIN') {
       const activeSuperAdmins = await db.execute(sql`
         SELECT COUNT(*) as count FROM users
-        WHERE admin_role = 'SUPER_ADMIN' AND status = 'active'
+        WHERE admin_role = 'SUPER_ADMIN' AND deleted_at IS NULL
       `);
       const count = parseInt(String((activeSuperAdmins.rows[0] as { count: string }).count));
 
@@ -422,7 +421,7 @@ export async function deactivateOperator(operatorId: string): Promise<ActionResu
     await db
       .update(users)
       .set({
-        status: 'inactive',
+        deletedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(users.id, operatorId));
@@ -460,7 +459,7 @@ export async function reactivateOperator(operatorId: string): Promise<ActionResu
     await db
       .update(users)
       .set({
-        status: 'active',
+        deletedAt: null,
         updatedAt: new Date(),
       })
       .where(eq(users.id, operatorId));
@@ -582,7 +581,7 @@ export async function resetOperatorPassword(operatorId: string): Promise<ActionR
     await db
       .update(users)
       .set({
-        password: hashedPassword,
+        passwordHash: hashedPassword,
         mustChangePassword: true,
         updatedAt: new Date(),
       })

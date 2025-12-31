@@ -38,7 +38,7 @@ export async function changePassword(formData: FormData): Promise<{
 
   const parseResult = changePasswordSchema.safeParse(rawData);
   if (!parseResult.success) {
-    return { success: false, error: parseResult.error.errors[0]?.message };
+    return { success: false, error: parseResult.error.issues[0]?.message };
   }
 
   const { currentPassword, newPassword } = parseResult.data;
@@ -47,7 +47,7 @@ export async function changePassword(formData: FormData): Promise<{
     // 현재 사용자 정보 조회
     const [user] = await db
       .select({
-        password: users.password,
+        passwordHash: users.passwordHash,
         role: users.role,
         adminRole: users.adminRole,
         isPlatformAdmin: users.isPlatformAdmin,
@@ -57,18 +57,18 @@ export async function changePassword(formData: FormData): Promise<{
       .where(eq(users.id, session.userId))
       .limit(1);
 
-    if (!user || !user.password) {
+    if (!user || !user.passwordHash) {
       return { success: false, error: '사용자를 찾을 수 없습니다.' };
     }
 
     // 현재 비밀번호 확인
-    const isCurrentPasswordValid = await compare(currentPassword, user.password);
+    const isCurrentPasswordValid = await compare(currentPassword, user.passwordHash);
     if (!isCurrentPasswordValid) {
       return { success: false, error: '현재 비밀번호가 올바르지 않습니다.' };
     }
 
     // 새 비밀번호가 현재와 같은지 확인
-    const isSamePassword = await compare(newPassword, user.password);
+    const isSamePassword = await compare(newPassword, user.passwordHash);
     if (isSamePassword) {
       return { success: false, error: '새 비밀번호는 현재 비밀번호와 달라야 합니다.' };
     }
@@ -80,7 +80,8 @@ export async function changePassword(formData: FormData): Promise<{
     await db
       .update(users)
       .set({
-        password: hashedPassword,
+        passwordHash: hashedPassword,
+        passwordChangedAt: new Date(),
         mustChangePassword: false,
         updatedAt: new Date(),
       })
@@ -91,7 +92,7 @@ export async function changePassword(formData: FormData): Promise<{
       userId: session.userId,
       email: session.email,
       tenantId: user.tenantId || '',
-      role: user.role || 'user',
+      role: (user.role || 'user') as 'user' | 'admin' | 'internal_operator',
       adminRole: user.adminRole as 'SUPER_ADMIN' | 'ADMIN' | 'SUPPORT' | 'VIEWER' | undefined,
       isPlatformAdmin: user.isPlatformAdmin ?? undefined,
       mustChangePassword: false,
