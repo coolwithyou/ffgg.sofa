@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { validateSession, SESSION_TTL } from '@/lib/auth';
 import { AdminSidebar } from '@/components/admin/sidebar';
 import { AdminHeader } from '@/components/admin/header';
+import { isOperator } from '@/lib/auth/admin-permissions';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -20,9 +21,17 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
     redirect('/login');
   }
 
-  // internal_operator 역할만 접근 가능
-  if (session.role !== 'internal_operator' && session.role !== 'admin') {
+  // 플랫폼 관리자 또는 기존 internal_operator/admin 역할만 접근 가능
+  const isPlatformOperator = isOperator(session);
+  const hasLegacyAccess = session.role === 'internal_operator' || session.role === 'admin';
+
+  if (!isPlatformOperator && !hasLegacyAccess) {
     redirect('/dashboard');
+  }
+
+  // 임시 비밀번호 변경 필요 시 비밀번호 변경 페이지로 리다이렉트
+  if (session.mustChangePassword) {
+    redirect('/change-password');
   }
 
   // 세션 만료 시간 (기존 세션 호환성을 위해 expiresAt이 없으면 계산)
@@ -32,7 +41,7 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
   return (
     <div className="flex h-screen bg-background">
       {/* 사이드바 */}
-      <AdminSidebar operatorEmail={session.email} />
+      <AdminSidebar operatorEmail={session.email} adminRole={session.adminRole} />
 
       {/* 메인 콘텐츠 */}
       <div className="flex flex-1 flex-col overflow-hidden">

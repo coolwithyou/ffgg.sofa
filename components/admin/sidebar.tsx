@@ -7,12 +7,34 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { AdminRole } from '@/lib/auth/admin-permissions';
 
 interface AdminSidebarProps {
   operatorEmail: string;
+  adminRole?: AdminRole;
 }
 
-const navItems = [
+// 권한 레벨 체크 헬퍼
+const ROLE_LEVELS: Record<AdminRole, number> = {
+  SUPER_ADMIN: 100,
+  ADMIN: 75,
+  SUPPORT: 50,
+  VIEWER: 25,
+};
+
+function hasRoleOrHigher(currentRole: AdminRole | undefined, requiredRole: AdminRole): boolean {
+  if (!currentRole) return false;
+  return (ROLE_LEVELS[currentRole] ?? 0) >= (ROLE_LEVELS[requiredRole] ?? 0);
+}
+
+interface NavItem {
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  minRole?: AdminRole; // 최소 필요 역할 (없으면 모든 관리자 접근 가능)
+}
+
+const navItems: NavItem[] = [
   {
     name: '대시보드',
     href: '/admin/dashboard',
@@ -43,10 +65,25 @@ const navItems = [
     href: '/admin/monitoring',
     icon: MonitoringIcon,
   },
+  {
+    name: '관리자 계정',
+    href: '/admin/operators',
+    icon: OperatorsIcon,
+    minRole: 'ADMIN', // ADMIN 이상만 접근 가능
+  },
 ];
 
-export function AdminSidebar({ operatorEmail }: AdminSidebarProps) {
+export function AdminSidebar({ operatorEmail, adminRole }: AdminSidebarProps) {
   const pathname = usePathname();
+
+  // 권한에 따라 메뉴 필터링
+  const visibleNavItems = navItems.filter((item) => {
+    // minRole이 없으면 모든 관리자가 접근 가능
+    if (!item.minRole) return true;
+    // adminRole이 없어도 기존 호환성 유지 (legacy internal_operator는 모두 접근)
+    if (!adminRole) return true;
+    return hasRoleOrHigher(adminRole, item.minRole);
+  });
 
   return (
     <aside className="flex w-64 flex-col border-r border-border bg-background">
@@ -57,7 +94,7 @@ export function AdminSidebar({ operatorEmail }: AdminSidebarProps) {
 
       {/* 네비게이션 */}
       <nav className="flex-1 space-y-1 p-4">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           const Icon = item.icon;
 
@@ -170,6 +207,19 @@ function ChatbotsIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+      />
+    </svg>
+  );
+}
+
+function OperatorsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
       />
     </svg>
   );

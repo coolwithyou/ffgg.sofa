@@ -6,6 +6,9 @@
 import { getIronSession, SessionOptions } from 'iron-session';
 import { cookies } from 'next/headers';
 
+// 플랫폼 관리자 역할 타입 (admin-permissions.ts에서 재정의)
+export type AdminRole = 'SUPER_ADMIN' | 'ADMIN' | 'SUPPORT' | 'VIEWER';
+
 // 세션 데이터 타입
 export interface SessionData {
   userId: string;
@@ -16,6 +19,10 @@ export interface SessionData {
   createdAt: number; // 세션 생성 시간 (timestamp)
   lastActivityAt: number; // 마지막 활동 시간
   expiresAt: number; // 세션 만료 시간 (Unix timestamp, 초 단위)
+  // 플랫폼 관리자 필드
+  adminRole?: AdminRole; // 플랫폼 관리자 역할
+  isPlatformAdmin?: boolean; // 플랫폼 관리자 여부
+  mustChangePassword?: boolean; // 임시 비밀번호 변경 필요
 }
 
 // 세션 기본값
@@ -89,10 +96,16 @@ export async function getSession(): Promise<SessionData> {
   };
 }
 
+/** 세션 생성에 필요한 데이터 타입 */
+export type CreateSessionData = Omit<
+  SessionData,
+  'isLoggedIn' | 'createdAt' | 'lastActivityAt' | 'expiresAt'
+>;
+
 /**
  * 세션 생성 (로그인 시)
  */
-export async function createSession(data: Omit<SessionData, 'isLoggedIn' | 'createdAt' | 'lastActivityAt' | 'expiresAt'>): Promise<void> {
+export async function createSession(data: CreateSessionData): Promise<void> {
   const cookieStore = await cookies();
   const session = await getIronSession<SessionData>(cookieStore, sessionOptions);
 
@@ -107,6 +120,11 @@ export async function createSession(data: Omit<SessionData, 'isLoggedIn' | 'crea
   session.createdAt = now;
   session.lastActivityAt = now;
   session.expiresAt = nowSeconds + SESSION_TTL; // 300분 후 만료
+
+  // 플랫폼 관리자 필드
+  session.adminRole = data.adminRole;
+  session.isPlatformAdmin = data.isPlatformAdmin;
+  session.mustChangePassword = data.mustChangePassword;
 
   await session.save();
 }

@@ -75,12 +75,20 @@ export const users = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }), // 실제 삭제일
     deleteScheduledAt: timestamp('delete_scheduled_at', { withTimezone: true }), // 삭제 예정일
     deleteReason: text('delete_reason'), // 탈퇴 사유 (선택)
+    // 플랫폼 관리자 (Admin 콘솔 접근)
+    adminRole: text('admin_role'), // 'SUPER_ADMIN' | 'ADMIN' | 'SUPPORT' | 'VIEWER' | null
+    isPlatformAdmin: boolean('is_platform_admin').default(false), // 빠른 필터링용
+    invitedBy: uuid('invited_by'), // 초대한 관리자 ID (자기 참조)
+    invitedAt: timestamp('invited_at', { withTimezone: true }),
+    adminNotes: text('admin_notes'), // 관리자 메모
+    mustChangePassword: boolean('must_change_password').default(false), // 임시 비밀번호 변경 필요
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
   (table) => [
     index('idx_users_email').on(table.email),
     index('idx_users_tenant').on(table.tenantId),
+    index('idx_users_platform_admin').on(table.isPlatformAdmin),
   ]
 );
 
