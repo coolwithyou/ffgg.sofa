@@ -6,8 +6,18 @@ import type { NextConfig } from "next";
  */
 const nextConfig: NextConfig = {
   // Node.js 전용 패키지를 서버 외부 패키지로 지정 (번들링 제외)
-  // __dirname 에러 방지
-  serverExternalPackages: ['unpdf', 'mammoth', 'pdfjs-dist'],
+  // __dirname 에러 방지 - Vercel 서버리스 환경에서 ESM/CommonJS 호환성 문제 해결
+  serverExternalPackages: [
+    // 문서 파싱 관련
+    'unpdf',
+    'mammoth',
+    'pdfjs-dist',
+    // 백그라운드 작업
+    'inngest',
+    // 데이터베이스 관련
+    '@neondatabase/serverless',
+    'drizzle-orm',
+  ],
 
   // 보안 헤더 설정
   async headers() {
