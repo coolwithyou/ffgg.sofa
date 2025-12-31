@@ -7,7 +7,7 @@
 
 import { db } from '@/lib/db';
 import { documents, chunks, datasets } from '@/drizzle/schema';
-import { eq, and, isNull, desc, sql, asc } from 'drizzle-orm';
+import { eq, and, inArray, desc, sql, asc } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 import { revalidatePath } from 'next/cache';
 
@@ -188,29 +188,76 @@ export async function copyChunksToDataset(
     return { success: false, copiedCount: 0, error: '인증이 필요합니다.' };
   }
 
-  try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/datasets/${targetDatasetId}/chunks/copy`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ chunkIds }),
-      }
-    );
+  const tenantId = session.tenantId;
 
-    if (!response.ok) {
-      const error = await response.json();
-      return { success: false, copiedCount: 0, error: error.error || '복사 실패' };
+  try {
+    // 대상 데이터셋 존재 및 권한 확인
+    const [targetDataset] = await db
+      .select({ id: datasets.id })
+      .from(datasets)
+      .where(and(eq(datasets.id, targetDatasetId), eq(datasets.tenantId, tenantId)));
+
+    if (!targetDataset) {
+      return { success: false, copiedCount: 0, error: '데이터셋을 찾을 수 없습니다.' };
     }
 
-    const result = await response.json();
+    // 원본 청크 조회 (테넌트 소유 확인)
+    const sourceChunks = await db
+      .select()
+      .from(chunks)
+      .where(and(inArray(chunks.id, chunkIds), eq(chunks.tenantId, tenantId)));
+
+    if (sourceChunks.length === 0) {
+      return { success: false, copiedCount: 0, error: '유효한 청크를 찾을 수 없습니다.' };
+    }
+
+    // 이미 대상 데이터셋에 있는 청크 필터링
+    const chunksToProcess = sourceChunks.filter((chunk) => chunk.datasetId !== targetDatasetId);
+
+    if (chunksToProcess.length === 0) {
+      return { success: false, copiedCount: 0, error: '모든 청크가 이미 해당 데이터셋에 있습니다.' };
+    }
+
+    // 청크 복사 실행
+    let copiedCount = 0;
+
+    for (const chunk of chunksToProcess) {
+      await db.insert(chunks).values({
+        tenantId: chunk.tenantId,
+        documentId: chunk.documentId,
+        datasetId: targetDatasetId,
+        sourceChunkId: chunk.id,
+        content: chunk.content,
+        embedding: chunk.embedding,
+        contentTsv: chunk.contentTsv,
+        chunkIndex: chunk.chunkIndex,
+        qualityScore: chunk.qualityScore,
+        status: chunk.status,
+        autoApproved: chunk.autoApproved,
+        version: 1,
+        isActive: true,
+        metadata: {
+          ...(typeof chunk.metadata === 'object' && chunk.metadata !== null ? chunk.metadata : {}),
+          copiedFrom: chunk.id,
+          copiedAt: new Date().toISOString(),
+        },
+      });
+      copiedCount++;
+    }
+
+    // 데이터셋 통계 업데이트
+    await db
+      .update(datasets)
+      .set({
+        chunkCount: sql`${datasets.chunkCount} + ${copiedCount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(datasets.id, targetDatasetId));
 
     revalidatePath('/library');
     revalidatePath('/datasets');
 
-    return { success: true, copiedCount: result.stats.copied };
+    return { success: true, copiedCount };
   } catch (error) {
     console.error('Chunk copy error:', error);
     return { success: false, copiedCount: 0, error: '청크 복사 중 오류가 발생했습니다.' };
