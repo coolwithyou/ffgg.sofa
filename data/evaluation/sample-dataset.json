@@ -1,0 +1,102 @@
+{
+  "version": "1.0.0",
+  "name": "SOFA 기본 평가 세트",
+  "description": "RAG 파이프라인 품질 평가를 위한 샘플 데이터셋",
+  "tenantId": "YOUR_TENANT_ID",
+  "datasetIds": [],
+  "items": [
+    {
+      "id": "factual-001",
+      "question": "환불 정책은 무엇인가요?",
+      "questionType": "factual",
+      "groundTruth": "구매 후 7일 이내에 미개봉 상품에 한해 전액 환불이 가능합니다."
+    },
+    {
+      "id": "factual-002",
+      "question": "배송은 얼마나 걸리나요?",
+      "questionType": "factual",
+      "groundTruth": "주문 확정 후 영업일 기준 2-3일 내 배송됩니다."
+    },
+    {
+      "id": "followup-001",
+      "question": "그러면 개봉한 경우는요?",
+      "questionType": "followup",
+      "groundTruth": "개봉한 상품은 제품 결함이 있는 경우에만 교환 또는 환불이 가능합니다.",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "환불 정책은 무엇인가요?"
+        },
+        {
+          "role": "assistant",
+          "content": "구매 후 7일 이내에 미개봉 상품에 한해 전액 환불이 가능합니다."
+        }
+      ]
+    },
+    {
+      "id": "followup-002",
+      "question": "제주도도 동일한가요?",
+      "questionType": "followup",
+      "groundTruth": "제주 및 도서산간 지역은 1-2일 추가 소요됩니다.",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "배송은 얼마나 걸리나요?"
+        },
+        {
+          "role": "assistant",
+          "content": "주문 확정 후 영업일 기준 2-3일 내 배송됩니다."
+        }
+      ]
+    },
+    {
+      "id": "procedural-001",
+      "question": "회원 가입은 어떻게 하나요?",
+      "questionType": "procedural",
+      "groundTruth": "1. 홈페이지 우측 상단 '회원가입' 클릭\n2. 이메일/비밀번호 입력\n3. 이메일 인증 완료"
+    },
+    {
+      "id": "procedural-002",
+      "question": "주문 취소 방법을 알려주세요.",
+      "questionType": "procedural",
+      "groundTruth": "마이페이지 > 주문내역에서 '주문취소' 버튼을 클릭하면 됩니다. 배송 시작 전에만 취소 가능합니다."
+    },
+    {
+      "id": "comparison-001",
+      "question": "일반 회원과 프리미엄 회원의 차이점은 무엇인가요?",
+      "questionType": "comparison",
+      "groundTruth": "프리미엄 회원은 무료 배송, 5% 추가 할인, 우선 고객 상담 혜택을 받을 수 있습니다."
+    },
+    {
+      "id": "reasoning-001",
+      "question": "왜 환불이 거부되었을까요?",
+      "questionType": "reasoning",
+      "groundTruth": "환불이 거부되는 경우는 1) 구매 후 7일 초과, 2) 상품 개봉, 3) 사용 흔적이 있는 경우입니다.",
+      "metadata": {
+        "note": "사용자가 맥락을 제공하지 않은 경우의 응답"
+      }
+    },
+    {
+      "id": "unanswerable-001",
+      "question": "내일 날씨가 어떨까요?",
+      "questionType": "unanswerable",
+      "groundTruth": "제공된 문서에서 관련 정보를 찾을 수 없습니다.",
+      "metadata": {
+        "expectedBehavior": "hallucination-test",
+        "description": "문서에 없는 정보 요청 시 적절히 거절하는지 테스트"
+      }
+    },
+    {
+      "id": "unanswerable-002",
+      "question": "경쟁사 A사의 가격은 얼마인가요?",
+      "questionType": "unanswerable",
+      "groundTruth": "제공된 문서에서 관련 정보를 찾을 수 없습니다.",
+      "metadata": {
+        "expectedBehavior": "hallucination-test",
+        "description": "문서에 없는 경쟁사 정보 요청"
+      }
+    }
+  ],
+  "createdAt": "2025-01-01T00:00:00Z",
+  "updatedAt": "2025-01-01T00:00:00Z"
+}
