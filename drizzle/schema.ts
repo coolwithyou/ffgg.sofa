@@ -804,3 +804,166 @@ export type NewResponseTimeStat = typeof responseTimeStats.$inferInsert;
 
 export type ResponseTimeThreshold = typeof responseTimeThresholds.$inferSelect;
 export type NewResponseTimeThreshold = typeof responseTimeThresholds.$inferInsert;
+
+// ============================================
+// 플랜 정의 (빌링)
+// ============================================
+export const plans = pgTable('plans', {
+  id: text('id').primaryKey(), // 'basic', 'standard', 'premium'
+  name: text('name').notNull(),
+  nameKo: text('name_ko').notNull(),
+  description: text('description'),
+  monthlyPrice: integer('monthly_price').notNull(), // KRW
+  yearlyPrice: integer('yearly_price').notNull(), // KRW (할인 적용)
+  features: jsonb('features').$type<string[]>().default([]),
+  limits: jsonb('limits').$type<{
+    maxChatbots: number;
+    maxDatasets: number;
+    maxDocuments: number;
+    maxStorageBytes: number;
+    maxMonthlyConversations: number;
+  }>(),
+  isActive: boolean('is_active').default(true),
+  sortOrder: integer('sort_order').default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+});
+
+// ============================================
+// 구독 (빌링)
+// ============================================
+export const subscriptions = pgTable(
+  'subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    planId: text('plan_id')
+      .notNull()
+      .references(() => plans.id),
+    status: text('status').notNull().default('active'), // active, cancelled, past_due, expired
+    billingCycle: text('billing_cycle').notNull(), // monthly, yearly
+
+    // PortOne 빌링키 정보 (AES-256-GCM 암호화 저장)
+    billingKey: text('billing_key'),
+    billingKeyIssuedAt: timestamp('billing_key_issued_at', { withTimezone: true }),
+
+    // 결제 주기 정보
+    currentPeriodStart: timestamp('current_period_start', {
+      withTimezone: true,
+    }).notNull(),
+    currentPeriodEnd: timestamp('current_period_end', {
+      withTimezone: true,
+    }).notNull(),
+    nextPaymentDate: timestamp('next_payment_date', { withTimezone: true }),
+
+    // 취소 정보
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+    cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_subscriptions_tenant').on(table.tenantId),
+    index('idx_subscriptions_status').on(table.status),
+    index('idx_subscriptions_next_payment').on(table.nextPaymentDate),
+  ]
+);
+
+// ============================================
+// 결제 내역 (빌링)
+// ============================================
+export const payments = pgTable(
+  'payments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    subscriptionId: uuid('subscription_id').references(() => subscriptions.id, {
+      onDelete: 'set null',
+    }),
+
+    // PortOne 결제 정보
+    paymentId: text('payment_id').notNull().unique(), // PortOne paymentId
+    transactionId: text('transaction_id'), // PortOne transactionId (PG사 거래 ID)
+
+    // 금액 정보
+    amount: integer('amount').notNull(),
+    currency: text('currency').notNull().default('KRW'),
+
+    // 상태
+    status: text('status').notNull(), // PAID, FAILED, CANCELLED, REFUNDED, PARTIAL_REFUNDED
+    failReason: text('fail_reason'),
+
+    // 결제 상세
+    payMethod: text('pay_method'), // CARD, EASY_PAY 등
+    cardInfo: jsonb('card_info').$type<{
+      issuer?: string;
+      acquirer?: string;
+      number?: string; // 마스킹된 카드번호
+      type?: string;
+    }>(),
+    receiptUrl: text('receipt_url'),
+
+    // 메타데이터
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_payments_tenant').on(table.tenantId),
+    index('idx_payments_subscription').on(table.subscriptionId),
+    index('idx_payments_status').on(table.status),
+    index('idx_payments_created').on(table.createdAt),
+  ]
+);
+
+// ============================================
+// 빌링 웹훅 로그
+// ============================================
+export const billingWebhookLogs = pgTable(
+  'billing_webhook_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+
+    // PortOne 웹훅 정보
+    webhookId: text('webhook_id'),
+    eventType: text('event_type').notNull(), // Transaction.Paid, Transaction.Failed 등
+
+    // 페이로드 (민감정보 마스킹 후 저장)
+    payload: jsonb('payload').notNull(),
+
+    // 처리 결과
+    processed: boolean('processed').default(false),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+    error: text('error'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_billing_webhook_event').on(table.eventType),
+    index('idx_billing_webhook_created').on(table.createdAt),
+    index('idx_billing_webhook_processed').on(table.processed),
+  ]
+);
+
+// ============================================
+// 빌링 타입 추론용 exports
+// ============================================
+export type Plan = typeof plans.$inferSelect;
+export type NewPlan = typeof plans.$inferInsert;
+
+export type Subscription = typeof subscriptions.$inferSelect;
+export type NewSubscription = typeof subscriptions.$inferInsert;
+
+export type Payment = typeof payments.$inferSelect;
+export type NewPayment = typeof payments.$inferInsert;
+
+export type BillingWebhookLog = typeof billingWebhookLogs.$inferSelect;
+export type NewBillingWebhookLog = typeof billingWebhookLogs.$inferInsert;

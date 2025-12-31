@@ -26,6 +26,9 @@ importers:
       '@neondatabase/serverless':
         specifier: ^1.0.2
         version: 1.0.2
+      '@portone/server-sdk':
+        specifier: ^0.18.0
+        version: 0.18.0
       '@upstash/ratelimit':
         specifier: ^2.0.7
         version: 2.0.7(@upstash/redis@1.35.8)
@@ -1763,6 +1766,9 @@ packages:
     resolution: {integrity: sha512-6TyEnHgd6SArQO8UO2OMTxshln3QMWBtPGrOCgs3wVEmQmwyuNtB10IZMfmYDE0riwNR1cu4q+pPcxMVtaG3TA==}
     engines: {node: '>=18'}
     hasBin: true
+
+  '@portone/server-sdk@0.18.0':
+    resolution: {integrity: sha512-Px8HjqCfgkgZH1aEAInv1niUSoM76+b2OiBu7MACkrxhN0wSdNdFH6hc6XfbKcoj9D9RO0wbLHUj2K2nBpKR+Q==}
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -6885,6 +6891,8 @@ snapshots:
   '@playwright/test@1.57.0':
     dependencies:
       playwright: 1.57.0
+
+  '@portone/server-sdk@0.18.0': {}
 
   '@protobufjs/aspromise@1.1.2': {}
 
