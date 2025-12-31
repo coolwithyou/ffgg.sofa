@@ -5,6 +5,10 @@ import type { NextConfig } from "next";
  * [W-007] 보안 헤더 설정
  */
 const nextConfig: NextConfig = {
+  // Node.js 전용 패키지를 서버 외부 패키지로 지정 (번들링 제외)
+  // __dirname 에러 방지
+  serverExternalPackages: ['unpdf', 'mammoth', 'pdfjs-dist'],
+
   // 보안 헤더 설정
   async headers() {
     return [
