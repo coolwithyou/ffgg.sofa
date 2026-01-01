@@ -262,13 +262,22 @@ export async function uploadFile(
     const client = getS3Client();
     const bucket = getBucket();
 
+    // S3 메타데이터는 ASCII만 허용하므로 UTF-8 문자열을 인코딩
+    const safeMetadata: Record<string, string> = {};
+    if (options.metadata) {
+      for (const [key, value] of Object.entries(options.metadata)) {
+        // 값에 비ASCII 문자가 있으면 URI 인코딩
+        safeMetadata[key] = encodeURIComponent(value);
+      }
+    }
+
     const command = new PutObjectCommand({
       Bucket: bucket,
       Key: key,
       Body: file,
       ContentType: options.contentType || 'application/octet-stream',
       Metadata: {
-        ...options.metadata,
+        ...safeMetadata,
         tenantId: options.tenantId,
         uploadedAt: new Date().toISOString(),
       },
