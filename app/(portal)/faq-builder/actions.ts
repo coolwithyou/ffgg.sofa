@@ -237,11 +237,12 @@ export async function uploadQAAsDocument(
 
   // 대상 데이터셋 결정
   let datasetId: string;
+  let datasetName: string;
 
   if (targetDatasetId) {
     // 지정된 데이터셋 검증
     const [targetDataset] = await db
-      .select({ id: datasets.id })
+      .select({ id: datasets.id, name: datasets.name })
       .from(datasets)
       .where(and(eq(datasets.id, targetDatasetId), eq(datasets.tenantId, session.tenantId)));
 
@@ -249,10 +250,11 @@ export async function uploadQAAsDocument(
       throw new Error('유효하지 않은 데이터셋입니다.');
     }
     datasetId = targetDataset.id;
+    datasetName = targetDataset.name;
   } else {
     // 기본 데이터셋 사용
     const [defaultDataset] = await db
-      .select({ id: datasets.id })
+      .select({ id: datasets.id, name: datasets.name })
       .from(datasets)
       .where(and(eq(datasets.tenantId, session.tenantId), eq(datasets.isDefault, true)));
 
@@ -260,6 +262,7 @@ export async function uploadQAAsDocument(
       throw new Error('기본 데이터셋이 없습니다. 먼저 데이터셋을 생성하세요.');
     }
     datasetId = defaultDataset.id;
+    datasetName = defaultDataset.name;
   }
 
   // 파일 업로드 (스토리지)
@@ -335,6 +338,8 @@ export async function uploadQAAsDocument(
     ...qa,
     documentId: newDocumentId,
     uploadedAt: new Date().toISOString(),
+    uploadedDatasetId: datasetId,
+    uploadedDatasetName: datasetName,
     isLocked: true,
     isModified: false,
     originalQuestion: qa.question,

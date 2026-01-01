@@ -311,18 +311,27 @@ function QAStatusBadge({ qa }: { qa: QAPair }) {
   if (qa.isLocked && !qa.isModified) {
     // 업로드됨 + 잠금 (초록색)
     return (
-      <span className="flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-500">
+      <span
+        className="flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-500"
+        title={qa.uploadedDatasetName ? `데이터셋: ${qa.uploadedDatasetName}` : undefined}
+      >
         <CheckIcon className="h-3 w-3" />
-        업로드됨
+        {qa.uploadedDatasetName ? `${qa.uploadedDatasetName}` : '업로드됨'}
       </span>
     );
   }
   if (qa.isModified) {
     // 수정됨 (노란색)
     return (
-      <span className="flex items-center gap-1 rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-500">
+      <span
+        className="flex items-center gap-1 rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-500"
+        title={qa.uploadedDatasetName ? `원본 데이터셋: ${qa.uploadedDatasetName}` : undefined}
+      >
         <WarningIcon className="h-3 w-3" />
         수정됨
+        {qa.uploadedDatasetName && (
+          <span className="text-yellow-500/70">({qa.uploadedDatasetName})</span>
+        )}
       </span>
     );
   }
