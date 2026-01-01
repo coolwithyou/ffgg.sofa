@@ -24,10 +24,21 @@ const listQuerySchema = z.object({
   minQualityScore: z.coerce.number().min(0).max(100).optional(),
   maxQualityScore: z.coerce.number().min(0).max(100).optional(),
   search: z.string().max(200).optional(),
-  sortBy: z.enum(['qualityScore', 'chunkIndex', 'createdAt', 'status']).optional(),
+  sortBy: z.enum(['qualityScore', 'chunkIndex', 'createdAt', 'status', 'contentLength']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
+  // 확장 필터 (v2)
+  searchability: z
+    .union([
+      z.enum(['full', 'partial', 'none']),
+      z.array(z.enum(['full', 'partial', 'none'])),
+    ])
+    .optional(),
+  hasContext: z.coerce.boolean().optional(),
+  minContentLength: z.coerce.number().int().min(0).optional(),
+  maxContentLength: z.coerce.number().int().min(0).optional(),
+  includeMetrics: z.coerce.boolean().optional(),
 });
 
 // 일괄 업데이트 스키마
@@ -68,6 +79,12 @@ export async function GET(request: NextRequest) {
       searchParams.status = statusParam.length === 1 ? statusParam[0] : statusParam;
     }
 
+    // searchability 배열 처리
+    const searchabilityParam = request.nextUrl.searchParams.getAll('searchability');
+    if (searchabilityParam.length > 0) {
+      searchParams.searchability = searchabilityParam.length === 1 ? searchabilityParam[0] : searchabilityParam;
+    }
+
     const parseResult = listQuerySchema.safeParse(searchParams);
     if (!parseResult.success) {
       return NextResponse.json(
@@ -81,12 +98,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const filter: ChunkListFilter = {
+    const baseFilter = {
       tenantId: tenant.tenantId,
       ...parseResult.data,
     };
 
-    const result = await getChunkList(filter);
+    // 오버로드 시그니처에 맞게 명시적으로 호출
+    const result = parseResult.data.includeMetrics
+      ? await getChunkList({ ...baseFilter, includeMetrics: true as const })
+      : await getChunkList({ ...baseFilter, includeMetrics: false as const });
 
     logger.info('Chunk list retrieved', {
       tenantId: tenant.tenantId,

@@ -64,6 +64,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .select({
         count: sql<number>`count(*)::int`,
         approvedCount: sql<number>`count(*) FILTER (WHERE status = 'approved')::int`,
+        pendingCount: sql<number>`count(*) FILTER (WHERE status = 'pending')::int`,
+        rejectedCount: sql<number>`count(*) FILTER (WHERE status = 'rejected')::int`,
+        modifiedCount: sql<number>`count(*) FILTER (WHERE status = 'modified')::int`,
       })
       .from(chunks)
       .where(eq(chunks.datasetId, id));
@@ -74,6 +77,53 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .from(chatbotDatasets)
       .where(eq(chatbotDatasets.datasetId, id));
 
+    // v2: 확장 통계 - 검색 가능 상태
+    const [searchabilityStats] = await db
+      .select({
+        denseReady: sql<number>`count(*) FILTER (WHERE embedding IS NOT NULL)::int`,
+        sparseReady: sql<number>`count(*) FILTER (WHERE content_tsv IS NOT NULL)::int`,
+        hybridReady: sql<number>`count(*) FILTER (WHERE embedding IS NOT NULL AND content_tsv IS NOT NULL)::int`,
+        notSearchable: sql<number>`count(*) FILTER (WHERE embedding IS NULL AND content_tsv IS NULL)::int`,
+      })
+      .from(chunks)
+      .where(eq(chunks.datasetId, id));
+
+    // v2: 품질 분포
+    const [qualityDistribution] = await db
+      .select({
+        excellent: sql<number>`count(*) FILTER (WHERE quality_score >= 80)::int`,
+        good: sql<number>`count(*) FILTER (WHERE quality_score >= 60 AND quality_score < 80)::int`,
+        fair: sql<number>`count(*) FILTER (WHERE quality_score >= 40 AND quality_score < 60)::int`,
+        poor: sql<number>`count(*) FILTER (WHERE quality_score < 40)::int`,
+        unscored: sql<number>`count(*) FILTER (WHERE quality_score IS NULL)::int`,
+      })
+      .from(chunks)
+      .where(eq(chunks.datasetId, id));
+
+    // v2: 데이터 무결성 이슈
+    const [integrityStats] = await db
+      .select({
+        emptyContent: sql<number>`count(*) FILTER (WHERE LENGTH(content) = 0)::int`,
+        missingEmbedding: sql<number>`count(*) FILTER (WHERE embedding IS NULL AND status = 'approved')::int`,
+        missingTsv: sql<number>`count(*) FILTER (WHERE content_tsv IS NULL AND status = 'approved')::int`,
+      })
+      .from(chunks)
+      .where(eq(chunks.datasetId, id));
+
+    // v2: 평균 청크 크기 및 토큰 수
+    const [sizeStats] = await db
+      .select({
+        avgContentLength: sql<number>`COALESCE(AVG(LENGTH(content)), 0)::int`,
+        avgTokens: sql<number>`COALESCE(AVG(
+          CASE
+            WHEN content ~ '[가-힣ㄱ-ㅎㅏ-ㅣ]' THEN LENGTH(content) / 2.5
+            ELSE LENGTH(content) / 4
+          END
+        ), 0)::int`,
+      })
+      .from(chunks)
+      .where(eq(chunks.datasetId, id));
+
     return NextResponse.json({
       dataset: {
         ...dataset,
@@ -82,7 +132,35 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           totalStorageBytes: Number(docStats?.totalSize) || 0,
           chunkCount: chunkStats?.count || 0,
           approvedChunkCount: chunkStats?.approvedCount || 0,
+          pendingChunkCount: chunkStats?.pendingCount || 0,
+          rejectedChunkCount: chunkStats?.rejectedCount || 0,
+          modifiedChunkCount: chunkStats?.modifiedCount || 0,
           connectedChatbots: chatbotCount?.count || 0,
+        },
+        // v2: 확장 통계
+        extendedStats: {
+          searchability: {
+            denseReady: searchabilityStats?.denseReady || 0,
+            sparseReady: searchabilityStats?.sparseReady || 0,
+            hybridReady: searchabilityStats?.hybridReady || 0,
+            notSearchable: searchabilityStats?.notSearchable || 0,
+          },
+          quality: {
+            excellent: qualityDistribution?.excellent || 0,
+            good: qualityDistribution?.good || 0,
+            fair: qualityDistribution?.fair || 0,
+            poor: qualityDistribution?.poor || 0,
+            unscored: qualityDistribution?.unscored || 0,
+          },
+          integrity: {
+            emptyContent: integrityStats?.emptyContent || 0,
+            missingEmbedding: integrityStats?.missingEmbedding || 0,
+            missingTsv: integrityStats?.missingTsv || 0,
+            duplicateContent: 0, // 중복 체크는 비용이 높아 on-demand 처리
+            unscored: qualityDistribution?.unscored || 0,
+          },
+          averageChunkSize: sizeStats?.avgContentLength || 0,
+          averageTokenCount: sizeStats?.avgTokens || 0,
         },
       },
     });

@@ -2,7 +2,7 @@
 
 /**
  * 청크 검토 메인 콘텐츠
- * 필터, 테이블, 페이지네이션 통합
+ * [v2] 확장 필터 및 메트릭 컬럼 지원
  */
 
 import { useState, useEffect, useTransition, useCallback } from 'react';
@@ -10,10 +10,13 @@ import { ReviewTable } from './review-table';
 import { ReviewFilters, type FilterState } from './review-filters';
 import { ReviewActions } from './review-actions';
 import { StatusSummary } from './status-summary';
-import type { ChunkReviewItem, ChunkStatus } from '@/lib/review/types';
+import type { ChunkReviewItem, ChunkReviewItemWithMetrics, ChunkStatus } from '@/lib/review/types';
+
+// 메트릭 포함 여부에 따른 응답 타입
+type ChunkItem = ChunkReviewItem | ChunkReviewItemWithMetrics;
 
 interface ChunkListResponse {
-  chunks: ChunkReviewItem[];
+  chunks: ChunkItem[];
   total: number;
   page: number;
   limit: number;
@@ -21,7 +24,7 @@ interface ChunkListResponse {
 }
 
 export function ReviewContent() {
-  const [chunks, setChunks] = useState<ChunkReviewItem[]>([]);
+  const [chunks, setChunks] = useState<ChunkItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
@@ -37,6 +40,12 @@ export function ReviewContent() {
     search: '',
     sortBy: 'createdAt',
     sortOrder: 'desc',
+    // v2 확장 필터
+    searchability: [],
+    hasContext: undefined,
+    minContentLength: undefined,
+    maxContentLength: undefined,
+    includeMetrics: false,
   });
 
   // 청크 목록 조회
@@ -64,6 +73,23 @@ export function ReviewContent() {
       }
       if (filters.sortOrder) {
         params.set('sortOrder', filters.sortOrder);
+      }
+
+      // v2 확장 필터
+      if (filters.searchability.length > 0) {
+        filters.searchability.forEach((s) => params.append('searchability', s));
+      }
+      if (filters.hasContext !== undefined) {
+        params.set('hasContext', filters.hasContext.toString());
+      }
+      if (filters.minContentLength !== undefined) {
+        params.set('minContentLength', filters.minContentLength.toString());
+      }
+      if (filters.maxContentLength !== undefined) {
+        params.set('maxContentLength', filters.maxContentLength.toString());
+      }
+      if (filters.includeMetrics) {
+        params.set('includeMetrics', 'true');
       }
 
       const response = await fetch(`/api/review/chunks?${params.toString()}`);
@@ -212,6 +238,7 @@ export function ReviewContent() {
         onStatusChange={handleStatusChange}
         isLoading={isLoading}
         isPending={isPending}
+        showMetrics={filters.includeMetrics}
       />
 
       {/* 페이지네이션 */}

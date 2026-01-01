@@ -275,10 +275,18 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
             </div>
           ) : (
             filteredDocuments.map((doc) => (
-              <button
+              <div
                 key={doc.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelectedDocumentId(doc.id)}
-                className={`w-full px-4 py-3 text-left transition-colors ${
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedDocumentId(doc.id);
+                  }
+                }}
+                className={`w-full cursor-pointer px-4 py-3 text-left transition-colors ${
                   selectedDocumentId === doc.id
                     ? 'bg-primary/10'
                     : 'hover:bg-muted/50'
@@ -368,7 +376,7 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
                     </button>
                   </div>
                 </div>
-              </button>
+              </div>
             ))
           )}
         </div>

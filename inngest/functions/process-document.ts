@@ -76,7 +76,7 @@ onFailure: async ({ event, error }) => {
   },
   { event: 'document/uploaded' },
   async ({ event, step }) => {
-    const { documentId, tenantId, datasetId, filename, fileType, filePath } = event.data;
+    const { documentId, tenantId, datasetId: eventDatasetId, filename, fileType, filePath } = event.data;
     const processingStartTime = Date.now();
 
     // 이전 로그 삭제 (재처리 시)
@@ -95,11 +95,33 @@ onFailure: async ({ event, error }) => {
       details: { filename, fileType },
     });
 
-    // Step 1: 문서 상태 업데이트
-    await step.run('initialize-processing', async () => {
+    // Step 1: 문서 상태 업데이트 및 datasetId 검증/동기화
+    const initResult = await step.run('initialize-processing', async () => {
       await updateDocumentProgress(documentId, 'parsing', 0);
-      return { initialized: true };
+
+      // 방어적 datasetId 검증: event에서 전달된 값이 없으면 documents 테이블에서 조회
+      let resolvedDatasetId = eventDatasetId;
+
+      if (!resolvedDatasetId) {
+        const [doc] = await db
+          .select({ datasetId: documents.datasetId })
+          .from(documents)
+          .where(eq(documents.id, documentId));
+
+        if (doc?.datasetId) {
+          resolvedDatasetId = doc.datasetId;
+          logger.warn('datasetId fallback from documents table', {
+            documentId,
+            resolvedDatasetId,
+          });
+        }
+      }
+
+      return { initialized: true, datasetId: resolvedDatasetId };
     });
+
+    // 검증된 datasetId 사용 (event 값 또는 documents 테이블에서 조회한 값)
+    const datasetId = initResult.datasetId;
 
     // Step 2: 문서 파싱 (파일 다운로드 포함)
     const parsingStartTime = Date.now();

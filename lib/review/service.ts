@@ -8,15 +8,20 @@ import { eq, and, or, gte, lte, like, desc, asc, sql, inArray } from 'drizzle-or
 import { logger } from '@/lib/logger';
 import type {
   ChunkReviewItem,
+  ChunkReviewItemWithMetrics,
   ChunkListFilter,
   ChunkListResult,
+  ChunkListResultWithMetrics,
   ChunkUpdateInput,
   BulkUpdateInput,
   BulkUpdateResult,
   DeploymentStatus,
   AutoApprovalConfig,
   ChunkStatus,
+  ChunkMetrics,
+  SearchabilityStatus,
 } from './types';
+import { createChunkMetrics, determineSearchability } from './utils';
 
 // 상수 정의
 const MAX_LIMIT = 100;
@@ -37,8 +42,17 @@ const DEFAULT_AUTO_APPROVAL: AutoApprovalConfig = {
 
 /**
  * 청크 목록 조회 (필터/정렬/페이징)
+ * @param filter.includeMetrics - true면 메트릭 포함 응답 반환
  */
-export async function getChunkList(filter: ChunkListFilter): Promise<ChunkListResult> {
+export async function getChunkList(
+  filter: ChunkListFilter & { includeMetrics: true }
+): Promise<ChunkListResultWithMetrics>;
+export async function getChunkList(
+  filter: ChunkListFilter & { includeMetrics?: false }
+): Promise<ChunkListResult>;
+export async function getChunkList(
+  filter: ChunkListFilter
+): Promise<ChunkListResult | ChunkListResultWithMetrics> {
   const {
     tenantId,
     documentId,
@@ -50,6 +64,12 @@ export async function getChunkList(filter: ChunkListFilter): Promise<ChunkListRe
     sortOrder = 'asc',
     page = 1,
     limit = DEFAULT_LIMIT,
+    // 확장 필터 (v2)
+    searchability,
+    hasContext,
+    minContentLength,
+    maxContentLength,
+    includeMetrics = false,
   } = filter;
 
   // limit 상한 적용
@@ -85,13 +105,59 @@ export async function getChunkList(filter: ChunkListFilter): Promise<ChunkListRe
     conditions.push(like(chunks.content, `%${escapedSearch}%`));
   }
 
+  // 확장 필터: searchability
+  if (searchability) {
+    const searchabilityValues = Array.isArray(searchability) ? searchability : [searchability];
+    const searchConditions: ReturnType<typeof sql>[] = [];
+
+    for (const s of searchabilityValues) {
+      if (s === 'full') {
+        // 둘 다 있음
+        searchConditions.push(sql`(${chunks.embedding} IS NOT NULL AND ${chunks.contentTsv} IS NOT NULL)`);
+      } else if (s === 'partial') {
+        // 하나만 있음
+        searchConditions.push(
+          sql`((${chunks.embedding} IS NOT NULL AND ${chunks.contentTsv} IS NULL) OR (${chunks.embedding} IS NULL AND ${chunks.contentTsv} IS NOT NULL))`
+        );
+      } else if (s === 'none') {
+        // 둘 다 없음
+        searchConditions.push(sql`(${chunks.embedding} IS NULL AND ${chunks.contentTsv} IS NULL)`);
+      }
+    }
+
+    if (searchConditions.length > 0) {
+      conditions.push(sql`(${sql.join(searchConditions, sql` OR `)})`);
+    }
+  }
+
+  // 확장 필터: hasContext (metadata에서 확인)
+  if (hasContext !== undefined) {
+    if (hasContext) {
+      conditions.push(sql`${chunks.metadata}->>'hasContext' = 'true'`);
+    } else {
+      conditions.push(sql`(${chunks.metadata}->>'hasContext' IS NULL OR ${chunks.metadata}->>'hasContext' != 'true')`);
+    }
+  }
+
+  // 확장 필터: content length
+  if (minContentLength !== undefined) {
+    conditions.push(sql`LENGTH(${chunks.content}) >= ${minContentLength}`);
+  }
+
+  if (maxContentLength !== undefined) {
+    conditions.push(sql`LENGTH(${chunks.content}) <= ${maxContentLength}`);
+  }
+
   // 정렬 구성
-  const orderColumn = {
+  type OrderableColumn = typeof chunks.qualityScore | typeof chunks.chunkIndex | typeof chunks.createdAt | typeof chunks.status;
+  const orderColumnMap: Record<string, OrderableColumn | ReturnType<typeof sql>> = {
     qualityScore: chunks.qualityScore,
     chunkIndex: chunks.chunkIndex,
     createdAt: chunks.createdAt,
     status: chunks.status,
-  }[sortBy];
+    contentLength: sql`LENGTH(${chunks.content})`,
+  };
+  const orderColumn = orderColumnMap[sortBy] || chunks.chunkIndex;
 
   const orderFn = sortOrder === 'desc' ? desc : asc;
 
@@ -112,6 +178,11 @@ export async function getChunkList(filter: ChunkListFilter): Promise<ChunkListRe
         createdAt: chunks.createdAt,
         updatedAt: chunks.updatedAt,
         documentName: documents.filename,
+        // 메트릭용 추가 필드
+        hasEmbedding: sql<boolean>`${chunks.embedding} IS NOT NULL`.as('has_embedding'),
+        hasContentTsv: sql<boolean>`${chunks.contentTsv} IS NOT NULL`.as('has_content_tsv'),
+        version: chunks.version,
+        contentLength: sql<number>`LENGTH(${chunks.content})`.as('content_length'),
       })
       .from(chunks)
       .leftJoin(documents, eq(chunks.documentId, documents.id))
@@ -127,6 +198,54 @@ export async function getChunkList(filter: ChunkListFilter): Promise<ChunkListRe
 
   const total = countResult[0]?.count ?? 0;
 
+  // 결과 매핑
+  if (includeMetrics) {
+    const items: ChunkReviewItemWithMetrics[] = chunkResults.map((row) => {
+      const metadata = (row.metadata || {}) as Record<string, unknown>;
+      const contextPrefix = (metadata.contextPrefix as string) || null;
+
+      const metrics: ChunkMetrics = {
+        hasEmbedding: row.hasEmbedding ?? false,
+        hasContentTsv: row.hasContentTsv ?? false,
+        searchability: determineSearchability(row.hasEmbedding ?? false, row.hasContentTsv ?? false),
+        contentLength: row.contentLength ?? 0,
+        estimatedTokens: Math.ceil((row.contentLength ?? 0) / 3), // 간단한 추정
+        contextLength: contextPrefix ? contextPrefix.length : null,
+        version: row.version ?? 1,
+        isModified: row.createdAt && row.updatedAt
+          ? Math.abs(row.updatedAt.getTime() - row.createdAt.getTime()) > 1000
+          : false,
+      };
+
+      return {
+        id: row.id,
+        documentId: row.documentId,
+        documentName: row.documentName || 'Unknown',
+        content: row.content,
+        chunkIndex: row.chunkIndex ?? 0,
+        qualityScore: row.qualityScore,
+        status: (row.status || 'pending') as ChunkStatus,
+        autoApproved: row.autoApproved ?? false,
+        metadata,
+        createdAt: row.createdAt?.toISOString() || '',
+        updatedAt: row.updatedAt?.toISOString() || '',
+        contextPrefix,
+        contextPrompt: (metadata.contextPrompt as string) || null,
+        hasContext: !!metadata.hasContext,
+        metrics,
+      };
+    });
+
+    return {
+      chunks: items,
+      total,
+      page,
+      limit: safeLimit,
+      hasMore: offset + items.length < total,
+    };
+  }
+
+  // 기본 응답 (메트릭 미포함)
   const items: ChunkReviewItem[] = chunkResults.map((row) => {
     const metadata = (row.metadata || {}) as Record<string, unknown>;
     return {

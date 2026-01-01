@@ -1,5 +1,6 @@
 /**
  * 데이터셋 상세 컨테이너 컴포넌트
+ * [v2] 확장 통계 지원 - 검색 상태, 품질 분포, 무결성 체크
  */
 
 'use client';
@@ -18,8 +19,31 @@ import {
   X,
   Upload,
   CheckCircle2,
+  Search,
+  BarChart3,
 } from 'lucide-react';
 import { DatasetDocuments } from './dataset-documents';
+import {
+  SearchabilityStats,
+  IntegrityAlertBanner,
+  QualityDistributionChart,
+  type IntegrityIssues,
+  type QualityDistribution,
+} from '@/components/dataset';
+
+// v2: 확장 통계 인터페이스
+interface ExtendedStats {
+  searchability: {
+    denseReady: number;
+    sparseReady: number;
+    hybridReady: number;
+    notSearchable: number;
+  };
+  quality: QualityDistribution;
+  integrity: IntegrityIssues;
+  averageChunkSize: number;
+  averageTokenCount: number;
+}
 
 interface DatasetData {
   id: string;
@@ -34,8 +58,12 @@ interface DatasetData {
     totalStorageBytes: number;
     chunkCount: number;
     approvedChunkCount: number;
+    pendingChunkCount: number;
+    rejectedChunkCount: number;
+    modifiedChunkCount: number;
     connectedChatbots: number;
   };
+  extendedStats?: ExtendedStats;
 }
 
 interface DatasetDetailProps {
@@ -239,7 +267,7 @@ export function DatasetDetail({ datasetId }: DatasetDetailProps) {
         </Link>
       </div>
 
-      {/* 통계 카드 */}
+      {/* 통계 카드 - 1행: 기본 통계 */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
@@ -258,6 +286,11 @@ export function DatasetDetail({ datasetId }: DatasetDetailProps) {
           <p className="mt-2 text-2xl font-bold text-foreground">
             {dataset.stats.chunkCount}
           </p>
+          {dataset.extendedStats && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              평균 {dataset.extendedStats.averageChunkSize}자 / ~{dataset.extendedStats.averageTokenCount}토큰
+            </p>
+          )}
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
@@ -267,6 +300,11 @@ export function DatasetDetail({ datasetId }: DatasetDetailProps) {
           <p className="mt-2 text-2xl font-bold text-foreground">
             {dataset.stats.approvedChunkCount}
           </p>
+          {dataset.stats.chunkCount > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {Math.round((dataset.stats.approvedChunkCount / dataset.stats.chunkCount) * 100)}%
+            </p>
+          )}
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
@@ -287,6 +325,46 @@ export function DatasetDetail({ datasetId }: DatasetDetailProps) {
           </p>
         </div>
       </div>
+
+      {/* v2: 무결성 경고 배너 */}
+      {dataset.extendedStats && (
+        <IntegrityAlertBanner
+          issues={dataset.extendedStats.integrity}
+          totalChunks={dataset.stats.chunkCount}
+        />
+      )}
+
+      {/* v2: 확장 통계 - 검색 상태 및 품질 분포 */}
+      {dataset.extendedStats && dataset.stats.chunkCount > 0 && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* 검색 가능 상태 */}
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-medium text-foreground">검색 가능 상태</h3>
+            </div>
+            <SearchabilityStats
+              denseReady={dataset.extendedStats.searchability.denseReady}
+              sparseReady={dataset.extendedStats.searchability.sparseReady}
+              hybridReady={dataset.extendedStats.searchability.hybridReady}
+              notSearchable={dataset.extendedStats.searchability.notSearchable}
+              total={dataset.stats.chunkCount}
+            />
+          </div>
+
+          {/* 품질 분포 */}
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-medium text-foreground">품질 점수 분포</h3>
+            </div>
+            <QualityDistributionChart
+              distribution={dataset.extendedStats.quality}
+              compact
+            />
+          </div>
+        </div>
+      )}
 
       {/* 문서 목록 */}
       <DatasetDocuments datasetId={datasetId} onUpdate={fetchDataset} />
