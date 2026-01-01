@@ -37,16 +37,7 @@ export async function getDocuments(): Promise<DocumentItem[]> {
   }
 
   try {
-    // 청크 수 서브쿼리
-    const chunkCountSubquery = db
-      .select({
-        documentId: chunks.documentId,
-        chunkCount: count().as('chunk_count'),
-      })
-      .from(chunks)
-      .groupBy(chunks.documentId)
-      .as('chunk_counts');
-
+    // 문서 목록 조회 (데이터셋 JOIN 포함)
     const docs = await db
       .select({
         id: documents.id,
@@ -58,13 +49,25 @@ export async function getDocuments(): Promise<DocumentItem[]> {
         errorMessage: documents.errorMessage,
         createdAt: documents.createdAt,
         datasetName: datasets.name,
-        chunkCount: chunkCountSubquery.chunkCount,
       })
       .from(documents)
       .leftJoin(datasets, eq(documents.datasetId, datasets.id))
-      .leftJoin(chunkCountSubquery, eq(documents.id, chunkCountSubquery.documentId))
       .where(eq(documents.tenantId, session.tenantId))
       .orderBy(desc(documents.createdAt));
+
+    // 청크 수 별도 조회
+    const chunkCounts = await db
+      .select({
+        documentId: chunks.documentId,
+        count: count(),
+      })
+      .from(chunks)
+      .groupBy(chunks.documentId);
+
+    // 청크 수를 Map으로 변환
+    const chunkCountMap = new Map(
+      chunkCounts.map((c) => [c.documentId, Number(c.count)])
+    );
 
     return docs.map((d) => ({
       id: d.id,
@@ -76,7 +79,7 @@ export async function getDocuments(): Promise<DocumentItem[]> {
       errorMessage: d.errorMessage,
       createdAt: d.createdAt?.toISOString() || new Date().toISOString(),
       datasetName: d.datasetName,
-      chunkCount: Number(d.chunkCount) || 0,
+      chunkCount: chunkCountMap.get(d.id) || 0,
     }));
   } catch (error) {
     logger.error('Failed to get documents', error as Error, { tenantId: session.tenantId });
