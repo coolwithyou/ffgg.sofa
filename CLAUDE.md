@@ -6,6 +6,7 @@ SOFA(Smart Operator's FAQ Assistant)는 RAG 기반 챗봇 플랫폼입니다.
 ## 기술 스택
 - **프레임워크**: Next.js 15 (App Router)
 - **스타일링**: Tailwind CSS v4 + OKLCH 컬러 시스템
+- **UI 컴포넌트**: shadcn/ui (Radix UI 기반)
 - **테마**: next-themes (다크/라이트 모드)
 - **데이터베이스**: PostgreSQL + Prisma
 
@@ -146,6 +147,65 @@ const statusConfig = {
 - [ ] `border-gray-*` 대신 `border-border` 사용
 - [ ] 상태 색상에 opacity 사용 (예: `bg-green-500/10`)
 - [ ] 다크모드에서 시각적 확인 완료
+
+---
+
+## shadcn/ui 컴포넌트 가이드라인
+
+### 기본 원칙
+- **모든 UI 컴포넌트는 shadcn/ui 패턴을 따름**
+- Radix UI 프리미티브 위에 Tailwind CSS 스타일 적용
+- 접근성(a11y), 키보드 네비게이션, 포커스 관리 내장
+- 다크/라이트 모드 자동 지원
+
+### 컴포넌트 구현 방식
+```
+Radix UI Primitive → shadcn/ui 스타일 래퍼 → 프로젝트 컴포넌트
+```
+
+### 현재 구현된 shadcn/ui 컴포넌트
+| 컴포넌트 | 위치 | 설명 |
+|---------|------|------|
+| AlertDialog | `components/ui/alert-dialog.tsx` | 확인 다이얼로그 (confirm 대체) |
+| Dialog | `components/ui/dialog.tsx` | 범용 모달 |
+| Toast | `components/ui/toast.tsx` | 알림 토스트 |
+
+### 새 컴포넌트 추가 시
+1. Radix UI 패키지 설치: `pnpm add @radix-ui/react-{component}`
+2. `components/ui/{component}.tsx` 생성
+3. `cn()` 유틸리티로 클래스 병합
+4. 시맨틱 컬러 토큰 사용
+
+### 금지 패턴
+```tsx
+// 금지: 브라우저 네이티브 API
+confirm('삭제하시겠습니까?')  // -> useAlertDialog 훅 사용
+alert('오류가 발생했습니다')   // -> Toast 사용
+prompt('이름을 입력하세요')    // -> Dialog + Input 사용
+```
+
+### useAlertDialog 훅 사용 예시
+```tsx
+import { useAlertDialog } from '@/components/ui/alert-dialog';
+
+function MyComponent() {
+  const { confirm } = useAlertDialog();
+
+  const handleDelete = async () => {
+    const confirmed = await confirm({
+      title: '문서 삭제',
+      message: '이 문서를 삭제하시겠습니까?',
+      confirmText: '삭제',
+      cancelText: '취소',
+      variant: 'destructive',
+    });
+
+    if (confirmed) {
+      // 삭제 로직
+    }
+  };
+}
+```
 
 ---
 

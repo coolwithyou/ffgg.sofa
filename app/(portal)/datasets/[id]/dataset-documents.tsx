@@ -12,6 +12,7 @@ import { FileText, Trash2, RotateCcw, ExternalLink, Search, X, Unlink } from 'lu
 import { DocumentProgressModal } from '@/components/document-progress-modal';
 import { DocumentChunks } from './document-chunks';
 import { unassignDocumentFromDataset } from '@/app/(portal)/library/actions';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
 
 interface DocumentItem {
   id: string;
@@ -41,6 +42,7 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [progressModalDocId, setProgressModalDocId] = useState<string | null>(null);
   const [documentSearch, setDocumentSearch] = useState('');
+  const { confirm } = useAlertDialog();
 
   useEffect(() => {
     fetchDocuments();
@@ -92,7 +94,15 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
   }, [documents, documentSearch]);
 
   const handleDelete = async (documentId: string) => {
-    if (!confirm('이 문서를 삭제하시겠습니까? 관련된 모든 청크도 함께 삭제됩니다.')) {
+    const confirmed = await confirm({
+      title: '문서 삭제',
+      message: '이 문서를 삭제하시겠습니까? 관련된 모든 청크도 함께 삭제됩니다.',
+      confirmText: '삭제',
+      cancelText: '취소',
+      variant: 'destructive',
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -152,7 +162,14 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
   };
 
   const handleUnassign = async (documentId: string) => {
-    if (!confirm('이 문서를 데이터셋에서 배치 해제하시겠습니까?\n문서는 삭제되지 않고 라이브러리로 이동됩니다.')) {
+    const confirmed = await confirm({
+      title: '배치 해제',
+      message: '이 문서를 데이터셋에서 배치 해제하시겠습니까? 문서는 삭제되지 않고 라이브러리로 이동됩니다.',
+      confirmText: '배치 해제',
+      cancelText: '취소',
+    });
+
+    if (!confirmed) {
       return;
     }
 

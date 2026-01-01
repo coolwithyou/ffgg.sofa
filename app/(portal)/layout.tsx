@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { validateSession, SESSION_TTL } from '@/lib/auth';
 import { PortalSidebar } from '@/components/portal/sidebar';
 import { PortalHeader } from '@/components/portal/header';
+import { PortalProviders } from '@/components/portal/providers';
 
 interface PortalLayoutProps {
   children: React.ReactNode;
@@ -38,7 +39,9 @@ export default async function PortalLayout({ children }: PortalLayoutProps) {
         />
 
         {/* 페이지 콘텐츠 */}
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-6">
+          <PortalProviders>{children}</PortalProviders>
+        </main>
       </div>
     </div>
   );

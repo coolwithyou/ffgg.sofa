@@ -8,6 +8,7 @@
 import { useState, useEffect, useTransition } from 'react';
 import { deleteDocument, reprocessDocument, refreshDocumentStatus, type DocumentItem } from './actions';
 import { DocumentProgressModal } from '@/components/document-progress-modal';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
 
 interface DocumentListProps {
   documents: DocumentItem[];
@@ -19,6 +20,7 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [progressModalDocId, setProgressModalDocId] = useState<string | null>(null);
+  const { confirm } = useAlertDialog();
 
   // 처리 중인 문서 폴링
   useEffect(() => {
@@ -47,7 +49,15 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
   }, [documents]);
 
   const handleDelete = async (documentId: string) => {
-    if (!confirm('이 문서를 삭제하시겠습니까? 관련된 모든 청크도 함께 삭제됩니다.')) {
+    const confirmed = await confirm({
+      title: '문서 삭제',
+      message: '이 문서를 삭제하시겠습니까? 관련된 모든 청크도 함께 삭제됩니다.',
+      confirmText: '삭제',
+      cancelText: '취소',
+      variant: 'destructive',
+    });
+
+    if (!confirmed) {
       return;
     }
 
