@@ -109,11 +109,10 @@ export function QAList({
           </div>
         ) : (
           <div className="space-y-4">
-            {sortedQAPairs.map((qa, index) => (
+            {sortedQAPairs.map((qa) => (
               <QAItem
                 key={qa.id}
                 qa={qa}
-                index={index}
                 onUpdate={onUpdate}
                 onDelete={onDelete}
                 onUpload={onUpload}
@@ -130,7 +129,6 @@ export function QAList({
 
 interface QAItemProps {
   qa: QAPair;
-  index: number;
   onUpdate: (id: string, field: 'question' | 'answer', value: string) => void;
   onDelete: (id: string) => void;
   onUpload: (id: string) => void;
@@ -140,7 +138,6 @@ interface QAItemProps {
 
 function QAItem({
   qa,
-  index,
   onUpdate,
   onDelete,
   onUpload,
@@ -194,7 +191,7 @@ function QAItem({
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground">
-            #{index + 1}
+            #{qa.order + 1}
           </span>
           <QAStatusBadge qa={qa} />
         </div>
