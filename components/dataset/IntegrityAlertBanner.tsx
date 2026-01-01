@@ -53,15 +53,24 @@ export function IntegrityAlertBanner({
     label: string;
     severity: 'error' | 'warning' | 'info';
     fixable?: boolean;
+    fixAction?: 'fixDatasetId' | 'fixMissingEmbedding';
     apiType?: IssueType;
   }[] = [
     { key: 'emptyContent', label: '빈 콘텐츠', severity: 'error', apiType: 'emptyContent' },
-    { key: 'missingEmbedding', label: '임베딩 누락', severity: 'warning', apiType: 'missingEmbedding' },
+    {
+      key: 'missingEmbedding',
+      label: '임베딩 누락',
+      severity: 'warning',
+      fixable: true,
+      fixAction: 'fixMissingEmbedding',
+      apiType: 'missingEmbedding',
+    },
     {
       key: 'missingDatasetId',
       label: '검색 제외 (datasetId 누락)',
       severity: 'error',
       fixable: true,
+      fixAction: 'fixDatasetId',
       apiType: 'missingDatasetId',
     },
     { key: 'duplicateContent', label: '중복 콘텐츠', severity: 'info' },
@@ -114,8 +123,13 @@ export function IntegrityAlertBanner({
     }
   };
 
-  const handleFix = async () => {
-    if (!confirm('datasetId를 동기화하시겠습니까? 이 작업은 청크의 datasetId를 문서의 datasetId로 업데이트합니다.')) {
+  const handleFix = async (action: 'fixDatasetId' | 'fixMissingEmbedding') => {
+    const confirmMessages = {
+      fixDatasetId: 'datasetId를 동기화하시겠습니까? 이 작업은 청크의 datasetId를 문서의 datasetId로 업데이트합니다.',
+      fixMissingEmbedding: '임베딩을 재생성하시겠습니까? 누락된 임베딩이 있는 청크에 대해 임베딩을 생성합니다. 청크 수에 따라 시간이 걸릴 수 있습니다.',
+    };
+
+    if (!confirm(confirmMessages[action])) {
       return;
     }
 
@@ -125,11 +139,16 @@ export function IntegrityAlertBanner({
       const res = await fetch(`/api/datasets/${datasetId}/integrity`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'fixDatasetId' }),
+        body: JSON.stringify({ action }),
       });
       const data = await res.json();
       if (res.ok) {
-        setFixResult(`✅ ${data.affectedRows}개 청크가 수정되었습니다.`);
+        if (action === 'fixMissingEmbedding') {
+          const failedInfo = data.failedRows > 0 ? ` (실패: ${data.failedRows}개)` : '';
+          setFixResult(`✅ ${data.affectedRows}개 청크에 임베딩이 생성되었습니다${failedInfo}`);
+        } else {
+          setFixResult(`✅ ${data.affectedRows}개 청크가 수정되었습니다.`);
+        }
         onFixed?.();
       } else {
         setFixResult(`❌ 오류: ${data.error}`);
@@ -171,9 +190,9 @@ export function IntegrityAlertBanner({
                     </span>
 
                     <div className="flex items-center gap-2">
-                      {item.fixable && issues[item.key] > 0 && (
+                      {item.fixable && item.fixAction && issues[item.key] > 0 && (
                         <button
-                          onClick={handleFix}
+                          onClick={() => handleFix(item.fixAction!)}
                           disabled={isFixing}
                           className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                         >
@@ -274,11 +293,13 @@ export function IntegrityAlertBanner({
             <p className="text-sm font-medium">{fixResult}</p>
           )}
 
-          {hasError && !fixResult && (
+          {!fixResult && (hasError || hasWarning) && (
             <p className="text-sm text-muted-foreground">
               {issues.missingDatasetId > 0
                 ? 'datasetId가 누락된 청크는 검색에서 완전히 제외됩니다. "수정" 버튼을 클릭하여 동기화하세요.'
-                : '빈 콘텐츠 청크는 검색 및 RAG 응답에 영향을 줄 수 있습니다. 해당 청크를 확인해주세요.'}
+                : issues.missingEmbedding > 0
+                  ? '임베딩이 누락된 청크는 Dense/Hybrid 검색에서 제외됩니다. "수정" 버튼을 클릭하여 임베딩을 재생성하세요.'
+                  : '빈 콘텐츠 청크는 검색 및 RAG 응답에 영향을 줄 수 있습니다. 해당 청크를 확인해주세요.'}
             </p>
           )}
         </div>
