@@ -75,6 +75,20 @@ export async function processChat(
           ...DEFAULT_PERSONA,
           ...chatbot.personaConfig,
         };
+        // INFO 레벨로 페르소나 설정 로깅 (프로덕션에서 확인 가능)
+        logger.info('[PersonaLoad] Persona loaded from chatbot', {
+          chatbotId: chatbot.id,
+          personaName: persona.name,
+          includedTopicsCount: persona.includedTopics?.length ?? 0,
+          includedTopics: persona.includedTopics, // 전체 로깅
+          excludedTopicsCount: persona.excludedTopics?.length ?? 0,
+          rawPersonaConfig: JSON.stringify(chatbot.personaConfig),
+        });
+      } else {
+        logger.info('[PersonaLoad] No personaConfig in chatbot, using DEFAULT_PERSONA', {
+          chatbotId: chatbot.id,
+          defaultPersona: JSON.stringify(DEFAULT_PERSONA),
+        });
       }
     }
 
@@ -156,37 +170,38 @@ export async function processChat(
     }> => {
       let searchQuery = request.message;
 
-      // Query Rewriting (후속 질문인 경우 맥락 반영)
-      if (!isFirstTurn) {
-        try {
-          searchQuery = await rewriteQuery(request.message, contextMessages, {
-            maxHistoryMessages: historyLimit,
-            temperature: 0.3,
-            maxTokens: 150,
-            trackingContext: {
-              tenantId,
-              chatbotId: chatbotId ?? undefined,
-              conversationId: conversation.id,
-              featureType: 'rewrite',
-            },
-          });
+      // Query Rewriting (키워드 확장 + 맥락 반영)
+      // 첫 질문이어도 키워드 확장은 적용됨
+      try {
+        searchQuery = await rewriteQuery(request.message, contextMessages, {
+          maxHistoryMessages: historyLimit,
+          temperature: 0.3,
+          maxTokens: 150,
+          trackingContext: {
+            tenantId,
+            chatbotId: chatbotId ?? undefined,
+            conversationId: conversation.id,
+            featureType: 'rewrite',
+          },
+          // 페르소나의 포함 주제를 전달하여 키워드 확장 적용
+          includedTopics: persona.includedTopics,
+        });
 
-          if (searchQuery !== request.message) {
-            logger.debug('Query rewritten for search', {
-              tenantId,
-              sessionId: conversation.sessionId,
-              original: request.message,
-              rewritten: searchQuery,
-            });
-          }
-        } catch (error) {
-          logger.warn('Query rewriting failed, using original', {
-            error: error instanceof Error ? error.message : String(error),
+        if (searchQuery !== request.message) {
+          logger.debug('Query rewritten for search', {
             tenantId,
             sessionId: conversation.sessionId,
+            original: request.message,
+            rewritten: searchQuery,
           });
-          searchQuery = request.message;
         }
+      } catch (error) {
+        logger.warn('Query rewriting failed, using original', {
+          error: error instanceof Error ? error.message : String(error),
+          tenantId,
+          sessionId: conversation.sessionId,
+        });
+        searchQuery = request.message;
       }
 
       // Hybrid Search로 관련 청크 검색

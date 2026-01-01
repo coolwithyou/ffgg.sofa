@@ -18,6 +18,95 @@ export interface QueryRewriteOptions {
   maxTokens?: number;
   /** 토큰 사용량 추적을 위한 컨텍스트 */
   trackingContext?: TrackingContext;
+  /** 페르소나의 포함 주제 (키워드 확장에 사용) */
+  includedTopics?: string[];
+}
+
+/**
+ * 쿼리에서 포함 주제와 관련된 키워드를 찾아 확장합니다.
+ * 예: "문희가 다니는 회사" + includedTopics["성문희"] → "문희 성문희가 다니는 회사"
+ *
+ * @param query - 원본 쿼리
+ * @param includedTopics - 페르소나의 포함 주제 목록
+ * @returns 키워드가 확장된 쿼리
+ */
+function expandQueryWithKeywords(query: string, includedTopics: string[]): string {
+  // INFO 레벨로 항상 로깅하여 프로덕션에서 확인 가능
+  logger.info('[KeywordExpansion] Starting', {
+    query,
+    queryLength: query.length,
+    includedTopicsCount: includedTopics?.length ?? 0,
+    includedTopics: includedTopics?.slice(0, 10), // 처음 10개 로깅
+  });
+
+  if (!includedTopics || includedTopics.length === 0) {
+    logger.info('[KeywordExpansion] No includedTopics, returning original query');
+    return query;
+  }
+
+  const expansions: string[] = [];
+  const queryLower = query.toLowerCase();
+
+  for (const topic of includedTopics) {
+    const topicLower = topic.toLowerCase();
+
+    // 쿼리에 이미 전체 키워드가 포함되어 있으면 스킵
+    if (queryLower.includes(topicLower)) {
+      logger.debug(`[KeywordExpansion] Topic "${topic}" already in query, skipping`);
+      continue;
+    }
+
+    // 키워드의 일부가 쿼리에 포함되어 있는지 확인 (2글자 이상)
+    // 예: "문희" in "성문희", "대한항공" in "대한항공"
+    let matched = false;
+    for (let len = Math.min(topic.length - 1, query.length); len >= 2; len--) {
+      // 키워드의 뒷부분이 쿼리에 있는지 (예: "문희" in "성문희")
+      const suffix = topic.slice(-len);
+      if (queryLower.includes(suffix.toLowerCase())) {
+        logger.info(`[KeywordExpansion] Match found: suffix "${suffix}" of "${topic}" in query`);
+        expansions.push(topic);
+        matched = true;
+        break;
+      }
+      // 키워드의 앞부분이 쿼리에 있는지 (예: "성문" in "성문희")
+      const prefix = topic.slice(0, len);
+      if (queryLower.includes(prefix.toLowerCase())) {
+        logger.info(`[KeywordExpansion] Match found: prefix "${prefix}" of "${topic}" in query`);
+        expansions.push(topic);
+        matched = true;
+        break;
+      }
+    }
+
+    if (!matched && topic.length <= 3) {
+      // 짧은 키워드(3글자 이하)는 별도 체크: 쿼리에 포함되어 있는지
+      if (queryLower.includes(topicLower)) {
+        logger.info(`[KeywordExpansion] Short topic "${topic}" found in query`);
+        expansions.push(topic);
+      }
+    }
+  }
+
+  if (expansions.length === 0) {
+    logger.info('[KeywordExpansion] No matches found, returning original query', {
+      query,
+      topicsChecked: includedTopics.length,
+    });
+    return query;
+  }
+
+  // 중복 제거 후 쿼리 앞에 키워드 추가
+  const uniqueExpansions = [...new Set(expansions)];
+  const expandedQuery = `${uniqueExpansions.join(' ')} ${query}`;
+
+  logger.info('[KeywordExpansion] Query expanded', {
+    original: query,
+    expanded: expandedQuery,
+    addedKeywords: uniqueExpansions,
+    expansionCount: uniqueExpansions.length,
+  });
+
+  return expandedQuery;
 }
 
 const REWRITE_SYSTEM_PROMPT = `당신은 대화 맥락을 고려하여 후속 질문을 재작성하는 전문가입니다.
@@ -55,12 +144,23 @@ export async function rewriteQuery(
   conversationHistory: ChatMessage[],
   options: QueryRewriteOptions = {}
 ): Promise<string> {
-  // 히스토리가 없으면 원본 반환 (첫 질문)
-  if (conversationHistory.length === 0) {
-    return currentQuery;
-  }
+  const { maxHistoryMessages = 4, temperature = 0.3, maxTokens = 150, trackingContext, includedTopics } = options;
 
-  const { maxHistoryMessages = 4, temperature = 0.3, maxTokens = 150, trackingContext } = options;
+  // 로깅: includedTopics 확인
+  logger.debug('Query rewrite started', {
+    query: currentQuery,
+    includedTopicsCount: includedTopics?.length ?? 0,
+    includedTopics: includedTopics?.slice(0, 5), // 처음 5개만 로깅
+    hasHistory: conversationHistory.length > 0,
+  });
+
+  // 1. 키워드 확장 (히스토리와 무관하게 항상 적용)
+  let expandedQuery = expandQueryWithKeywords(currentQuery, includedTopics || []);
+
+  // 2. 히스토리가 없으면 확장된 쿼리 반환 (첫 질문)
+  if (conversationHistory.length === 0) {
+    return expandedQuery;
+  }
 
   try {
     // 최근 N개 메시지만 사용
@@ -73,7 +173,7 @@ export async function rewriteQuery(
 ${recentHistory}
 
 [현재 질문]
-${currentQuery}
+${expandedQuery}
 
 [재작성된 질문]`;
 
@@ -87,13 +187,14 @@ ${currentQuery}
 
     const result = rewritten.trim();
 
-    // 빈 결과 또는 너무 긴 결과는 원본 반환
-    if (!result || result.length > currentQuery.length * 5) {
-      logger.warn('Query rewriting returned invalid result, using original', {
+    // 빈 결과 또는 너무 긴 결과는 확장된 쿼리 반환
+    if (!result || result.length > expandedQuery.length * 5) {
+      logger.warn('Query rewriting returned invalid result, using expanded query', {
         originalLength: currentQuery.length,
+        expandedLength: expandedQuery.length,
         rewrittenLength: result?.length ?? 0,
       });
-      return currentQuery;
+      return expandedQuery;
     }
 
     logger.debug('Query rewritten successfully', {
@@ -106,9 +207,10 @@ ${currentQuery}
   } catch (error) {
     logger.error('Query rewriting failed', error as Error, {
       originalQuery: currentQuery,
+      expandedQuery,
       historyLength: conversationHistory.length,
     });
-    // 실패 시 원본 반환 (Graceful degradation)
-    return currentQuery;
+    // 실패 시 확장된 쿼리 반환 (Graceful degradation)
+    return expandedQuery;
   }
 }

@@ -24,6 +24,9 @@ export interface ChatbotInfo {
   personaConfig: {
     name?: string;
     expertiseArea?: string;
+    expertiseDescription?: string;
+    includedTopics?: string[];
+    excludedTopics?: string[];
     tone?: 'professional' | 'friendly' | 'casual';
   };
 }
