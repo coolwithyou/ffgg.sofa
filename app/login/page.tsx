@@ -8,7 +8,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 
 type LoginStep = 'credentials' | 'totp';
 
@@ -20,6 +20,30 @@ export default function LoginPage() {
   const [credentials, setCredentials] = useState({ email: '', password: '' });
   const [totpCode, setTotpCode] = useState('');
   const [useBackupCode, setUseBackupCode] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  // 이미 로그인된 사용자 리다이렉트
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const response = await fetch('/api/auth/me');
+        if (response.ok) {
+          const data = await response.json();
+          // 역할에 따라 대시보드로 리다이렉트
+          if (data.user?.role === 'internal_operator') {
+            router.replace('/admin/dashboard');
+          } else {
+            router.replace('/dashboard');
+          }
+          return;
+        }
+      } catch {
+        // 인증 실패 시 무시 (로그인 페이지 표시)
+      }
+      setIsCheckingAuth(false);
+    }
+    checkAuth();
+  }, [router]);
 
   async function handleCredentialsSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -118,6 +142,18 @@ export default function LoginPage() {
     setTotpCode('');
     setError(null);
     setUseBackupCode(false);
+  }
+
+  // 인증 상태 확인 중 로딩 표시
+  if (isCheckingAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-muted-foreground">로딩 중...</p>
+        </div>
+      </div>
+    );
   }
 
   return (

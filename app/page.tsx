@@ -6,10 +6,52 @@
  */
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+
+interface User {
+  id: string;
+  email: string;
+  role: 'user' | 'admin' | 'internal_operator';
+}
 
 export default function LandingPage() {
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // 세션 상태 확인
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const response = await fetch('/api/auth/me');
+        if (response.ok) {
+          const data = await response.json();
+          setUser(data.user);
+        }
+      } catch {
+        // 인증 실패 시 무시 (로그인하지 않은 상태)
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    checkAuth();
+  }, []);
+
+  // 로그아웃 핸들러
+  async function handleLogout() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      setUser(null);
+      router.refresh();
+    } catch {
+      // 로그아웃 실패 시 무시
+    }
+  }
+
+  // 대시보드 경로 결정
+  const dashboardPath = user?.role === 'internal_operator' ? '/admin/dashboard' : '/dashboard';
 
   return (
     <div className="min-h-screen bg-background">
@@ -34,18 +76,39 @@ export default function LandingPage() {
             <a href="#faq" className="text-muted-foreground hover:text-foreground">
               FAQ
             </a>
-            <Link
-              href="/login"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              로그인
-            </Link>
-            <Link
-              href="/signup"
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              무료로 시작하기
-            </Link>
+            {isLoading ? (
+              <div className="h-9 w-20 animate-pulse rounded-lg bg-muted" />
+            ) : user ? (
+              <>
+                <Link
+                  href={dashboardPath}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  대시보드
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+                >
+                  로그아웃
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  로그인
+                </Link>
+                <Link
+                  href="/signup"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                  무료로 시작하기
+                </Link>
+              </>
+            )}
           </div>
 
           {/* 모바일 메뉴 버튼 */}
@@ -104,18 +167,41 @@ export default function LandingPage() {
               >
                 FAQ
               </a>
-              <Link
-                href="/login"
-                className="block py-2 text-muted-foreground hover:text-foreground"
-              >
-                로그인
-              </Link>
-              <Link
-                href="/signup"
-                className="mt-2 block rounded-lg bg-primary py-2 text-center text-sm font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                무료로 시작하기
-              </Link>
+              {user ? (
+                <>
+                  <Link
+                    href={dashboardPath}
+                    className="block py-2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    대시보드
+                  </Link>
+                  <button
+                    onClick={() => {
+                      handleLogout();
+                      setMobileMenuOpen(false);
+                    }}
+                    className="mt-2 block w-full rounded-lg border border-border py-2 text-center text-sm font-medium text-foreground hover:bg-muted"
+                  >
+                    로그아웃
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    className="block py-2 text-muted-foreground hover:text-foreground"
+                  >
+                    로그인
+                  </Link>
+                  <Link
+                    href="/signup"
+                    className="mt-2 block rounded-lg bg-primary py-2 text-center text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                  >
+                    무료로 시작하기
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         )}
