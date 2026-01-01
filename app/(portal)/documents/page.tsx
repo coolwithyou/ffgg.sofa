@@ -28,13 +28,9 @@ export default async function DocumentsPage() {
 
       {/* 메인: 12그리드 기준 8:4 비율 */}
       <div className="grid gap-6 lg:grid-cols-12">
-        {/* 1열: 업로드 영역 (8칸) */}
-        <div className="lg:col-span-8">
+        {/* 1열: 업로드 영역 + 문서 목록 (8칸) */}
+        <div className="space-y-6 lg:col-span-8">
           <DocumentUpload />
-        </div>
-
-        {/* 2열: 문서 목록 + 가이드 + 템플릿 (4칸) */}
-        <div className="space-y-6 lg:col-span-4">
           <Suspense
             fallback={
               <div className="flex h-64 items-center justify-center rounded-lg border border-border bg-card">
@@ -44,6 +40,10 @@ export default async function DocumentsPage() {
           >
             <DocumentList initialData={documentsData} />
           </Suspense>
+        </div>
+
+        {/* 2열: 가이드 + 템플릿 (4칸) */}
+        <div className="space-y-6 lg:col-span-4">
           <UploadGuide />
           <TemplateDownload />
         </div>
