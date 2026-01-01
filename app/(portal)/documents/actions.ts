@@ -179,12 +179,13 @@ export async function reprocessDocument(documentId: string): Promise<{ success: 
   }
 
   try {
-    // 문서 소유권 확인
+    // 문서 소유권 확인 (재처리에 필요한 모든 필드 조회)
     const doc = await db.query.documents.findFirst({
       where: eq(documents.id, documentId),
       columns: {
         id: true,
         tenantId: true,
+        datasetId: true,
         filename: true,
         fileType: true,
         filePath: true,
@@ -214,13 +215,14 @@ export async function reprocessDocument(documentId: string): Promise<{ success: 
       })
       .where(eq(documents.id, documentId));
 
-    // Inngest 이벤트 발송
+    // Inngest 이벤트 발송 (datasetId 포함하여 명시적 전달)
     const { inngest } = await import('@/inngest/client');
     await inngest.send({
       name: 'document/uploaded',
       data: {
         documentId: doc.id,
         tenantId: doc.tenantId,
+        datasetId: doc.datasetId, // null이면 라이브러리 문서
         userId: session.userId,
         filename: doc.filename,
         fileType: doc.fileType || 'unknown',

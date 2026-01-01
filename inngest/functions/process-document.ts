@@ -79,20 +79,24 @@ onFailure: async ({ event, error }) => {
     const { documentId, tenantId, datasetId: eventDatasetId, filename, fileType, filePath } = event.data;
     const processingStartTime = Date.now();
 
-    // 이전 로그 삭제 (재처리 시)
-    await clearDocumentLogs(documentId);
+    // Step 0: 이전 데이터 정리 (step.run 내부에서 실행하여 retry 시 중복 실행 방지)
+    // 중요: step.run 외부에서 실행하면 retry 시 청크가 삭제되지만 memoized step은 재실행되지 않아 청크가 사라짐
+    await step.run('cleanup-previous-data', async () => {
+      // 이전 로그 삭제 (재처리 시)
+      await clearDocumentLogs(documentId);
 
-    // 이전 청크 삭제 (재처리 시 중복 방지 - fail-safe)
-    await db.delete(chunks).where(eq(chunks.documentId, documentId));
+      // 이전 청크 삭제 (재처리 시 중복 방지)
+      await db.delete(chunks).where(eq(chunks.documentId, documentId));
 
-    // 처리 시작 로그
-    await logDocumentProcessing({
-      documentId,
-      tenantId,
-      step: 'started',
-      status: 'started',
-      message: `문서 처리 시작: ${filename}`,
-      details: { filename, fileType },
+      // 처리 시작 로그
+      await logDocumentProcessing({
+        documentId,
+        tenantId,
+        step: 'started',
+        status: 'started',
+        message: `문서 처리 시작: ${filename}`,
+        details: { filename, fileType },
+      });
     });
 
     // Step 1: 문서 상태 업데이트 및 datasetId 검증/동기화
