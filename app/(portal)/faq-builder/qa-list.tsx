@@ -44,8 +44,9 @@ export function QAList({
   selectedDatasetId,
   onDatasetChange,
 }: QAListProps) {
+  // 최신순 정렬 (order 내림차순) - 새로 추가한 아이템이 상단에 표시
   const sortedQAPairs = useMemo(
-    () => [...qaPairs].sort((a, b) => a.order - b.order),
+    () => [...qaPairs].sort((a, b) => b.order - a.order),
     [qaPairs]
   );
 
