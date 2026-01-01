@@ -65,7 +65,7 @@ export function UploadGuide() {
 
       {isExpanded && (
         <div className="border-t border-border px-6 pb-6">
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-4 grid gap-4">
             {GUIDELINES.map((guideline, index) => (
               <div
                 key={index}
