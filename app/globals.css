@@ -48,6 +48,9 @@
 
 :root {
   --radius: 0.625rem;
+  /* Scrollbar */
+  --scrollbar-thumb: oklch(0.556 0 0 / 0.25);
+  --scrollbar-thumb-hover: oklch(0.556 0 0 / 0.5);
   /* Light mode - Monochrome (black primary) */
   --background: oklch(0.99 0 0);          /* #FCFCFC */
   --foreground: oklch(0.13 0 0);          /* #1A1A1A */
@@ -85,6 +88,9 @@
 }
 
 .dark {
+  /* Scrollbar */
+  --scrollbar-thumb: oklch(0.869 0 0 / 0.2);
+  --scrollbar-thumb-hover: oklch(0.869 0 0 / 0.4);
   /* Dark mode - Monochrome (white primary), #090909 base with depth spectrum */
   --background: oklch(0.11 0 0);          /* #090909 - Deepest */
   --foreground: oklch(0.93 0 0);          /* #ECECEC */
@@ -124,8 +130,49 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    /* Modern thin scrollbar - Firefox, Chrome 121+ */
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Webkit scrollbar (Chrome, Edge, Safari) */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbar but keep scrolling */
+  .scrollbar-hidden {
+    scrollbar-width: none;
+  }
+  .scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Accessibility: High contrast mode */
+@media (prefers-contrast: more) {
+  ::-webkit-scrollbar-thumb {
+    background-color: currentColor;
   }
 }

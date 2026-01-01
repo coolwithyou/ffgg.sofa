@@ -163,7 +163,7 @@ export function PageError({ error, reset }: PageErrorProps) {
             <summary className="cursor-pointer text-sm text-gray-500">
               에러 상세 정보
             </summary>
-            <pre className="mt-2 overflow-auto rounded bg-gray-100 p-4 text-xs text-red-600">
+            <pre className="mt-2 overflow-auto rounded bg-muted p-4 text-xs text-destructive">
               {error.message}
               {error.stack && `\n\n${error.stack}`}
             </pre>

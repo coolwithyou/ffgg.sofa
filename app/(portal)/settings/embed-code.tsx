@@ -28,7 +28,7 @@ export function EmbedCodeSection({ code }: EmbedCodeSectionProps) {
     <div className="space-y-4">
       {/* 코드 블록 */}
       <div className="relative">
-        <pre className="overflow-x-auto rounded-lg bg-gray-900 p-4 text-sm text-gray-100">
+        <pre className="overflow-x-auto rounded-lg bg-muted p-4 text-sm text-foreground">
           <code>{code}</code>
         </pre>
         <button

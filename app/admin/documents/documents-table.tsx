@@ -38,12 +38,12 @@ interface ApiResponse {
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  uploaded: { label: '업로드됨', color: 'bg-gray-100 text-gray-700' },
-  processing: { label: '처리 중', color: 'bg-blue-100 text-blue-700' },
-  chunked: { label: '청킹 완료', color: 'bg-purple-100 text-purple-700' },
-  reviewing: { label: '검토 중', color: 'bg-yellow-100 text-yellow-700' },
-  approved: { label: '승인됨', color: 'bg-green-100 text-green-700' },
-  failed: { label: '실패', color: 'bg-red-100 text-red-700' },
+  uploaded: { label: '업로드됨', color: 'bg-muted text-muted-foreground' },
+  processing: { label: '처리 중', color: 'bg-blue-500/10 text-blue-500' },
+  chunked: { label: '청킹 완료', color: 'bg-purple-500/10 text-purple-500' },
+  reviewing: { label: '검토 중', color: 'bg-yellow-500/10 text-yellow-500' },
+  approved: { label: '승인됨', color: 'bg-green-500/10 text-green-500' },
+  failed: { label: '실패', color: 'bg-destructive/10 text-destructive' },
 };
 
 const PROGRESS_LABELS: Record<string, string> = {
