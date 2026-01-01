@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
-import { db, documents } from '@/lib/db';
+import { db, documents, chunks } from '@/lib/db';
 import { eq } from 'drizzle-orm';
 import { inngest } from '@/inngest/client';
 import { logger } from '@/lib/logger';
@@ -44,6 +44,13 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    // 기존 청크 삭제 (재처리 시 중복 방지)
+    await db.delete(chunks).where(eq(chunks.documentId, documentId));
+    logger.info('Deleted existing chunks for reprocess', {
+      documentId,
+      tenantId: doc.tenantId,
+    });
 
     // 문서 상태를 uploaded로 리셋
     await db

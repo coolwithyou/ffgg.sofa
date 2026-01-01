@@ -11,6 +11,7 @@ import {
   date,
   index,
   unique,
+  uniqueIndex,
   vector,
   bigint,
 } from 'drizzle-orm/pg-core';
@@ -285,6 +286,8 @@ export const chunks = pgTable(
     index('idx_chunks_document').on(table.documentId),
     index('idx_chunks_dataset').on(table.datasetId),
     index('idx_chunks_source').on(table.sourceChunkId),
+    // 중복 청크 방지를 위한 UNIQUE 제약조건
+    uniqueIndex('unique_document_chunk_index').on(table.documentId, table.chunkIndex),
   ]
 );
 

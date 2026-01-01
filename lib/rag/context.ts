@@ -31,10 +31,46 @@ export interface ContextGenerationOptions {
 const DEFAULT_OPTIONS: Required<ContextGenerationOptions> = {
   maxDocumentLength: 20000,
   maxContextTokens: 150,
-  batchSize: 10,
-  batchDelayMs: 200,
+  batchSize: 5, // Rate limit 여유 확보를 위해 10→5로 축소
+  batchDelayMs: 300, // 기본 딜레이 증가 (200→300ms)
   savePrompt: true, // 리뷰 UI에서 확인하기 위해 기본값 true
 };
+
+// Rate Limit 관련 상수
+const RATE_LIMIT_WAIT_MS = 60000; // Rate limit 히트 시 대기 시간 (60초)
+const MAX_RETRY_ATTEMPTS = 2; // 최대 재시도 횟수
+
+/**
+ * 처리 진행률에 따른 동적 딜레이 계산 (Exponential Backoff)
+ * 처리량이 증가할수록 딜레이를 늘려 Rate Limit 회피
+ */
+function calculateBackoffDelay(
+  processedCount: number,
+  totalCount: number,
+  baseDelay: number
+): number {
+  const progress = processedCount / totalCount;
+  // 초반 30%: 기본 딜레이
+  // 중반 30-60%: 2배 딜레이
+  // 후반 60%+: 3배 딜레이
+  if (progress < 0.3) return baseDelay;
+  if (progress < 0.6) return baseDelay * 2;
+  return baseDelay * 3;
+}
+
+/**
+ * Rate Limit 에러인지 확인
+ */
+function isRateLimitError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    return message.includes('rate limit') ||
+           message.includes('rate_limit') ||
+           message.includes('429') ||
+           message.includes('too many requests');
+  }
+  return false;
+}
 
 // 한글 프롬프트 (문서가 한글인 경우 더 좋은 품질)
 const CONTEXT_PROMPT_KO = `<document>
@@ -118,12 +154,13 @@ function buildPrompt(
 }
 
 /**
- * 단일 청크에 대한 컨텍스트 생성
+ * 단일 청크에 대한 컨텍스트 생성 (Rate Limit 재시도 포함)
  */
 export async function generateChunkContext(
   fullDocument: string,
   chunkContent: string,
-  options: ContextGenerationOptions = {}
+  options: ContextGenerationOptions = {},
+  retryCount: number = 0
 ): Promise<{ contextPrefix: string; prompt: string; inputTokens: number; outputTokens: number }> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const prompt = buildPrompt(fullDocument, chunkContent, opts.maxDocumentLength);
@@ -147,9 +184,24 @@ export async function generateChunkContext(
       outputTokens: result.usage?.outputTokens ?? 0,
     };
   } catch (error) {
+    // Rate Limit 에러 감지 시 대기 후 재시도
+    if (isRateLimitError(error) && retryCount < MAX_RETRY_ATTEMPTS) {
+      logger.warn('Rate limit hit, waiting before retry', {
+        retryCount: retryCount + 1,
+        maxRetries: MAX_RETRY_ATTEMPTS,
+        waitMs: RATE_LIMIT_WAIT_MS,
+        chunkPreview: chunkContent.slice(0, 50),
+      });
+
+      await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_WAIT_MS));
+      return generateChunkContext(fullDocument, chunkContent, options, retryCount + 1);
+    }
+
     logger.warn('Context generation failed', {
       error: error instanceof Error ? error.message : 'Unknown',
       chunkPreview: chunkContent.slice(0, 100),
+      isRateLimit: isRateLimitError(error),
+      retryCount,
     });
     return { contextPrefix: '', prompt: opts.savePrompt ? prompt : '', inputTokens: 0, outputTokens: 0 };
   }
@@ -204,10 +256,63 @@ export async function generateContextsBatch(
       onProgress(Math.min(i + opts.batchSize, chunks.length), chunks.length);
     }
 
-    // Rate limit 대응 (배치 간 딜레이)
+    // Rate limit 대응 (Exponential Backoff 적용)
     if (i + opts.batchSize < chunks.length) {
-      await new Promise((resolve) => setTimeout(resolve, opts.batchDelayMs));
+      const delay = calculateBackoffDelay(
+        Math.min(i + opts.batchSize, chunks.length),
+        chunks.length,
+        opts.batchDelayMs
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
+  }
+
+  // 실패한 청크 재시도 (50% 미만 실패 시에만)
+  const failedResults = results.filter(r => r.contextPrefix.length === 0);
+  if (failedResults.length > 0 && failedResults.length < chunks.length * 0.5) {
+    logger.info('Retrying failed context generation', {
+      failedCount: failedResults.length,
+      totalChunks: chunks.length,
+    });
+
+    // 30초 대기 후 재시도 (Rate Limit 회복 대기)
+    await new Promise(resolve => setTimeout(resolve, 30000));
+
+    // 실패한 청크들의 원본 데이터 찾기
+    const failedChunks = failedResults
+      .map(f => chunks.find(c => c.index === f.chunkIndex))
+      .filter((c): c is { index: number; content: string } => c !== undefined);
+
+    // 재시도 (더 보수적인 설정: 배치 2, 딜레이 1초)
+    for (const chunk of failedChunks) {
+      const { contextPrefix, prompt, inputTokens, outputTokens } = await generateChunkContext(
+        fullDocument,
+        chunk.content,
+        { ...opts, batchSize: 1, batchDelayMs: 1000 }
+      );
+
+      totalInputTokens += inputTokens;
+      totalOutputTokens += outputTokens;
+
+      // 성공한 경우 결과 업데이트
+      if (contextPrefix.length > 0) {
+        const original = results.find(r => r.chunkIndex === chunk.index);
+        if (original) {
+          original.contextPrefix = contextPrefix;
+          if (opts.savePrompt) {
+            original.prompt = prompt;
+          }
+        }
+      }
+
+      // 각 청크 사이 1초 대기
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    logger.info('Retry completed', {
+      retriedCount: failedChunks.length,
+      newSuccessCount: results.filter(r => r.contextPrefix.length > 0).length,
+    });
   }
 
   const successCount = results.filter((r) => r.contextPrefix.length > 0).length;

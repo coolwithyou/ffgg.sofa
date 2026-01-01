@@ -82,6 +82,9 @@ onFailure: async ({ event, error }) => {
     // 이전 로그 삭제 (재처리 시)
     await clearDocumentLogs(documentId);
 
+    // 이전 청크 삭제 (재처리 시 중복 방지 - fail-safe)
+    await db.delete(chunks).where(eq(chunks.documentId, documentId));
+
     // 처리 시작 로그
     await logDocumentProcessing({
       documentId,
@@ -273,14 +276,34 @@ onFailure: async ({ event, error }) => {
         };
       });
 
-      // 배치 삽입 (neon-http는 트랜잭션 미지원)
+      // 배치 삽입 (neon-http는 트랜잭션 미지원) + 검증
       const BATCH_SIZE = 100;
+      let savedCount = 0;
+
       for (let i = 0; i < chunkRecords.length; i += BATCH_SIZE) {
         const batch = chunkRecords.slice(i, i + BATCH_SIZE);
-        await db.insert(chunks).values(batch);
+        const result = await db.insert(chunks).values(batch).returning({ id: chunks.id });
+        savedCount += result.length;
+
+        // 배치 저장 검증
+        if (result.length !== batch.length) {
+          logger.warn('Batch save incomplete', {
+            documentId,
+            expected: batch.length,
+            actual: result.length,
+            batchIndex: Math.floor(i / BATCH_SIZE),
+          });
+        }
       }
 
-      // 트랜잭션 완료 후 진행 상태 업데이트
+      // 최종 저장 검증
+      if (savedCount !== chunkRecords.length) {
+        const errorMsg = `청크 저장 불완전: ${savedCount}/${chunkRecords.length}`;
+        logger.error(errorMsg, new Error(errorMsg));
+        throw new Error(errorMsg);
+      }
+
+      // 저장 완료 후 진행 상태 업데이트
       await updateDocumentProgress(documentId, 'quality_check', 100);
 
       const autoApprovedCount = chunkRecords.filter((c) => c.autoApproved).length;
