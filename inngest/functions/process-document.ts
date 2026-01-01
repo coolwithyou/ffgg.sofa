@@ -129,7 +129,20 @@ onFailure: async ({ event, error }) => {
       await updateDocumentProgress(documentId, 'parsing', 30);
 
       // 파일 다운로드 - step 내에서 직접 수행 (직렬화 문제 회피)
-      const fileBuffer = await getFileFromStorage(filePath, tenantId);
+      let fileBuffer: Buffer;
+      try {
+        fileBuffer = await getFileFromStorage(filePath, tenantId);
+      } catch (storageError) {
+        // R2/S3 파일 없음 에러를 사용자 친화적 메시지로 변환
+        const errMsg = (storageError as Error).message || '';
+        if (errMsg.includes('NoSuchKey') || errMsg.includes('not found') || errMsg.includes('ENOENT')) {
+          throw new Error(
+            `원본 파일을 찾을 수 없습니다. 문서를 삭제하고 다시 업로드해주세요. (파일: ${filename})`
+          );
+        }
+        throw storageError;
+      }
+
       const result = await parseDocument(
         fileBuffer,
         fileType as SupportedFileType
