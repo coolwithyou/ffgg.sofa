@@ -188,8 +188,12 @@ export function AlertDialogProvider({ children }: AlertDialogProviderProps) {
     resolve: null,
   });
 
+  // resolve 함수를 ref로 관리하여 클로저 문제 방지
+  const resolveRef = React.useRef<((value: boolean) => void) | null>(null);
+
   const confirm = React.useCallback((options: AlertDialogOptions): Promise<boolean> => {
     return new Promise((resolve) => {
+      resolveRef.current = resolve;
       setDialog({
         isOpen: true,
         ...options,
@@ -199,14 +203,16 @@ export function AlertDialogProvider({ children }: AlertDialogProviderProps) {
   }, []);
 
   const handleConfirm = React.useCallback(() => {
-    dialog.resolve?.(true);
+    resolveRef.current?.(true);
+    resolveRef.current = null;
     setDialog((prev) => ({ ...prev, isOpen: false, resolve: null }));
-  }, [dialog.resolve]);
+  }, []);
 
   const handleCancel = React.useCallback(() => {
-    dialog.resolve?.(false);
+    resolveRef.current?.(false);
+    resolveRef.current = null;
     setDialog((prev) => ({ ...prev, isOpen: false, resolve: null }));
-  }, [dialog.resolve]);
+  }, []);
 
   return (
     <AlertDialogContext.Provider value={{ confirm }}>
