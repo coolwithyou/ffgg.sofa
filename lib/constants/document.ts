@@ -12,7 +12,7 @@ export const DOCUMENT_CONSTANTS = {
   /** 폴링 간격 (3초) */
   POLLING_INTERVAL_MS: 3000,
   /** 재처리 가능한 상태 */
-  REPROCESSABLE_STATUSES: ['uploaded', 'failed'] as const,
+  REPROCESSABLE_STATUSES: ['uploaded', 'failed', 'reviewing'] as const,
 } as const;
 
 /**
@@ -63,7 +63,7 @@ export function canReprocessDocument(
   updatedAt?: Date | string | null
 ): boolean {
   // 기본 재처리 가능 상태
-  if (DOCUMENT_CONSTANTS.REPROCESSABLE_STATUSES.includes(status as 'uploaded' | 'failed')) {
+  if (DOCUMENT_CONSTANTS.REPROCESSABLE_STATUSES.includes(status as 'uploaded' | 'failed' | 'reviewing')) {
     return true;
   }
 
@@ -97,4 +97,36 @@ export function getDocumentStatusLabel(status: string, isStalled: boolean): stri
   };
 
   return labels[status] || status;
+}
+
+/**
+ * 재처리 유형 반환
+ *
+ * @description
+ * - 'safe': 청크가 없어 안전하게 재처리 가능
+ * - 'destructive': 청크가 있어 삭제 후 재처리 (경고 필요)
+ * - 'not_allowed': 재처리 불가능한 상태
+ *
+ * @param status - 문서 상태
+ * @param chunkCount - 청크 수
+ * @param updatedAt - 마지막 업데이트 시각 (stalled 판단용)
+ * @returns 'safe' | 'destructive' | 'not_allowed'
+ */
+export function getReprocessType(
+  status: string,
+  chunkCount: number,
+  updatedAt?: Date | string | null
+): 'safe' | 'destructive' | 'not_allowed' {
+  // 재처리 불가 상태
+  if (!canReprocessDocument(status, updatedAt)) {
+    return 'not_allowed';
+  }
+
+  // 청크가 있으면 파괴적 재처리 (경고 필요)
+  if (chunkCount > 0) {
+    return 'destructive';
+  }
+
+  // 청크 없으면 안전한 재처리
+  return 'safe';
 }

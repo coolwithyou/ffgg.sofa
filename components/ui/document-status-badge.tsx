@@ -68,10 +68,10 @@ const STATUS_CONFIG: Record<
 
 /**
  * 클릭 가능한 상태인지 확인
- * processing, stalled, uploaded, failed 상태에서 모달을 열 수 있음
+ * processing, stalled, uploaded, failed, reviewing 상태에서 모달을 열 수 있음
  */
 export function isClickableStatus(status: string): boolean {
-  return ['processing', 'stalled', 'uploaded', 'failed'].includes(status);
+  return ['processing', 'stalled', 'uploaded', 'failed', 'reviewing'].includes(status);
 }
 
 export function DocumentStatusBadge({

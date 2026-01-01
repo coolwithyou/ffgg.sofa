@@ -6,7 +6,14 @@
  */
 
 import { useState, useEffect, useTransition } from 'react';
-import { deleteDocument, reprocessDocument, refreshDocumentStatus, type DocumentItem } from './actions';
+import {
+  deleteDocument,
+  reprocessDocument,
+  refreshDocumentStatus,
+  getDocuments,
+  type DocumentItem,
+  type GetDocumentsResult,
+} from './actions';
 import { DocumentProgressModal } from '@/components/document-progress-modal';
 import { DocumentStatusBadge } from '@/components/ui/document-status-badge';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
@@ -14,11 +21,13 @@ import { useToast } from '@/components/ui/toast';
 import { canReprocessDocument } from '@/lib/constants/document';
 
 interface DocumentListProps {
-  documents: DocumentItem[];
+  initialData: GetDocumentsResult;
 }
 
-export function DocumentList({ documents: initialDocuments }: DocumentListProps) {
-  const [documents, setDocuments] = useState(initialDocuments);
+export function DocumentList({ initialData }: DocumentListProps) {
+  const [documents, setDocuments] = useState(initialData.documents);
+  const [pagination, setPagination] = useState(initialData.pagination);
+  const [isPageLoading, setIsPageLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
@@ -79,7 +88,8 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
       const result = await deleteDocument(documentId);
 
       if (result.success) {
-        setDocuments((prev) => prev.filter((d) => d.id !== documentId));
+        // 페이지네이션 사용 시 새로고침
+        await refreshCurrentPage();
       } else {
         showError('삭제 실패', result.error || '삭제에 실패했습니다.');
       }
@@ -111,7 +121,40 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
     });
   };
 
-  if (documents.length === 0) {
+  // 페이지 변경 핸들러
+  const handlePageChange = async (newPage: number) => {
+    if (newPage < 1 || newPage > pagination.totalPages || isPageLoading) return;
+
+    setIsPageLoading(true);
+    try {
+      const result = await getDocuments(newPage, pagination.limit);
+      setDocuments(result.documents);
+      setPagination(result.pagination);
+    } catch (error) {
+      showError('페이지 로딩 실패', '문서 목록을 불러오는데 실패했습니다.');
+    } finally {
+      setIsPageLoading(false);
+    }
+  };
+
+  // 현재 페이지 새로고침 (삭제 후 등)
+  const refreshCurrentPage = async () => {
+    setIsPageLoading(true);
+    try {
+      // 현재 페이지가 비었고 이전 페이지가 있으면 이전 페이지로
+      const targetPage =
+        documents.length === 1 && pagination.page > 1 ? pagination.page - 1 : pagination.page;
+      const result = await getDocuments(targetPage, pagination.limit);
+      setDocuments(result.documents);
+      setPagination(result.pagination);
+    } catch (error) {
+      // 에러 시 무시
+    } finally {
+      setIsPageLoading(false);
+    }
+  };
+
+  if (documents.length === 0 && pagination.total === 0) {
     return (
       <div className="rounded-lg border border-border bg-card p-12 text-center">
         <DocumentIcon className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -128,11 +171,16 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
       <div className="rounded-lg border border-border bg-card">
         <div className="border-b border-border px-6 py-4">
           <h2 className="text-lg font-semibold text-foreground">
-            업로드된 문서 ({documents.length})
+            업로드된 문서 ({pagination.total}개)
           </h2>
         </div>
 
-        <div className="divide-y divide-border">
+        <div className="relative divide-y divide-border">
+        {isPageLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-card/50">
+            <LoadingSpinner className="h-8 w-8 text-primary" />
+          </div>
+        )}
         {documents.map((doc) => (
           <div
             key={doc.id}
@@ -215,6 +263,31 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
           </div>
         ))}
         </div>
+
+        {/* 페이지네이션 */}
+        {pagination.totalPages > 1 && (
+          <div className="flex items-center justify-center gap-4 border-t border-border px-6 py-4">
+            <button
+              onClick={() => handlePageChange(pagination.page - 1)}
+              disabled={pagination.page === 1 || isPageLoading}
+              className="flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ChevronLeftIcon className="h-4 w-4" />
+              이전
+            </button>
+            <span className="text-sm text-muted-foreground">
+              {pagination.page} / {pagination.totalPages}
+            </span>
+            <button
+              onClick={() => handlePageChange(pagination.page + 1)}
+              disabled={pagination.page === pagination.totalPages || isPageLoading}
+              className="flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              다음
+              <ChevronRightIcon className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 처리 상태 모달 */}
@@ -337,6 +410,22 @@ function ChunkIcon({ className }: { className?: string }) {
         strokeWidth={2}
         d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
       />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
     </svg>
   );
 }

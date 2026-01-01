@@ -7,7 +7,7 @@
 
 import { validateSession } from '@/lib/auth';
 import { db, documents, datasets, chunks } from '@/lib/db';
-import { eq, desc, count, sql } from 'drizzle-orm';
+import { eq, desc, count, sql, inArray } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import { revalidatePath } from 'next/cache';
 import { canReprocessDocument } from '@/lib/constants/document';
@@ -29,18 +29,47 @@ export interface DocumentItem {
   chunkCount: number;
 }
 
+export interface GetDocumentsResult {
+  documents: DocumentItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 /**
- * 문서 목록 조회
+ * 문서 목록 조회 (페이지네이션 지원)
  */
-export async function getDocuments(): Promise<DocumentItem[]> {
+export async function getDocuments(
+  page: number = 1,
+  limit: number = 10
+): Promise<GetDocumentsResult> {
   const session = await validateSession();
 
+  const emptyResult: GetDocumentsResult = {
+    documents: [],
+    pagination: { page, limit, total: 0, totalPages: 0 },
+  };
+
   if (!session) {
-    return [];
+    return emptyResult;
   }
 
   try {
-    // 문서 목록 조회 (데이터셋 JOIN 포함)
+    const offset = (page - 1) * limit;
+
+    // 전체 문서 수 조회
+    const [totalResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(documents)
+      .where(eq(documents.tenantId, session.tenantId));
+
+    const total = totalResult?.count || 0;
+    const totalPages = Math.ceil(total / limit);
+
+    // 문서 목록 조회 (데이터셋 JOIN 포함, 페이지네이션 적용)
     const docs = await db
       .select({
         id: documents.id,
@@ -57,38 +86,51 @@ export async function getDocuments(): Promise<DocumentItem[]> {
       .from(documents)
       .leftJoin(datasets, eq(documents.datasetId, datasets.id))
       .where(eq(documents.tenantId, session.tenantId))
-      .orderBy(desc(documents.createdAt));
+      .orderBy(desc(documents.createdAt))
+      .limit(limit)
+      .offset(offset);
 
-    // 청크 수 별도 조회
-    const chunkCounts = await db
-      .select({
-        documentId: chunks.documentId,
-        count: count(),
-      })
-      .from(chunks)
-      .groupBy(chunks.documentId);
+    // 현재 페이지 문서들의 청크 수 조회
+    const docIds = docs.map((d) => d.id);
+    const chunkCounts =
+      docIds.length > 0
+        ? await db
+            .select({
+              documentId: chunks.documentId,
+              count: count(),
+            })
+            .from(chunks)
+            .where(inArray(chunks.documentId, docIds))
+            .groupBy(chunks.documentId)
+        : [];
 
     // 청크 수를 Map으로 변환
-    const chunkCountMap = new Map(
-      chunkCounts.map((c) => [c.documentId, Number(c.count)])
-    );
+    const chunkCountMap = new Map(chunkCounts.map((c) => [c.documentId, Number(c.count)]));
 
-    return docs.map((d) => ({
-      id: d.id,
-      filename: d.filename,
-      fileSize: d.fileSize,
-      fileType: d.fileType,
-      status: d.status || 'uploaded',
-      progressPercent: d.progressPercent,
-      errorMessage: d.errorMessage,
-      createdAt: d.createdAt?.toISOString() || new Date().toISOString(),
-      updatedAt: d.updatedAt?.toISOString() || null,
-      datasetName: d.datasetName,
-      chunkCount: chunkCountMap.get(d.id) || 0,
-    }));
+    return {
+      documents: docs.map((d) => ({
+        id: d.id,
+        filename: d.filename,
+        fileSize: d.fileSize,
+        fileType: d.fileType,
+        status: d.status || 'uploaded',
+        progressPercent: d.progressPercent,
+        errorMessage: d.errorMessage,
+        createdAt: d.createdAt?.toISOString() || new Date().toISOString(),
+        updatedAt: d.updatedAt?.toISOString() || null,
+        datasetName: d.datasetName,
+        chunkCount: chunkCountMap.get(d.id) || 0,
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
+    };
   } catch (error) {
     logger.error('Failed to get documents', error as Error, { tenantId: session.tenantId });
-    return [];
+    return emptyResult;
   }
 }
 

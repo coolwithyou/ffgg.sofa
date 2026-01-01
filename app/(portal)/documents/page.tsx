@@ -12,7 +12,7 @@ import { TemplateDownload } from './template-download';
 import { UploadGuide } from './upload-guide';
 
 export default async function DocumentsPage() {
-  const documents = await getDocuments();
+  const documentsData = await getDocuments(1, 10);
 
   return (
     <div className="space-y-6">
@@ -26,25 +26,28 @@ export default async function DocumentsPage() {
         </div>
       </div>
 
-      {/* 작성 가이드 */}
-      <UploadGuide />
+      {/* 메인: 12그리드 기준 8:4 비율 */}
+      <div className="grid gap-6 lg:grid-cols-12">
+        {/* 1열: 업로드 영역 (8칸) */}
+        <div className="lg:col-span-8">
+          <DocumentUpload />
+        </div>
 
-      {/* 템플릿 다운로드 */}
-      <TemplateDownload />
-
-      {/* 업로드 영역 */}
-      <DocumentUpload />
-
-      {/* 문서 목록 */}
-      <Suspense
-        fallback={
-          <div className="flex h-32 items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          </div>
-        }
-      >
-        <DocumentList documents={documents} />
-      </Suspense>
+        {/* 2열: 문서 목록 + 가이드 + 템플릿 (4칸) */}
+        <div className="space-y-6 lg:col-span-4">
+          <Suspense
+            fallback={
+              <div className="flex h-64 items-center justify-center rounded-lg border border-border bg-card">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              </div>
+            }
+          >
+            <DocumentList initialData={documentsData} />
+          </Suspense>
+          <UploadGuide />
+          <TemplateDownload />
+        </div>
+      </div>
     </div>
   );
 }

@@ -78,7 +78,7 @@ export function TemplateDownload() {
         </p>
       </div>
 
-      <div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 p-6">
         {TEMPLATES.map((template) => (
           <div
             key={template.id}

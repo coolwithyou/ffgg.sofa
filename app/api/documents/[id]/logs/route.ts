@@ -5,8 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
-import { db, documents, documentProcessingLogs } from '@/lib/db';
-import { eq, desc, and } from 'drizzle-orm';
+import { db, documents, documentProcessingLogs, chunks } from '@/lib/db';
+import { eq, desc, and, sql } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 
 export async function GET(
@@ -62,6 +62,14 @@ export async function GET(
       .where(eq(documentProcessingLogs.documentId, documentId))
       .orderBy(documentProcessingLogs.createdAt); // 오래된 순 (시간순)
 
+    // 청크 수 조회
+    const chunkCountResult = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(chunks)
+      .where(eq(chunks.documentId, documentId));
+
+    const chunkCount = chunkCountResult[0]?.count ?? 0;
+
     return NextResponse.json({
       document: {
         id: doc.id,
@@ -71,6 +79,7 @@ export async function GET(
         progressPercent: doc.progressPercent,
         errorMessage: doc.errorMessage,
         updatedAt: doc.updatedAt?.toISOString() || null,
+        chunkCount,
       },
       logs: logs.map((log) => ({
         id: log.id,
