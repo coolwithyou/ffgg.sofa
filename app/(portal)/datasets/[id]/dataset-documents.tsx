@@ -14,6 +14,7 @@ import { DocumentStatusBadge } from '@/components/ui/document-status-badge';
 import { DocumentChunks } from './document-chunks';
 import { unassignDocumentFromDataset } from '@/app/(portal)/library/actions';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
+import { useToast } from '@/components/ui/toast';
 
 interface DocumentItem {
   id: string;
@@ -44,6 +45,7 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
   const [progressModalDocId, setProgressModalDocId] = useState<string | null>(null);
   const [documentSearch, setDocumentSearch] = useState('');
   const { confirm } = useAlertDialog();
+  const { error: showError } = useToast();
 
   useEffect(() => {
     fetchDocuments();
@@ -122,11 +124,11 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
           }
           onUpdate();
         } else {
-          alert('삭제에 실패했습니다.');
+          showError('삭제 실패', '문서 삭제에 실패했습니다.');
         }
       } catch (err) {
         console.error('Delete error:', err);
-        alert('삭제 중 오류가 발생했습니다.');
+        showError('삭제 실패', '삭제 중 오류가 발생했습니다.');
       } finally {
         setDeletingId(null);
       }
@@ -151,11 +153,11 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
             )
           );
         } else {
-          alert('재처리 요청에 실패했습니다.');
+          showError('재처리 실패', '재처리 요청에 실패했습니다.');
         }
       } catch (err) {
         console.error('Reprocess error:', err);
-        alert('재처리 요청 중 오류가 발생했습니다.');
+        showError('재처리 실패', '재처리 요청 중 오류가 발생했습니다.');
       } finally {
         setReprocessingId(null);
       }
@@ -187,11 +189,11 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
           }
           onUpdate();
         } else {
-          alert(result.error || '배치 해제에 실패했습니다.');
+          showError('배치 해제 실패', result.error || '배치 해제에 실패했습니다.');
         }
       } catch (err) {
         console.error('Unassign error:', err);
-        alert('배치 해제 중 오류가 발생했습니다.');
+        showError('배치 해제 실패', '배치 해제 중 오류가 발생했습니다.');
       } finally {
         setUnassigningId(null);
       }

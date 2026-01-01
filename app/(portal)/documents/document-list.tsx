@@ -10,6 +10,8 @@ import { deleteDocument, reprocessDocument, refreshDocumentStatus, type Document
 import { DocumentProgressModal } from '@/components/document-progress-modal';
 import { DocumentStatusBadge } from '@/components/ui/document-status-badge';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
+import { useToast } from '@/components/ui/toast';
+import { canReprocessDocument } from '@/lib/constants/document';
 
 interface DocumentListProps {
   documents: DocumentItem[];
@@ -22,6 +24,7 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [progressModalDocId, setProgressModalDocId] = useState<string | null>(null);
   const { confirm } = useAlertDialog();
+  const { error: showError } = useToast();
 
   // 처리 중인 문서 폴링
   useEffect(() => {
@@ -70,7 +73,7 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
       if (result.success) {
         setDocuments((prev) => prev.filter((d) => d.id !== documentId));
       } else {
-        alert(result.error || '삭제에 실패했습니다.');
+        showError('삭제 실패', result.error || '삭제에 실패했습니다.');
       }
 
       setDeletingId(null);
@@ -93,7 +96,7 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
           )
         );
       } else {
-        alert(result.error || '재처리 요청에 실패했습니다.');
+        showError('재처리 실패', result.error || '재처리 요청에 실패했습니다.');
       }
 
       setReprocessingId(null);

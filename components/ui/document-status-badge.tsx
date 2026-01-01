@@ -6,10 +6,12 @@
  */
 
 import { cn } from '@/lib/utils';
+import { isDocumentStalled } from '@/lib/constants/document';
 
 export type DocumentStatus =
   | 'uploaded'
   | 'processing'
+  | 'stalled'
   | 'chunked'
   | 'reviewing'
   | 'approved'
@@ -24,6 +26,8 @@ interface DocumentStatusBadgeProps {
   progressPercent?: number | null;
   /** 에러 메시지 (failed 상태일 때 아이콘 표시) */
   errorMessage?: string | null;
+  /** 마지막 업데이트 시각 (stalled 판단용) */
+  updatedAt?: string | null;
   /** 클릭 핸들러 */
   onClick?: () => void;
 }
@@ -39,6 +43,10 @@ const STATUS_CONFIG: Record<
   processing: {
     label: '처리중',
     className: 'bg-primary/10 text-primary',
+  },
+  stalled: {
+    label: '중단됨',
+    className: 'bg-orange-500/10 text-orange-500',
   },
   chunked: {
     label: '청킹완료',
@@ -60,10 +68,10 @@ const STATUS_CONFIG: Record<
 
 /**
  * 클릭 가능한 상태인지 확인
- * processing, uploaded, failed 상태에서 모달을 열 수 있음
+ * processing, stalled, uploaded, failed 상태에서 모달을 열 수 있음
  */
 export function isClickableStatus(status: string): boolean {
-  return ['processing', 'uploaded', 'failed'].includes(status);
+  return ['processing', 'stalled', 'uploaded', 'failed'].includes(status);
 }
 
 export function DocumentStatusBadge({
@@ -72,15 +80,20 @@ export function DocumentStatusBadge({
   clickable,
   progressPercent,
   errorMessage,
+  updatedAt,
   onClick,
 }: DocumentStatusBadgeProps) {
-  const config = STATUS_CONFIG[status as DocumentStatus] || {
+  // stalled 상태 감지: processing 상태에서 5분 이상 업데이트 없으면 stalled로 표시
+  const isStalled = isDocumentStalled(status, updatedAt);
+  const effectiveStatus = isStalled ? 'stalled' : status;
+
+  const config = STATUS_CONFIG[effectiveStatus as DocumentStatus] || {
     label: status,
     className: 'bg-muted text-muted-foreground',
   };
 
   // clickable이 명시되지 않으면 자동 감지
-  const isClickable = clickable ?? isClickableStatus(status);
+  const isClickable = clickable ?? isClickableStatus(effectiveStatus);
 
   return (
     <div
@@ -97,13 +110,24 @@ export function DocumentStatusBadge({
           isClickable && onClick && 'hover:ring-2 hover:ring-offset-1 hover:ring-primary/30',
           className
         )}
-        title={isClickable ? '클릭하여 처리 상태 보기' : (errorMessage || undefined)}
+        title={
+          isStalled
+            ? '처리가 중단되었습니다. 재시작하려면 클릭하세요.'
+            : isClickable
+              ? '클릭하여 처리 상태 보기'
+              : (errorMessage || undefined)
+        }
       >
         {config.label}
-        {status === 'processing' && progressPercent != null && (
+        {status === 'processing' && !isStalled && progressPercent != null && (
           <span className="ml-1">({progressPercent}%)</span>
         )}
       </span>
+      {isStalled && (
+        <span className="text-xs text-orange-500" title="서버 재시작 등으로 처리가 중단되었습니다">
+          ⏸️
+        </span>
+      )}
       {status === 'failed' && errorMessage && (
         <span className="text-xs text-destructive" title={errorMessage}>
           ⚠️

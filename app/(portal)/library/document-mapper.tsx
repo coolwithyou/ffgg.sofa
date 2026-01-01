@@ -8,6 +8,8 @@
 import { useState, useTransition } from 'react';
 import type { LibraryDocument, DatasetOption } from './actions';
 import { moveDocumentToDataset, duplicateDocumentToDataset } from './actions';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
+import { useToast } from '@/components/ui/toast';
 
 interface DocumentMapperProps {
   document: LibraryDocument | null;
@@ -20,6 +22,8 @@ export function DocumentMapper({ document, datasets, onSuccess }: DocumentMapper
     datasets.find((d) => d.isDefault)?.id || datasets[0]?.id || ''
   );
   const [isPending, startTransition] = useTransition();
+  const { confirm } = useAlertDialog();
+  const { success, error: showError, warning } = useToast();
 
   // 문서가 선택되지 않은 경우
   if (!document) {
@@ -39,15 +43,15 @@ export function DocumentMapper({ document, datasets, onSuccess }: DocumentMapper
   // 문서가 라이브러리에 있는지 (datasetId === null) 확인
   const isLibraryDocument = document.datasetId === null;
 
-  const handleAction = () => {
+  const handleAction = async () => {
     if (!targetDatasetId) {
-      alert('대상 데이터셋을 선택해주세요.');
+      warning('데이터셋 선택 필요', '대상 데이터셋을 선택해주세요.');
       return;
     }
 
     // 같은 데이터셋 선택 시 방지
     if (document.datasetId === targetDatasetId) {
-      alert('이미 해당 데이터셋에 속한 문서입니다.');
+      warning('동일 데이터셋', '이미 해당 데이터셋에 속한 문서입니다.');
       return;
     }
 
@@ -56,7 +60,14 @@ export function DocumentMapper({ document, datasets, onSuccess }: DocumentMapper
       ? `"${document.filename}"을(를) 선택한 데이터셋으로 이동하시겠습니까?`
       : `"${document.filename}"을(를) 선택한 데이터셋으로 복제하시겠습니까?\n(원본 문서는 그대로 유지됩니다)`;
 
-    if (!confirm(confirmMessage)) {
+    const confirmed = await confirm({
+      title: `문서 ${actionLabel}`,
+      message: confirmMessage,
+      confirmText: actionLabel,
+      cancelText: '취소',
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -65,19 +76,19 @@ export function DocumentMapper({ document, datasets, onSuccess }: DocumentMapper
         // 라이브러리 문서 → 이동
         const result = await moveDocumentToDataset(document.id, targetDatasetId);
         if (result.success) {
-          alert(`문서가 성공적으로 이동되었습니다.`);
+          success('이동 완료', '문서가 성공적으로 이동되었습니다.');
           onSuccess?.();
         } else {
-          alert(result.error || '이동에 실패했습니다.');
+          showError('이동 실패', result.error || '이동에 실패했습니다.');
         }
       } else {
         // 이미 배치된 문서 → 복제
         const result = await duplicateDocumentToDataset(document.id, targetDatasetId);
         if (result.success) {
-          alert(`문서가 성공적으로 복제되었습니다.\n(${result.copiedChunkCount}개 청크 복제됨)`);
+          success('복제 완료', `문서가 성공적으로 복제되었습니다. (${result.copiedChunkCount}개 청크 복제됨)`);
           onSuccess?.();
         } else {
-          alert(result.error || '복제에 실패했습니다.');
+          showError('복제 실패', result.error || '복제에 실패했습니다.');
         }
       }
     });

@@ -5,6 +5,7 @@
  */
 
 import { useState, useTransition } from 'react';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
 import type { OperatorListItem } from '../actions';
 import {
   updateOperatorRole,
@@ -27,6 +28,7 @@ export function OperatorTable({ operators, currentUserId, isSuperAdmin }: Operat
   const [actionTarget, setActionTarget] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { confirm } = useAlertDialog();
 
   const handleRoleChange = (operatorId: string, newRole: AdminRole) => {
     setError(null);
@@ -40,8 +42,15 @@ export function OperatorTable({ operators, currentUserId, isSuperAdmin }: Operat
     });
   };
 
-  const handleDeactivate = (operatorId: string) => {
-    if (!confirm('이 관리자를 비활성화하시겠습니까?')) return;
+  const handleDeactivate = async (operatorId: string) => {
+    const confirmed = await confirm({
+      title: '관리자 비활성화',
+      message: '이 관리자를 비활성화하시겠습니까?',
+      confirmText: '비활성화',
+      cancelText: '취소',
+    });
+    if (!confirmed) return;
+
     setError(null);
     setActionTarget(operatorId);
     startTransition(async () => {
@@ -65,8 +74,16 @@ export function OperatorTable({ operators, currentUserId, isSuperAdmin }: Operat
     });
   };
 
-  const handleDelete = (operatorId: string) => {
-    if (!confirm('이 관리자를 완전히 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+  const handleDelete = async (operatorId: string) => {
+    const confirmed = await confirm({
+      title: '관리자 삭제',
+      message: '이 관리자를 완전히 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
+      confirmText: '삭제',
+      cancelText: '취소',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
+
     setError(null);
     setActionTarget(operatorId);
     startTransition(async () => {
@@ -78,8 +95,15 @@ export function OperatorTable({ operators, currentUserId, isSuperAdmin }: Operat
     });
   };
 
-  const handleResetPassword = (operatorId: string) => {
-    if (!confirm('비밀번호를 초기화하시겠습니까? 임시 비밀번호가 생성됩니다.')) return;
+  const handleResetPassword = async (operatorId: string) => {
+    const confirmed = await confirm({
+      title: '비밀번호 초기화',
+      message: '비밀번호를 초기화하시겠습니까? 임시 비밀번호가 생성됩니다.',
+      confirmText: '초기화',
+      cancelText: '취소',
+    });
+    if (!confirmed) return;
+
     setError(null);
     setActionTarget(operatorId);
     startTransition(async () => {

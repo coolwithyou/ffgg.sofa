@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
 import { DocumentProgressModal } from '@/components/document-progress-modal';
 import { DocumentStatusBadge, isClickableStatus } from '@/components/ui/document-status-badge';
 
@@ -61,6 +62,7 @@ export function DocumentsTable() {
   const [reprocessing, setReprocessing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [progressModalDocId, setProgressModalDocId] = useState<string | null>(null);
+  const { confirm } = useAlertDialog();
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -142,7 +144,13 @@ export function DocumentsTable() {
   };
 
   const handleReprocessAll = async () => {
-    if (!confirm('모든 미처리/실패 문서를 재처리하시겠습니까?')) return;
+    const confirmed = await confirm({
+      title: '전체 재처리',
+      message: '모든 미처리/실패 문서를 재처리하시겠습니까?',
+      confirmText: '재처리',
+      cancelText: '취소',
+    });
+    if (!confirmed) return;
 
     setReprocessing(true);
     setMessage(null);

@@ -11,7 +11,7 @@ import { ReviewFilters, type FilterState } from './review-filters';
 import { ReviewActions } from './review-actions';
 import { StatusSummary } from './status-summary';
 import type { ChunkReviewItem, ChunkReviewItemWithMetrics, ChunkStatus } from '@/lib/review/types';
-
+import { useToast } from '@/components/ui/toast';
 // 메트릭 포함 여부에 따른 응답 타입
 type ChunkItem = ChunkReviewItem | ChunkReviewItemWithMetrics;
 
@@ -32,6 +32,7 @@ export function ReviewContent() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [isLoading, setIsLoading] = useState(true);
+  const { error: showError } = useToast();
 
   const [filters, setFilters] = useState<FilterState>({
     status: [],
@@ -171,7 +172,7 @@ export function ReviewContent() {
         setSelectedIds(new Set());
       } catch (error) {
         console.error('Bulk update error:', error);
-        alert('일괄 업데이트에 실패했습니다.');
+        showError('일괄 업데이트 실패', '선택한 항목들의 상태 변경에 실패했습니다.');
       }
     });
   };
@@ -197,7 +198,7 @@ export function ReviewContent() {
         );
       } catch (error) {
         console.error('Status change error:', error);
-        alert('상태 변경에 실패했습니다.');
+        showError('상태 변경 실패', '청크 상태 변경에 실패했습니다.');
       }
     });
   };

@@ -13,7 +13,7 @@ import { CategoryList } from './category-list';
 import { QAList } from './qa-list';
 import { FAQPreview } from './faq-preview';
 import { ExportModal } from './export-modal';
-
+import { useToast } from '@/components/ui/toast';
 // 데이터셋 타입
 interface Dataset {
   id: string;
@@ -28,6 +28,7 @@ interface FAQEditorProps {
 export function FAQEditor({ initialDrafts }: FAQEditorProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const { warning, error: showError } = useToast();
 
   // 현재 편집 중인 초안
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(
@@ -278,7 +279,7 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
 
       const draftId = currentDraftId;
       if (!draftId) {
-        alert('FAQ를 먼저 저장해주세요.');
+        warning('저장 필요', 'FAQ를 먼저 저장해주세요.');
         return;
       }
 
@@ -297,7 +298,7 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
         setLastSaved(new Date());
       } catch (error) {
         console.error('업로드 실패:', error);
-        alert(error instanceof Error ? error.message : '업로드에 실패했습니다.');
+        showError('업로드 실패', error instanceof Error ? error.message : '업로드에 실패했습니다.');
       } finally {
         setUploadingQAId(null);
       }
@@ -320,7 +321,7 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
         );
       } catch (error) {
         console.error('잠금 해제 실패:', error);
-        alert(error instanceof Error ? error.message : '잠금 해제에 실패했습니다.');
+        showError('잠금 해제 실패', error instanceof Error ? error.message : '잠금 해제에 실패했습니다.');
       }
     },
     [currentDraftId, qaPairs]

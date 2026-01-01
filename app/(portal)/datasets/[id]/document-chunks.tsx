@@ -8,6 +8,8 @@
 
 import { useState, useEffect, useTransition, useMemo } from 'react';
 import { ChevronDown, ChevronUp, Eye, EyeOff, Trash2, Search, X } from 'lucide-react';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
+import { useToast } from '@/components/ui/toast';
 
 interface ChunkItem {
   id: string;
@@ -38,6 +40,8 @@ export function DocumentChunks({ documentId, onChunkUpdate, showSearch = false }
   const [isPending, startTransition] = useTransition();
   const [processingChunkId, setProcessingChunkId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const { confirm } = useAlertDialog();
+  const { error: showError } = useToast();
 
   useEffect(() => {
     fetchChunks();
@@ -87,7 +91,7 @@ export function DocumentChunks({ documentId, onChunkUpdate, showSearch = false }
 
         onChunkUpdate?.();
       } catch (err) {
-        alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+        showError('상태 변경 실패', err instanceof Error ? err.message : '오류가 발생했습니다.');
       } finally {
         setProcessingChunkId(null);
       }
@@ -95,9 +99,15 @@ export function DocumentChunks({ documentId, onChunkUpdate, showSearch = false }
   };
 
   const handleDelete = async (chunkId: string) => {
-    if (!confirm('이 청크를 삭제하시겠습니까? 삭제된 청크는 복구할 수 없습니다.')) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: '청크 삭제',
+      message: '이 청크를 삭제하시겠습니까? 삭제된 청크는 복구할 수 없습니다.',
+      confirmText: '삭제',
+      cancelText: '취소',
+      variant: 'destructive',
+    });
+
+    if (!confirmed) return;
 
     setProcessingChunkId(chunkId);
 
@@ -115,7 +125,7 @@ export function DocumentChunks({ documentId, onChunkUpdate, showSearch = false }
         setChunks((prev) => prev.filter((chunk) => chunk.id !== chunkId));
         onChunkUpdate?.();
       } catch (err) {
-        alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+        showError('삭제 실패', err instanceof Error ? err.message : '오류가 발생했습니다.');
       } finally {
         setProcessingChunkId(null);
       }

@@ -6,6 +6,8 @@
 
 import { useState } from 'react';
 import { Settings, Sparkles, Search, Check, RotateCcw } from 'lucide-react';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
+import { useToast } from '@/components/ui/toast';
 
 interface LlmConfig {
   temperature?: number;
@@ -43,6 +45,8 @@ export function LlmSettings({
   onUpdate,
 }: LlmSettingsProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const { confirm } = useAlertDialog();
+  const { success } = useToast();
 
   // LLM 설정 상태
   const [temperature, setTemperature] = useState(
@@ -84,7 +88,7 @@ export function LlmSettings({
 
       if (response.ok) {
         onUpdate();
-        alert('설정이 저장되었습니다');
+        success('저장 완료', '설정이 저장되었습니다');
       }
     } catch (err) {
       console.error('Save error:', err);
@@ -93,8 +97,15 @@ export function LlmSettings({
     }
   };
 
-  const handleReset = () => {
-    if (!confirm('설정을 기본값으로 초기화하시겠습니까?')) return;
+  const handleReset = async () => {
+    const confirmed = await confirm({
+      title: '설정 초기화',
+      message: '설정을 기본값으로 초기화하시겠습니까?',
+      confirmText: '초기화',
+      cancelText: '취소',
+    });
+
+    if (!confirmed) return;
 
     setTemperature(DEFAULT_LLM_CONFIG.temperature);
     setMaxTokens(DEFAULT_LLM_CONFIG.maxTokens);

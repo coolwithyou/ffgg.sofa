@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Settings,
 } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 
 interface KakaoData {
   enabled: boolean;
@@ -50,6 +51,8 @@ export function KakaoSettings({
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const { success, error: showError, warning } = useToast();
+
   // 설정 폼 상태
   const [botId, setBotId] = useState('');
   const [fallbackMessage, setFallbackMessage] = useState('');
@@ -85,7 +88,7 @@ export function KakaoSettings({
 
     // 활성화 시 봇 ID 필요
     if (!kakao.enabled && !botId) {
-      alert('카카오 봇 ID를 입력해주세요.');
+      warning('입력 필요', '카카오 봇 ID를 입력해주세요.');
       return;
     }
 
@@ -105,7 +108,7 @@ export function KakaoSettings({
         onUpdate();
       } else {
         const data = await response.json();
-        alert(data.error || '오류가 발생했습니다');
+        showError('카카오 설정 오류', data.error || '오류가 발생했습니다.');
       }
     } catch (err) {
       console.error('Toggle error:', err);
@@ -128,7 +131,7 @@ export function KakaoSettings({
 
       if (response.ok) {
         await fetchKakao();
-        alert('설정이 저장되었습니다');
+        success('저장 완료', '카카오 설정이 저장되었습니다.');
       }
     } catch (err) {
       console.error('Save error:', err);

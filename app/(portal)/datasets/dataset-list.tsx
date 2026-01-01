@@ -7,6 +7,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { FolderOpen, FileText, MoreVertical, Pencil, Trash2, Star } from 'lucide-react';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
+import { useToast } from '@/components/ui/toast';
 import type { DatasetSummary } from './actions';
 import { deleteDataset, updateDataset, setDefaultDataset } from './actions';
 
@@ -21,6 +23,8 @@ export function DatasetList({ datasets }: DatasetListProps) {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSettingDefault, setIsSettingDefault] = useState(false);
+  const { confirm } = useAlertDialog();
+  const { error } = useToast();
 
   const handleEdit = (dataset: DatasetSummary) => {
     setEditingId(dataset.id);
@@ -40,14 +44,20 @@ export function DatasetList({ datasets }: DatasetListProps) {
     if (result.success) {
       setEditingId(null);
     } else {
-      alert(result.error);
+      error('저장 실패', result.error);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('이 데이터셋을 삭제하시겠습니까? 연결된 모든 문서와 청크도 함께 삭제됩니다.')) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: '데이터셋 삭제',
+      message: '이 데이터셋을 삭제하시겠습니까? 연결된 모든 문서와 청크도 함께 삭제됩니다.',
+      confirmText: '삭제',
+      cancelText: '취소',
+      variant: 'destructive',
+    });
+
+    if (!confirmed) return;
 
     setIsDeleting(true);
     const result = await deleteDataset(id);
@@ -55,7 +65,7 @@ export function DatasetList({ datasets }: DatasetListProps) {
     setMenuOpenId(null);
 
     if (!result.success) {
-      alert(result.error);
+      error('삭제 실패', result.error);
     }
   };
 
@@ -66,7 +76,7 @@ export function DatasetList({ datasets }: DatasetListProps) {
     setMenuOpenId(null);
 
     if (!result.success) {
-      alert(result.error);
+      error('설정 실패', result.error);
     }
   };
 

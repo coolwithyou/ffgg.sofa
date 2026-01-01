@@ -17,6 +17,12 @@ function SignupForm() {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(1);
 
+  // Step 1에서 입력한 값들을 저장 (Step 2에서 DOM에서 제거되어도 유지)
+  const [step1Data, setStep1Data] = useState({
+    email: '',
+    password: '',
+  });
+
   // 비밀번호 복잡성 검증 함수
   function validatePassword(password: string): { valid: boolean; message: string } {
     if (password.length < 8) {
@@ -66,6 +72,8 @@ function SignupForm() {
       return;
     }
 
+    // Step 1 데이터를 상태에 저장
+    setStep1Data({ email, password });
     setError(null);
     setStep(2);
   }
@@ -84,30 +92,17 @@ function SignupForm() {
       return;
     }
 
+    // Step 1 데이터는 상태에서, Step 2 데이터는 FormData에서 가져옴
     const data = {
       companyName: formData.get('companyName') as string,
-      email: formData.get('email') as string,
-      password: formData.get('password') as string,
-      passwordConfirm: formData.get('passwordConfirm') as string,
+      email: step1Data.email,
+      password: step1Data.password,
       contactName: formData.get('contactName') as string,
       contactPhone: formData.get('contactPhone') as string,
       plan,
       agreedToTerms,
       agreedToPrivacy,
     };
-
-    // 비밀번호 확인
-    if (data.password !== data.passwordConfirm) {
-      setError('비밀번호가 일치하지 않습니다.');
-      return;
-    }
-
-    // 비밀번호 복잡성 검사
-    const passwordValidation = validatePassword(data.password);
-    if (!passwordValidation.valid) {
-      setError(passwordValidation.message);
-      return;
-    }
 
     startTransition(async () => {
       try {

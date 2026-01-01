@@ -10,6 +10,7 @@ import { db, documents, datasets, chunks } from '@/lib/db';
 import { eq, desc, count, sql } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import { revalidatePath } from 'next/cache';
+import { canReprocessDocument } from '@/lib/constants/document';
 
 export interface DocumentItem {
   id: string;
@@ -20,6 +21,8 @@ export interface DocumentItem {
   progressPercent: number | null;
   errorMessage: string | null;
   createdAt: string;
+  /** 마지막 업데이트 시각 (stalled 판단용) */
+  updatedAt: string | null;
   /** 할당된 데이터셋 이름 (null이면 라이브러리) */
   datasetName: string | null;
   /** 청크 수 */
@@ -48,6 +51,7 @@ export async function getDocuments(): Promise<DocumentItem[]> {
         progressPercent: documents.progressPercent,
         errorMessage: documents.errorMessage,
         createdAt: documents.createdAt,
+        updatedAt: documents.updatedAt,
         datasetName: datasets.name,
       })
       .from(documents)
@@ -78,6 +82,7 @@ export async function getDocuments(): Promise<DocumentItem[]> {
       progressPercent: d.progressPercent,
       errorMessage: d.errorMessage,
       createdAt: d.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: d.updatedAt?.toISOString() || null,
       datasetName: d.datasetName,
       chunkCount: chunkCountMap.get(d.id) || 0,
     }));
@@ -142,6 +147,7 @@ export async function reprocessDocument(documentId: string): Promise<{ success: 
         fileType: true,
         filePath: true,
         status: true,
+        updatedAt: true,
       },
     });
 
@@ -149,9 +155,9 @@ export async function reprocessDocument(documentId: string): Promise<{ success: 
       return { success: false, error: '문서를 찾을 수 없습니다.' };
     }
 
-    // 재처리 가능한 상태 확인
-    if (!['uploaded', 'failed'].includes(doc.status || '')) {
-      return { success: false, error: '재처리할 수 없는 상태입니다.' };
+    // 재처리 가능한 상태 확인 (uploaded, failed, 또는 stalled)
+    if (!canReprocessDocument(doc.status || '', doc.updatedAt)) {
+      return { success: false, error: '재처리할 수 없는 상태입니다. 현재 처리가 진행 중입니다.' };
     }
 
     // 문서 상태 리셋
@@ -201,6 +207,7 @@ export async function refreshDocumentStatus(documentId: string): Promise<{
   status: string;
   progressPercent: number | null;
   errorMessage: string | null;
+  updatedAt: string | null;
 } | null> {
   const session = await validateSession();
 
@@ -215,6 +222,7 @@ export async function refreshDocumentStatus(documentId: string): Promise<{
         status: true,
         progressPercent: true,
         errorMessage: true,
+        updatedAt: true,
         tenantId: true,
       },
     });
@@ -227,6 +235,7 @@ export async function refreshDocumentStatus(documentId: string): Promise<{
       status: doc.status || 'uploaded',
       progressPercent: doc.progressPercent,
       errorMessage: doc.errorMessage,
+      updatedAt: doc.updatedAt?.toISOString() || null,
     };
   } catch (error) {
     logger.error('Failed to refresh document status', error as Error, { documentId });

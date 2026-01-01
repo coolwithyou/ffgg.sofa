@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { AlertTriangle, AlertCircle, Info, ChevronDown, ChevronUp, Wrench, Loader2 } from 'lucide-react';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
 
 export interface IntegrityIssues {
   emptyContent: number;
@@ -47,6 +48,7 @@ export function IntegrityAlertBanner({
   const [isLoading, setIsLoading] = useState(false);
   const [isFixing, setIsFixing] = useState(false);
   const [fixResult, setFixResult] = useState<string | null>(null);
+  const { confirm } = useAlertDialog();
 
   const issueItems: {
     key: keyof IntegrityIssues;
@@ -124,12 +126,25 @@ export function IntegrityAlertBanner({
   };
 
   const handleFix = async (action: 'fixDatasetId' | 'fixMissingEmbedding') => {
-    const confirmMessages = {
-      fixDatasetId: 'datasetId를 동기화하시겠습니까? 이 작업은 청크의 datasetId를 문서의 datasetId로 업데이트합니다.',
-      fixMissingEmbedding: '임베딩을 재생성하시겠습니까? 누락된 임베딩이 있는 청크에 대해 임베딩을 생성합니다. 청크 수에 따라 시간이 걸릴 수 있습니다.',
+    const confirmConfig = {
+      fixDatasetId: {
+        title: 'datasetId 동기화',
+        message: 'datasetId를 동기화하시겠습니까? 이 작업은 청크의 datasetId를 문서의 datasetId로 업데이트합니다.',
+      },
+      fixMissingEmbedding: {
+        title: '임베딩 재생성',
+        message: '임베딩을 재생성하시겠습니까? 누락된 임베딩이 있는 청크에 대해 임베딩을 생성합니다. 청크 수에 따라 시간이 걸릴 수 있습니다.',
+      },
     };
 
-    if (!confirm(confirmMessages[action])) {
+    const confirmed = await confirm({
+      title: confirmConfig[action].title,
+      message: confirmConfig[action].message,
+      confirmText: '수정',
+      cancelText: '취소',
+    });
+
+    if (!confirmed) {
       return;
     }
 

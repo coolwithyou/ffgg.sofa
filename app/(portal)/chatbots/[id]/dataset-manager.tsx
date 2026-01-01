@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { Database, Plus, Unlink, FileText, Layers } from 'lucide-react';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
 
 interface LinkedDataset {
   id: string;
@@ -39,6 +40,7 @@ export function DatasetManager({
   const [isLinking, setIsLinking] = useState(false);
   const [selectedDatasetId, setSelectedDatasetId] = useState('');
   const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
+  const { confirm } = useAlertDialog();
 
   useEffect(() => {
     fetchAvailableDatasets();
@@ -84,7 +86,14 @@ export function DatasetManager({
   };
 
   const handleUnlink = async (datasetId: string) => {
-    if (!confirm('이 데이터셋 연결을 해제하시겠습니까?')) return;
+    const confirmed = await confirm({
+      title: '데이터셋 연결 해제',
+      message: '이 데이터셋 연결을 해제하시겠습니까?',
+      confirmText: '연결 해제',
+      cancelText: '취소',
+    });
+
+    if (!confirmed) return;
 
     setUnlinkingId(datasetId);
     try {

@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
 
 interface Session {
   id: string;
@@ -20,6 +21,7 @@ export function ActiveSessions() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const { confirm } = useAlertDialog();
 
   useEffect(() => {
     fetchSessions();
@@ -67,9 +69,15 @@ export function ActiveSessions() {
   };
 
   const logoutAllSessions = async () => {
-    if (!confirm('현재 세션을 포함한 모든 세션에서 로그아웃됩니다. 계속하시겠습니까?')) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: '전체 로그아웃',
+      message: '현재 세션을 포함한 모든 세션에서 로그아웃됩니다. 계속하시겠습니까?',
+      confirmText: '로그아웃',
+      cancelText: '취소',
+      variant: 'destructive',
+    });
+
+    if (!confirmed) return;
 
     try {
       setActionLoading('all');

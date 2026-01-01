@@ -7,6 +7,8 @@
 import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
+import { useToast } from '@/components/ui/toast';
 import type { ChunkReviewItem, ChunkStatus } from '@/lib/review/types';
 
 interface ChunkDetailProps {
@@ -21,6 +23,8 @@ export function ChunkDetail({ chunkId }: ChunkDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [isPending, startTransition] = useTransition();
+  const { confirm } = useAlertDialog();
+  const { error: showError } = useToast();
 
   // 청크 조회
   useEffect(() => {
@@ -67,7 +71,7 @@ export function ChunkDetail({ chunkId }: ChunkDetailProps) {
         const data = await response.json();
         setChunk(data.chunk);
       } catch (err) {
-        alert('상태 변경에 실패했습니다.');
+        showError('상태 변경 실패', '상태 변경에 실패했습니다.');
       }
     });
   };
@@ -95,14 +99,22 @@ export function ChunkDetail({ chunkId }: ChunkDetailProps) {
         setChunk(data.chunk);
         setIsEditing(false);
       } catch (err) {
-        alert('저장에 실패했습니다.');
+        showError('저장 실패', '저장에 실패했습니다.');
       }
     });
   };
 
   // 삭제
   const handleDelete = async () => {
-    if (!confirm('이 청크를 삭제하시겠습니까?')) return;
+    const confirmed = await confirm({
+      title: '청크 삭제',
+      message: '이 청크를 삭제하시겠습니까?',
+      confirmText: '삭제',
+      cancelText: '취소',
+      variant: 'destructive',
+    });
+
+    if (!confirmed) return;
 
     startTransition(async () => {
       try {
@@ -116,7 +128,7 @@ export function ChunkDetail({ chunkId }: ChunkDetailProps) {
 
         router.push('/review');
       } catch (err) {
-        alert('삭제에 실패했습니다.');
+        showError('삭제 실패', '삭제에 실패했습니다.');
       }
     });
   };

@@ -160,20 +160,20 @@ interface ToastItemProps {
 function ToastItem({ toast, onRemove }: ToastItemProps) {
   const config: Record<ToastType, { bg: string; icon: ReactNode }> = {
     success: {
-      bg: 'bg-green-50 border-green-200',
+      bg: 'bg-green-500/10 border-green-500/20',
       icon: <CheckIcon className="h-5 w-5 text-green-500" />,
     },
     error: {
-      bg: 'bg-red-50 border-red-200',
-      icon: <XCircleIcon className="h-5 w-5 text-red-500" />,
+      bg: 'bg-destructive/10 border-destructive/20',
+      icon: <XCircleIcon className="h-5 w-5 text-destructive" />,
     },
     warning: {
-      bg: 'bg-yellow-50 border-yellow-200',
+      bg: 'bg-yellow-500/10 border-yellow-500/20',
       icon: <WarningIcon className="h-5 w-5 text-yellow-500" />,
     },
     info: {
-      bg: 'bg-blue-50 border-blue-200',
-      icon: <InfoIcon className="h-5 w-5 text-blue-500" />,
+      bg: 'bg-primary/10 border-primary/20',
+      icon: <InfoIcon className="h-5 w-5 text-primary" />,
     },
   };
 
@@ -186,14 +186,14 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
     >
       {icon}
       <div className="flex-1">
-        <p className="font-medium text-gray-900">{toast.title}</p>
+        <p className="font-medium text-foreground">{toast.title}</p>
         {toast.message && (
-          <p className="mt-1 text-sm text-gray-600">{toast.message}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{toast.message}</p>
         )}
       </div>
       <button
         onClick={() => onRemove(toast.id)}
-        className="text-gray-400 hover:text-gray-600"
+        className="text-muted-foreground hover:text-foreground"
         aria-label="닫기"
       >
         <XIcon className="h-4 w-4" />

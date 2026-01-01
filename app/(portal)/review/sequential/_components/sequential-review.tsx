@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback, useTransition } from 'react';
 import Link from 'next/link';
 import type { ChunkReviewItem, ChunkStatus } from '@/lib/review/types';
-
+import { useToast } from '@/components/ui/toast';
 interface ReviewStats {
   total: number;
   reviewed: number;
@@ -22,6 +22,7 @@ export function SequentialReview() {
   const [history, setHistory] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
+  const { error: showError } = useToast();
 
   // 다음 청크 가져오기
   const fetchNextChunk = useCallback(async (currentChunkId?: string) => {
@@ -100,7 +101,7 @@ export function SequentialReview() {
         await fetchStats();
       } catch (error) {
         console.error('Error updating chunk:', error);
-        alert('상태 변경에 실패했습니다.');
+        showError('상태 변경 실패', '청크 상태 변경에 실패했습니다.');
       }
     });
   }, [chunk, fetchNextChunk, fetchStats]);

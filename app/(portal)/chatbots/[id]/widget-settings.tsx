@@ -14,6 +14,7 @@ import {
   Palette,
   MessageSquare,
 } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 
 interface WidgetData {
   enabled: boolean;
@@ -45,6 +46,8 @@ export function WidgetSettings({
   const [isToggling, setIsToggling] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const { success, error: showError } = useToast();
 
   // 설정 폼 상태
   const [primaryColor, setPrimaryColor] = useState('#3B82F6');
@@ -96,7 +99,7 @@ export function WidgetSettings({
         onUpdate();
       } else {
         const data = await response.json();
-        alert(data.error || '오류가 발생했습니다');
+        showError('위젯 설정 오류', data.error || '오류가 발생했습니다.');
       }
     } catch (err) {
       console.error('Toggle error:', err);
@@ -121,7 +124,7 @@ export function WidgetSettings({
 
       if (response.ok) {
         await fetchWidget();
-        alert('설정이 저장되었습니다');
+        success('저장 완료', '위젯 설정이 저장되었습니다.');
       }
     } catch (err) {
       console.error('Save error:', err);

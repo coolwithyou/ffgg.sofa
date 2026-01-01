@@ -18,6 +18,8 @@ import {
   Power,
   PowerOff,
 } from 'lucide-react';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
+import { useToast } from '@/components/ui/toast';
 import type { ChatbotSummary } from './actions';
 import { deleteChatbot, updateChatbot } from './actions';
 
@@ -31,6 +33,8 @@ export function ChatbotList({ chatbots }: ChatbotListProps) {
   const [editDescription, setEditDescription] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const { confirm } = useAlertDialog();
+  const { error } = useToast();
 
   const handleEdit = (chatbot: ChatbotSummary) => {
     setEditingId(chatbot.id);
@@ -50,7 +54,7 @@ export function ChatbotList({ chatbots }: ChatbotListProps) {
     if (result.success) {
       setEditingId(null);
     } else {
-      alert(result.error);
+      error('저장 실패', result.error);
     }
   };
 
@@ -59,15 +63,21 @@ export function ChatbotList({ chatbots }: ChatbotListProps) {
     const result = await updateChatbot(chatbot.id, { status: newStatus });
 
     if (!result.success) {
-      alert(result.error);
+      error('상태 변경 실패', result.error);
     }
     setMenuOpenId(null);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('이 챗봇을 삭제하시겠습니까?')) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: '챗봇 삭제',
+      message: '이 챗봇을 삭제하시겠습니까?',
+      confirmText: '삭제',
+      cancelText: '취소',
+      variant: 'destructive',
+    });
+
+    if (!confirmed) return;
 
     setIsDeleting(true);
     const result = await deleteChatbot(id);
@@ -75,7 +85,7 @@ export function ChatbotList({ chatbots }: ChatbotListProps) {
     setMenuOpenId(null);
 
     if (!result.success) {
-      alert(result.error);
+      error('삭제 실패', result.error);
     }
   };
 

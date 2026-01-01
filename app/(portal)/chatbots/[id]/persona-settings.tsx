@@ -7,6 +7,8 @@
 
 import { useState, useEffect } from 'react';
 import { User, Check, RotateCcw, Sparkles, Plus, X } from 'lucide-react';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
+import { useToast } from '@/components/ui/toast';
 
 interface PersonaConfig {
   name?: string;
@@ -41,6 +43,8 @@ export function PersonaSettings({ chatbotId, onUpdate }: PersonaSettingsProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const { confirm } = useAlertDialog();
+  const { success, error: showError } = useToast();
 
   // 페르소나 상태
   const [name, setName] = useState(DEFAULT_PERSONA.name!);
@@ -102,21 +106,28 @@ export function PersonaSettings({ chatbotId, onUpdate }: PersonaSettingsProps) {
 
       if (response.ok) {
         onUpdate();
-        alert('페르소나 설정이 저장되었습니다');
+        success('저장 완료', '페르소나 설정이 저장되었습니다');
       } else {
         const data = await response.json();
-        alert(data.error || '저장에 실패했습니다');
+        showError('저장 실패', data.error || '저장에 실패했습니다');
       }
     } catch (err) {
       console.error('Save error:', err);
-      alert('저장 중 오류가 발생했습니다');
+      showError('저장 실패', '저장 중 오류가 발생했습니다');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleReset = () => {
-    if (!confirm('페르소나 설정을 기본값으로 초기화하시겠습니까?')) return;
+  const handleReset = async () => {
+    const confirmed = await confirm({
+      title: '설정 초기화',
+      message: '페르소나 설정을 기본값으로 초기화하시겠습니까?',
+      confirmText: '초기화',
+      cancelText: '취소',
+    });
+
+    if (!confirmed) return;
 
     setName(DEFAULT_PERSONA.name!);
     setExpertiseArea(DEFAULT_PERSONA.expertiseArea!);
@@ -176,11 +187,11 @@ export function PersonaSettings({ chatbotId, onUpdate }: PersonaSettingsProps) {
         setGeneratedKeywords(data.persona.keywords || []);
         setGeneratedConfidence(data.persona.confidence || null);
       } else {
-        alert(data.error || '페르소나 생성에 실패했습니다');
+        showError('생성 실패', data.error || '페르소나 생성에 실패했습니다');
       }
     } catch (err) {
       console.error('Generate error:', err);
-      alert('페르소나 생성 중 오류가 발생했습니다');
+      showError('생성 실패', '페르소나 생성 중 오류가 발생했습니다');
     } finally {
       setIsGenerating(false);
     }
