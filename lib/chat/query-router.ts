@@ -32,17 +32,17 @@ export interface RouterConfig {
   chitchatThreshold: number;
   /** OUT_OF_SCOPE로 처리할 최소 confidence (기본: 0.85) */
   outOfScopeThreshold: number;
-  /** RAG 결과로 재검증할 최소 score (기본: 0.7) */
+  /** RAG 결과로 재검증할 최소 Dense score (기본: 0.5) */
   ragReverifyThreshold: number;
-  /** RAG 결과가 낮으면 거절할 score 기준 (기본: 0.5) */
+  /** RAG 결과가 낮으면 거절할 Dense score 기준 (기본: 0.3) */
   ragDeclineThreshold: number;
 }
 
 const DEFAULT_ROUTER_CONFIG: RouterConfig = {
   chitchatThreshold: 0.85,
   outOfScopeThreshold: 0.85,
-  ragReverifyThreshold: 0.7,
-  ragDeclineThreshold: 0.5,
+  ragReverifyThreshold: 0.5,  // Dense 점수 0.5 이상이면 OUT_OF_SCOPE → DOMAIN_QUERY로 재분류
+  ragDeclineThreshold: 0.3,   // Dense 점수 0.3 미만이면 "정보 없음" 응답
 };
 
 // ============================================================================
