@@ -7,7 +7,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { isDocumentStalled } from '@/lib/constants/document';
+import { isDocumentStalled, getReprocessType } from '@/lib/constants/document';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
 
 interface ProcessingLog {
   id: string;
@@ -28,6 +29,7 @@ interface DocumentInfo {
   progressPercent: number | null;
   errorMessage: string | null;
   updatedAt: string | null;
+  chunkCount: number;
 }
 
 interface DocumentProgressModalProps {
@@ -56,6 +58,7 @@ export function DocumentProgressModal({
   const [logs, setLogs] = useState<ProcessingLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { confirm } = useAlertDialog();
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -117,6 +120,39 @@ export function DocumentProgressModal({
   const isFailed = document?.status === 'failed';
   const isStalled = isDocumentStalled(document?.status || '', document?.updatedAt);
   const isProcessing = ['uploaded', 'processing'].includes(document?.status || '') && !isStalled;
+  const isReviewing = document?.status === 'reviewing';
+  const canReprocess = isFailed || isStalled || isReviewing;
+
+  // 재처리 버튼 클릭 핸들러
+  const handleReprocessClick = async () => {
+    if (!document) return;
+
+    const reprocessType = getReprocessType(
+      document.status,
+      document.chunkCount ?? 0,
+      document.updatedAt
+    );
+
+    if (reprocessType === 'not_allowed') {
+      return;
+    }
+
+    // 파괴적 재처리인 경우 경고 다이얼로그 표시
+    if (reprocessType === 'destructive') {
+      const confirmed = await confirm({
+        title: '⚠️ 기존 청크 삭제 경고',
+        message: `이 문서에는 ${document.chunkCount}개의 청크가 있습니다.\n\n재처리하면 기존 청크가 모두 삭제되고 새로 생성됩니다. 이 작업은 되돌릴 수 없습니다.\n\n계속하시겠습니까?`,
+        confirmText: '삭제 후 재처리',
+        cancelText: '취소',
+        variant: 'destructive',
+      });
+
+      if (!confirmed) return;
+    }
+
+    onReprocess?.();
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -259,16 +295,15 @@ export function DocumentProgressModal({
 
         {/* 푸터 */}
         <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
-          {(isFailed || isStalled) && onReprocess && (
+          {canReprocess && onReprocess && (
             <button
-              onClick={() => {
-                onReprocess();
-                onClose();
-              }}
+              onClick={handleReprocessClick}
               className={`rounded-lg px-4 py-2 text-sm font-medium ${
                 isStalled
                   ? 'bg-orange-500 text-white hover:bg-orange-600'
-                  : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  : isReviewing
+                    ? 'bg-yellow-500 text-white hover:bg-yellow-600'
+                    : 'bg-primary text-primary-foreground hover:bg-primary/90'
               }`}
             >
               재처리

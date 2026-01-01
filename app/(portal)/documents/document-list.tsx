@@ -18,7 +18,7 @@ import { DocumentProgressModal } from '@/components/document-progress-modal';
 import { DocumentStatusBadge } from '@/components/ui/document-status-badge';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
 import { useToast } from '@/components/ui/toast';
-import { canReprocessDocument } from '@/lib/constants/document';
+import { canReprocessDocument, getReprocessType } from '@/lib/constants/document';
 
 interface DocumentListProps {
   initialData: GetDocumentsResult;
@@ -98,17 +98,36 @@ export function DocumentList({ initialData }: DocumentListProps) {
     });
   };
 
-  const handleReprocess = async (documentId: string) => {
-    setReprocessingId(documentId);
+  const handleReprocess = async (doc: DocumentItem) => {
+    const reprocessType = getReprocessType(doc.status, doc.chunkCount, doc.updatedAt);
+
+    if (reprocessType === 'not_allowed') {
+      return;
+    }
+
+    // 파괴적 재처리인 경우 경고 다이얼로그 표시
+    if (reprocessType === 'destructive') {
+      const confirmed = await confirm({
+        title: '⚠️ 기존 청크 삭제 경고',
+        message: `이 문서에는 ${doc.chunkCount}개의 청크가 있습니다.\n\n재처리하면 기존 청크가 모두 삭제되고 새로 생성됩니다. 이 작업은 되돌릴 수 없습니다.\n\n계속하시겠습니까?`,
+        confirmText: '삭제 후 재처리',
+        cancelText: '취소',
+        variant: 'destructive',
+      });
+
+      if (!confirmed) return;
+    }
+
+    setReprocessingId(doc.id);
 
     startTransition(async () => {
-      const result = await reprocessDocument(documentId);
+      const result = await reprocessDocument(doc.id);
 
       if (result.success) {
         // 상태를 processing으로 업데이트
         setDocuments((prev) =>
           prev.map((d) =>
-            d.id === documentId
+            d.id === doc.id
               ? { ...d, status: 'processing', progressPercent: 0, errorMessage: null }
               : d
           )
@@ -231,10 +250,10 @@ export function DocumentList({ initialData }: DocumentListProps) {
                 onClick={() => setProgressModalDocId(doc.id)}
               />
 
-              {/* 재처리 버튼 - uploaded, failed, 또는 stalled 상태에서 표시 */}
+              {/* 재처리 버튼 - uploaded, failed, reviewing, 또는 stalled 상태에서 표시 */}
               {canReprocessDocument(doc.status, doc.updatedAt) && (
                 <button
-                  onClick={() => handleReprocess(doc.id)}
+                  onClick={() => handleReprocess(doc)}
                   disabled={isPending || reprocessingId === doc.id}
                   className="rounded p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50"
                   title="재처리"
@@ -296,7 +315,10 @@ export function DocumentList({ initialData }: DocumentListProps) {
           documentId={progressModalDocId}
           isOpen={true}
           onClose={() => setProgressModalDocId(null)}
-          onReprocess={() => handleReprocess(progressModalDocId)}
+          onReprocess={() => {
+            const doc = documents.find((d) => d.id === progressModalDocId);
+            if (doc) handleReprocess(doc);
+          }}
         />
       )}
     </>

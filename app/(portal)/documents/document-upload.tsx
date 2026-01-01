@@ -214,21 +214,22 @@ export function DocumentUpload() {
         throw new Error(error.error || '업로드에 실패했습니다.');
       }
 
-      setUploadState({
-        status: 'success',
-        progress: 100,
-        message: '업로드가 완료되었습니다.',
-      });
+      const result = await response.json();
+      const documentId = result.data?.id;
+
+      // 상태 초기화
+      setUploadState({ status: 'idle', progress: 0 });
+      setSelectedFile(null);
+      setPreviewData(null);
+
+      // 문서 처리 상태 모달 표시
+      if (documentId) {
+        setUploadedDocumentId(documentId);
+        setShowProgressModal(true);
+      }
 
       // 페이지 새로고침하여 목록 갱신
       router.refresh();
-
-      // 3초 후 상태 초기화
-      setTimeout(() => {
-        setUploadState({ status: 'idle', progress: 0 });
-        setSelectedFile(null);
-        setPreviewData(null);
-      }, 3000);
     } catch (error) {
       setUploadState({
         status: 'error',
@@ -244,6 +245,12 @@ export function DocumentUpload() {
     setPreviewData(null);
     setUploadState({ status: 'idle', progress: 0 });
   }, []);
+
+  const handleCloseProgressModal = useCallback(() => {
+    setShowProgressModal(false);
+    setUploadedDocumentId(null);
+    router.refresh(); // 모달 닫을 때 목록 갱신
+  }, [router]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -491,6 +498,15 @@ export function DocumentUpload() {
         filename={selectedFile?.name || ''}
         isUploading={uploadState.status === 'uploading'}
       />
+
+      {/* 처리 상태 모달 */}
+      {uploadedDocumentId && (
+        <DocumentProgressModal
+          documentId={uploadedDocumentId}
+          isOpen={showProgressModal}
+          onClose={handleCloseProgressModal}
+        />
+      )}
     </>
   );
 }
