@@ -6,8 +6,8 @@
  */
 
 import { validateSession } from '@/lib/auth';
-import { db, documents } from '@/lib/db';
-import { eq, desc } from 'drizzle-orm';
+import { db, documents, datasets, chunks } from '@/lib/db';
+import { eq, desc, count, sql } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import { revalidatePath } from 'next/cache';
 
@@ -20,6 +20,10 @@ export interface DocumentItem {
   progressPercent: number | null;
   errorMessage: string | null;
   createdAt: string;
+  /** 할당된 데이터셋 이름 (null이면 라이브러리) */
+  datasetName: string | null;
+  /** 청크 수 */
+  chunkCount: number;
 }
 
 /**
@@ -33,6 +37,16 @@ export async function getDocuments(): Promise<DocumentItem[]> {
   }
 
   try {
+    // 청크 수 서브쿼리
+    const chunkCountSubquery = db
+      .select({
+        documentId: chunks.documentId,
+        count: count().as('chunk_count'),
+      })
+      .from(chunks)
+      .groupBy(chunks.documentId)
+      .as('chunk_counts');
+
     const docs = await db
       .select({
         id: documents.id,
@@ -43,8 +57,12 @@ export async function getDocuments(): Promise<DocumentItem[]> {
         progressPercent: documents.progressPercent,
         errorMessage: documents.errorMessage,
         createdAt: documents.createdAt,
+        datasetName: datasets.name,
+        chunkCount: sql<number>`COALESCE(${chunkCountSubquery.count}, 0)`.as('chunk_count'),
       })
       .from(documents)
+      .leftJoin(datasets, eq(documents.datasetId, datasets.id))
+      .leftJoin(chunkCountSubquery, eq(documents.id, chunkCountSubquery.documentId))
       .where(eq(documents.tenantId, session.tenantId))
       .orderBy(desc(documents.createdAt));
 
@@ -57,6 +75,8 @@ export async function getDocuments(): Promise<DocumentItem[]> {
       progressPercent: d.progressPercent,
       errorMessage: d.errorMessage,
       createdAt: d.createdAt?.toISOString() || new Date().toISOString(),
+      datasetName: d.datasetName,
+      chunkCount: Number(d.chunkCount) || 0,
     }));
   } catch (error) {
     logger.error('Failed to get documents', error as Error, { tenantId: session.tenantId });

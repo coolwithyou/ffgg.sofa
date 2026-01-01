@@ -130,10 +130,34 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
               <FileTypeIcon fileType={doc.fileType} />
               <div>
                 <p className="font-medium text-foreground">{doc.filename}</p>
-                <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
                   <span>{formatFileSize(doc.fileSize)}</span>
                   <span>•</span>
                   <span>{formatDate(doc.createdAt)}</span>
+                  {/* 데이터셋 배지 */}
+                  {doc.datasetName ? (
+                    <>
+                      <span>•</span>
+                      <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                        {doc.datasetName}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span>•</span>
+                      <span className="text-muted-foreground/60">라이브러리</span>
+                    </>
+                  )}
+                  {/* 청크 수 */}
+                  {doc.chunkCount > 0 && (
+                    <>
+                      <span>•</span>
+                      <span className="inline-flex items-center gap-1">
+                        <ChunkIcon className="h-3.5 w-3.5" />
+                        {doc.chunkCount}개 청크
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -341,6 +365,19 @@ function LoadingSpinner({ className }: { className?: string }) {
         className="opacity-75"
         fill="currentColor"
         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
+    </svg>
+  );
+}
+
+function ChunkIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
       />
     </svg>
   );
