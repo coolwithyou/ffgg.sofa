@@ -41,7 +41,7 @@ export async function getDocuments(): Promise<DocumentItem[]> {
     const chunkCountSubquery = db
       .select({
         documentId: chunks.documentId,
-        count: count().as('chunk_count'),
+        chunkCount: count().as('chunk_count'),
       })
       .from(chunks)
       .groupBy(chunks.documentId)
@@ -58,7 +58,7 @@ export async function getDocuments(): Promise<DocumentItem[]> {
         errorMessage: documents.errorMessage,
         createdAt: documents.createdAt,
         datasetName: datasets.name,
-        chunkCount: sql<number>`COALESCE(${chunkCountSubquery.count}, 0)`.as('chunk_count'),
+        chunkCount: chunkCountSubquery.chunkCount,
       })
       .from(documents)
       .leftJoin(datasets, eq(documents.datasetId, datasets.id))
