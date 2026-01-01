@@ -39,6 +39,8 @@ export interface ProcessingDocument {
   progressStep: string | null;
   progressPercent: number | null;
   createdAt: string;
+  /** 마지막 업데이트 시각 (stalled 판단용) */
+  updatedAt: string | null;
 }
 
 export interface DashboardData {
@@ -131,6 +133,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
           progressStep: documents.progressStep,
           progressPercent: documents.progressPercent,
           createdAt: documents.createdAt,
+          updatedAt: documents.updatedAt,
         })
         .from(documents)
         .where(
@@ -140,7 +143,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
           )
         )
         .orderBy(desc(documents.createdAt))
-        .limit(5),
+        .limit(10),
     ]);
 
     // 청크 통계 집계
@@ -174,6 +177,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
         progressStep: d.progressStep,
         progressPercent: d.progressPercent,
         createdAt: d.createdAt?.toISOString() || new Date().toISOString(),
+        updatedAt: d.updatedAt?.toISOString() || null,
       })),
     };
   } catch (error) {

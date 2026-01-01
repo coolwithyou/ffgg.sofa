@@ -3,9 +3,11 @@
 /**
  * 문서 처리 상태 모달
  * 처리 단계별 진행 상황 및 에러 표시
+ * [Week 10] Stalled 상태 감지 및 정지 아이콘 표시
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { isDocumentStalled } from '@/lib/constants/document';
 
 interface ProcessingLog {
   id: string;
@@ -25,6 +27,7 @@ interface DocumentInfo {
   progressStep: string | null;
   progressPercent: number | null;
   errorMessage: string | null;
+  updatedAt: string | null;
 }
 
 interface DocumentProgressModalProps {
@@ -112,7 +115,8 @@ export function DocumentProgressModal({
   };
 
   const isFailed = document?.status === 'failed';
-  const isProcessing = ['uploaded', 'processing'].includes(document?.status || '');
+  const isStalled = isDocumentStalled(document?.status || '', document?.updatedAt);
+  const isProcessing = ['uploaded', 'processing'].includes(document?.status || '') && !isStalled;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -173,6 +177,19 @@ export function DocumentProgressModal({
                 </div>
               )}
 
+              {/* 중단됨(Stalled) 상태 표시 */}
+              {isStalled && (
+                <div className="mb-4 rounded-lg bg-orange-500/10 p-4">
+                  <div className="flex items-center gap-2 text-orange-500">
+                    <PauseIcon className="h-5 w-5" />
+                    <span className="font-medium">처리 중단됨</span>
+                  </div>
+                  <p className="mt-2 text-sm text-orange-600">
+                    서버 재시작 등으로 인해 처리가 중단되었습니다. 재처리 버튼을 클릭하여 다시 시작하세요.
+                  </p>
+                </div>
+              )}
+
               {/* 단계별 상태 */}
               <div className="space-y-3">
                 {PROCESSING_STEPS.map((step) => {
@@ -188,7 +205,10 @@ export function DocumentProgressModal({
                         {status === 'failed' && (
                           <ErrorIcon className="h-5 w-5 text-destructive" />
                         )}
-                        {status === 'in_progress' && (
+                        {status === 'in_progress' && isStalled && (
+                          <PauseIcon className="h-5 w-5 text-orange-500" />
+                        )}
+                        {status === 'in_progress' && !isStalled && (
                           <LoadingSpinner className="h-5 w-5 text-primary" />
                         )}
                         {status === 'pending' && (
@@ -203,9 +223,11 @@ export function DocumentProgressModal({
                                 ? 'text-foreground'
                                 : status === 'failed'
                                   ? 'text-destructive'
-                                  : status === 'in_progress'
-                                    ? 'text-primary'
-                                    : 'text-muted-foreground'
+                                  : status === 'in_progress' && isStalled
+                                    ? 'text-orange-500'
+                                    : status === 'in_progress'
+                                      ? 'text-primary'
+                                      : 'text-muted-foreground'
                             }`}
                           >
                             {step.label}
@@ -237,13 +259,17 @@ export function DocumentProgressModal({
 
         {/* 푸터 */}
         <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
-          {isFailed && onReprocess && (
+          {(isFailed || isStalled) && onReprocess && (
             <button
               onClick={() => {
                 onReprocess();
                 onClose();
               }}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                isStalled
+                  ? 'bg-orange-500 text-white hover:bg-orange-600'
+                  : 'bg-primary text-primary-foreground hover:bg-primary/90'
+              }`}
             >
               재처리
             </button>
@@ -313,6 +339,20 @@ function CircleIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <circle cx="12" cy="12" r="10" strokeWidth={2} />
+    </svg>
+  );
+}
+
+function PauseIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" strokeWidth={2} />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M10 9v6M14 9v6"
+      />
     </svg>
   );
 }

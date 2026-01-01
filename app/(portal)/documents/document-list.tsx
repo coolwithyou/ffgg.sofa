@@ -37,14 +37,22 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
     const interval = setInterval(() => {
       processingDocs.forEach(async (doc) => {
         const updated = await refreshDocumentStatus(doc.id);
-        if (updated && updated.status !== doc.status) {
-          setDocuments((prev) =>
-            prev.map((d) =>
-              d.id === doc.id
-                ? { ...d, ...updated }
-                : d
-            )
-          );
+        if (updated) {
+          // 상태 또는 updatedAt이 변경되면 UI 업데이트
+          const hasChanged =
+            updated.status !== doc.status ||
+            updated.progressPercent !== doc.progressPercent ||
+            updated.updatedAt !== doc.updatedAt;
+
+          if (hasChanged) {
+            setDocuments((prev) =>
+              prev.map((d) =>
+                d.id === doc.id
+                  ? { ...d, ...updated }
+                  : d
+              )
+            );
+          }
         }
       });
     }, 3000);
@@ -171,11 +179,12 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
                 status={doc.status}
                 progressPercent={doc.progressPercent}
                 errorMessage={doc.errorMessage}
+                updatedAt={doc.updatedAt}
                 onClick={() => setProgressModalDocId(doc.id)}
               />
 
-              {/* 재처리 버튼 - uploaded 또는 failed 상태에서만 표시 */}
-              {['uploaded', 'failed'].includes(doc.status) && (
+              {/* 재처리 버튼 - uploaded, failed, 또는 stalled 상태에서 표시 */}
+              {canReprocessDocument(doc.status, doc.updatedAt) && (
                 <button
                   onClick={() => handleReprocess(doc.id)}
                   disabled={isPending || reprocessingId === doc.id}

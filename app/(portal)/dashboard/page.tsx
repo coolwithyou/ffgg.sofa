@@ -1,11 +1,14 @@
 /**
  * 대시보드 페이지
  * [Week 9] 테넌트 현황 요약
+ * [Week 10] Stalled 문서 감지 및 경고 배너
  */
 
 import Link from 'next/link';
 import { getDashboardData } from './actions';
 import { DocumentStatusBadge } from '@/components/ui/document-status-badge';
+import { isDocumentStalled } from '@/lib/constants/document';
+import { StalledDocumentsBanner } from './_components/stalled-documents-banner';
 
 export default async function DashboardPage() {
   const data = await getDashboardData();
@@ -26,37 +29,56 @@ export default async function DashboardPage() {
         <p className="text-muted-foreground">서비스 현황을 한눈에 확인하세요.</p>
       </div>
 
-      {/* 처리 중인 문서 배너 */}
-      {data.processingDocuments.length > 0 && (
-        <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <LoadingSpinner className="h-4 w-4 text-primary" />
-            <h2 className="font-medium text-foreground">
-              문서 처리 중 ({data.processingDocuments.length}건)
-            </h2>
-          </div>
-          <div className="space-y-2">
-            {data.processingDocuments.map((doc) => (
-              <div key={doc.id} className="flex items-center justify-between gap-4">
-                <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                  {doc.filename}
-                </span>
-                <div className="flex shrink-0 items-center gap-2">
-                  <div className="h-2 w-24 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full bg-primary transition-all"
-                      style={{ width: `${doc.progressPercent || 0}%` }}
-                    />
-                  </div>
-                  <span className="w-10 text-right text-xs text-muted-foreground">
-                    {doc.progressPercent || 0}%
-                  </span>
+      {/* 중단된 문서 경고 배너 (stalled) */}
+      {(() => {
+        const stalledDocs = data.processingDocuments.filter(
+          (doc) => isDocumentStalled(doc.status, doc.updatedAt)
+        );
+        const activeDocs = data.processingDocuments.filter(
+          (doc) => !isDocumentStalled(doc.status, doc.updatedAt)
+        );
+
+        return (
+          <>
+            {/* Stalled 문서 경고 배너 - 주황색 */}
+            {stalledDocs.length > 0 && (
+              <StalledDocumentsBanner documents={stalledDocs} />
+            )}
+
+            {/* 정상 처리 중인 문서 배너 - 파란색 */}
+            {activeDocs.length > 0 && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <LoadingSpinner className="h-4 w-4 text-primary" />
+                  <h2 className="font-medium text-foreground">
+                    문서 처리 중 ({activeDocs.length}건)
+                  </h2>
+                </div>
+                <div className="space-y-2">
+                  {activeDocs.map((doc) => (
+                    <div key={doc.id} className="flex items-center justify-between gap-4">
+                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                        {doc.filename}
+                      </span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <div className="h-2 w-24 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full bg-primary transition-all"
+                            style={{ width: `${doc.progressPercent || 0}%` }}
+                          />
+                        </div>
+                        <span className="w-10 text-right text-xs text-muted-foreground">
+                          {doc.progressPercent || 0}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            )}
+          </>
+        );
+      })()}
 
       {/* 통계 카드 */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">

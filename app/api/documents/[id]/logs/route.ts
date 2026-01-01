@@ -32,6 +32,7 @@ export async function GET(
         progressStep: true,
         progressPercent: true,
         errorMessage: true,
+        updatedAt: true,
       },
     });
 
@@ -69,6 +70,7 @@ export async function GET(
         progressStep: doc.progressStep,
         progressPercent: doc.progressPercent,
         errorMessage: doc.errorMessage,
+        updatedAt: doc.updatedAt?.toISOString() || null,
       },
       logs: logs.map((log) => ({
         id: log.id,
