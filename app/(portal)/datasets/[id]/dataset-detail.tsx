@@ -331,6 +331,8 @@ export function DatasetDetail({ datasetId }: DatasetDetailProps) {
         <IntegrityAlertBanner
           issues={dataset.extendedStats.integrity}
           totalChunks={dataset.stats.chunkCount}
+          datasetId={datasetId}
+          onFixed={fetchDataset}
         />
       )}
 

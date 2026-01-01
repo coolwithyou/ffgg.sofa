@@ -105,10 +105,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .select({
         emptyContent: sql<number>`count(*) FILTER (WHERE LENGTH(content) = 0)::int`,
         missingEmbedding: sql<number>`count(*) FILTER (WHERE embedding IS NULL AND status = 'approved')::int`,
-        missingTsv: sql<number>`count(*) FILTER (WHERE content_tsv IS NULL AND status = 'approved')::int`,
       })
       .from(chunks)
       .where(eq(chunks.datasetId, id));
+
+    // v2: datasetId 불일치 청크 (문서는 이 데이터셋에 속하지만 청크의 datasetId가 null이거나 다른 경우)
+    // 이 청크들은 검색에서 완전히 제외됨
+    const orphanedChunksResult = await db.execute(sql`
+      SELECT COUNT(*)::int as count
+      FROM chunks c
+      INNER JOIN documents d ON c.document_id = d.id
+      WHERE d.dataset_id = ${id}
+      AND (c.dataset_id IS NULL OR c.dataset_id != ${id})
+    `);
+    const missingDatasetId = (orphanedChunksResult.rows[0] as any)?.count || 0;
 
     // v2: 평균 청크 크기 및 토큰 수
     const [sizeStats] = await db
@@ -155,7 +165,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           integrity: {
             emptyContent: integrityStats?.emptyContent || 0,
             missingEmbedding: integrityStats?.missingEmbedding || 0,
-            missingTsv: integrityStats?.missingTsv || 0,
+            missingDatasetId, // 검색에서 제외되는 청크 (datasetId 누락/불일치)
             duplicateContent: 0, // 중복 체크는 비용이 높아 on-demand 처리
             unscored: qualityDistribution?.unscored || 0,
           },
