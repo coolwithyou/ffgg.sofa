@@ -15,7 +15,10 @@ export interface SearchResult {
   documentId: string;
   datasetId?: string;
   content: string;
+  /** RRF 점수 (랭킹용, 0.01~0.03 범위) */
   score: number;
+  /** Dense 검색 원본 점수 (코사인 유사도, 0~1 범위, 임계값 비교용) */
+  denseScore?: number;
   metadata: Record<string, unknown>;
   source: 'dense' | 'sparse' | 'hybrid';
 }
@@ -23,6 +26,8 @@ export interface SearchResult {
 interface RankedResult {
   chunk: SearchResult;
   score: number;
+  /** Dense 검색 원본 점수 (0~1 범위) */
+  denseScore?: number;
 }
 
 const DEFAULT_LIMIT = 5;
@@ -108,14 +113,29 @@ export async function hybridSearchMultiDataset(
     );
 
     const duration = Date.now() - startTime;
-    logger.info('Multi-dataset hybrid search completed', {
+
+    // INFO 레벨로 상세 검색 결과 로깅 (디버깅용)
+    logger.info('[HybridSearch] Multi-dataset search completed', {
       tenantId,
       datasetIds,
+      searchQuery: query, // 실제 검색에 사용된 쿼리
       queryLength: query.length,
       denseCount: denseResults.length,
       sparseCount: sparseResults.length,
       hybridCount: hybridResults.length,
       duration,
+      // 상위 3개 결과의 점수와 내용 미리보기
+      topResults: hybridResults.slice(0, 3).map((r, i) => ({
+        rank: i + 1,
+        score: r.score,
+        contentPreview: r.content.slice(0, 100),
+        source: r.source,
+      })),
+      // Dense 검색 상위 결과 (RRF 적용 전)
+      topDenseScores: denseResults.slice(0, 3).map(r => ({
+        score: r.score,
+        contentPreview: r.content.slice(0, 50),
+      })),
     });
 
     return hybridResults;
@@ -186,6 +206,9 @@ async function denseSearch(
 
 /**
  * Sparse Search (BM25 전문 검색)
+ *
+ * PostgreSQL의 'simple' 설정을 사용하여 텍스트 검색 수행
+ * 한국어의 경우 tsvector보다 ILIKE 폴백이 더 효과적일 수 있음
  */
 async function sparseSearch(
   tenantId: string,
@@ -193,19 +216,23 @@ async function sparseSearch(
   limit: number
 ): Promise<SearchResult[]> {
   try {
-    // Nori를 사용한 한국어 전문 검색
+    // 'simple' 설정으로 전문 검색 (한국어 토큰화 미지원이지만 오류 방지)
+    // ILIKE 폴백으로 한국어 부분 문자열 매칭 지원
     const results = await db.execute(sql`
       SELECT
         id,
         document_id,
         content,
         metadata,
-        ts_rank_cd(content_tsv, plainto_tsquery('korean', ${query})) as score
+        CASE
+          WHEN content ILIKE ${'%' + query + '%'} THEN 1.0
+          ELSE 0.5
+        END as score
       FROM chunks
       WHERE tenant_id = ${tenantId}
         AND status = 'approved'
         AND is_active = true
-        AND content_tsv @@ plainto_tsquery('korean', ${query})
+        AND content ILIKE ${'%' + query + '%'}
       ORDER BY score DESC
       LIMIT ${limit}
     `);
@@ -298,6 +325,9 @@ async function denseSearchMultiDataset(
 
 /**
  * 다중 데이터셋 Sparse Search (BM25 전문 검색)
+ *
+ * PostgreSQL 'simple' 설정 대신 ILIKE 기반 검색 사용
+ * 한국어에서 tsvector 기반 검색보다 ILIKE가 더 효과적임
  */
 async function sparseSearchMultiDataset(
   tenantId: string,
@@ -308,7 +338,7 @@ async function sparseSearchMultiDataset(
   try {
     const datasetIdsArray = `{${datasetIds.join(',')}}`;
 
-    // Nori를 사용한 한국어 전문 검색 (다중 데이터셋)
+    // ILIKE 기반 한국어 부분 문자열 매칭 (다중 데이터셋)
     const results = await db.execute(sql`
       SELECT
         id,
@@ -316,13 +346,16 @@ async function sparseSearchMultiDataset(
         dataset_id,
         content,
         metadata,
-        ts_rank_cd(content_tsv, plainto_tsquery('korean', ${query})) as score
+        CASE
+          WHEN content ILIKE ${'%' + query + '%'} THEN 1.0
+          ELSE 0.5
+        END as score
       FROM chunks
       WHERE tenant_id = ${tenantId}
         AND dataset_id = ANY(${datasetIdsArray}::uuid[])
         AND status = 'approved'
         AND is_active = true
-        AND content_tsv @@ plainto_tsquery('korean', ${query})
+        AND content ILIKE ${'%' + query + '%'}
       ORDER BY score DESC
       LIMIT ${limit}
     `);
@@ -357,6 +390,8 @@ async function sparseSearchMultiDataset(
 /**
  * Reciprocal Rank Fusion (RRF) 알고리즘
  * 두 검색 결과를 순위 기반으로 병합
+ *
+ * @returns SearchResult[] - RRF 점수(score)와 Dense 원본 점수(denseScore) 모두 포함
  */
 function reciprocalRankFusion(
   denseResults: SearchResult[],
@@ -365,12 +400,13 @@ function reciprocalRankFusion(
 ): SearchResult[] {
   const scores = new Map<string, RankedResult>();
 
-  // Dense 결과 점수 계산
+  // Dense 결과 점수 계산 - 원본 점수도 보존
   denseResults.forEach((result, rank) => {
     const rrfScore = 1 / (RRF_K + rank + 1);
     scores.set(result.id, {
       chunk: { ...result, source: 'hybrid' },
       score: rrfScore,
+      denseScore: result.score, // Dense 원본 점수 보존 (코사인 유사도)
     });
   });
 
@@ -385,6 +421,7 @@ function reciprocalRankFusion(
       scores.set(result.id, {
         chunk: { ...result, source: 'hybrid' },
         score: rrfScore,
+        // Sparse-only 결과는 denseScore 없음
       });
     }
   });
@@ -396,6 +433,7 @@ function reciprocalRankFusion(
     .map((item) => ({
       ...item.chunk,
       score: item.score,
+      denseScore: item.denseScore, // Dense 원본 점수 포함
     }));
 }
 

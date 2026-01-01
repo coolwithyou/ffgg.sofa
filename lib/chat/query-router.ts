@@ -197,7 +197,9 @@ export async function routeQuery(
   config: RouterConfig = DEFAULT_ROUTER_CONFIG
 ): Promise<RouterResult> {
   const startTime = Date.now();
-  const topRagScore = ragResults[0]?.score ?? 0;
+  const topRrfScore = ragResults[0]?.score ?? 0;
+  // 임계값 비교는 Dense 원본 점수 사용 (RRF 점수는 0.01~0.03 범위라 임계값 비교에 부적합)
+  const topDenseScore = ragResults[0]?.denseScore ?? topRrfScore;
 
   // -------------------------------------------------------------------------
   // Case 1: CHITCHAT (높은 신뢰도)
@@ -227,20 +229,21 @@ export async function routeQuery(
   // Case 2: OUT_OF_SCOPE (높은 신뢰도)
   // -------------------------------------------------------------------------
   if (intentResult.intent === 'OUT_OF_SCOPE' && intentResult.confidence >= config.outOfScopeThreshold) {
-    // RAG 결과로 재검증 - 혹시 관련 문서가 있는지 확인
-    if (topRagScore >= config.ragReverifyThreshold) {
+    // RAG 결과로 재검증 - 혹시 관련 문서가 있는지 확인 (Dense 점수 기준)
+    if (topDenseScore >= config.ragReverifyThreshold) {
       // RAG에서 좋은 결과 발견 → DOMAIN_QUERY로 재분류
       logger.info('OUT_OF_SCOPE reclassified to DOMAIN_QUERY by RAG', {
         message: message.slice(0, 50),
-        ragScore: topRagScore,
+        denseScore: topDenseScore,
+        rrfScore: topRrfScore,
         duration: Date.now() - startTime,
       });
 
       return {
         shouldUseRAG: true,
         intent: 'DOMAIN_QUERY',
-        confidence: topRagScore,
-        reasoning: `OUT_OF_SCOPE but RAG found relevant content (score: ${topRagScore.toFixed(2)})`,
+        confidence: topDenseScore,
+        reasoning: `OUT_OF_SCOPE but RAG found relevant content (denseScore: ${topDenseScore.toFixed(2)})`,
       };
     }
 
@@ -250,7 +253,8 @@ export async function routeQuery(
     logger.info('Query routed to OUT_OF_SCOPE decline', {
       message: message.slice(0, 50),
       confidence: intentResult.confidence,
-      ragScore: topRagScore,
+      denseScore: topDenseScore,
+      rrfScore: topRrfScore,
       duration: Date.now() - startTime,
     });
 
@@ -259,7 +263,7 @@ export async function routeQuery(
       response,
       intent: 'OUT_OF_SCOPE',
       confidence: intentResult.confidence,
-      reasoning: `OUT_OF_SCOPE confirmed by low RAG score (${topRagScore.toFixed(2)})`,
+      reasoning: `OUT_OF_SCOPE confirmed by low RAG score (denseScore: ${topDenseScore.toFixed(2)})`,
     };
   }
 
@@ -267,14 +271,16 @@ export async function routeQuery(
   // Case 3: DOMAIN_QUERY 또는 낮은 신뢰도
   // -------------------------------------------------------------------------
 
-  // RAG 결과가 너무 낮으면 "정보 없음" 응답
-  if (ragResults.length === 0 || topRagScore < config.ragDeclineThreshold) {
+  // RAG 결과가 너무 낮으면 "정보 없음" 응답 (Dense 점수 기준)
+  if (ragResults.length === 0 || topDenseScore < config.ragDeclineThreshold) {
     const response = generateNoResultResponse(persona);
 
     logger.info('Query routed to no-result response', {
       message: message.slice(0, 50),
       intent: intentResult.intent,
-      ragScore: topRagScore,
+      denseScore: topDenseScore,
+      rrfScore: topRrfScore,
+      threshold: config.ragDeclineThreshold,
       duration: Date.now() - startTime,
     });
 
@@ -283,7 +289,7 @@ export async function routeQuery(
       response,
       intent: intentResult.intent,
       confidence: intentResult.confidence,
-      reasoning: `No relevant RAG results (score: ${topRagScore.toFixed(2)})`,
+      reasoning: `No relevant RAG results (denseScore: ${topDenseScore.toFixed(2)} < ${config.ragDeclineThreshold})`,
     };
   }
 
@@ -291,7 +297,8 @@ export async function routeQuery(
   logger.info('Query routed to RAG pipeline', {
     message: message.slice(0, 50),
     intent: intentResult.intent,
-    ragScore: topRagScore,
+    denseScore: topDenseScore,
+    rrfScore: topRrfScore,
     duration: Date.now() - startTime,
   });
 
@@ -299,7 +306,7 @@ export async function routeQuery(
     shouldUseRAG: true,
     intent: intentResult.intent,
     confidence: intentResult.confidence,
-    reasoning: `DOMAIN_QUERY with RAG results (score: ${topRagScore.toFixed(2)})`,
+    reasoning: `DOMAIN_QUERY with RAG results (denseScore: ${topDenseScore.toFixed(2)})`,
   };
 }
 
@@ -309,24 +316,28 @@ export async function routeQuery(
 
 /**
  * RAG 결과의 품질을 평가합니다.
+ * Dense 점수 기준으로 평가 (RRF 점수가 아닌 코사인 유사도 기준)
  */
 export function evaluateRagQuality(ragResults: SearchResult[]): {
   hasResults: boolean;
   topScore: number;
+  topDenseScore: number;
   avgScore: number;
   quality: 'high' | 'medium' | 'low' | 'none';
 } {
   if (ragResults.length === 0) {
-    return { hasResults: false, topScore: 0, avgScore: 0, quality: 'none' };
+    return { hasResults: false, topScore: 0, topDenseScore: 0, avgScore: 0, quality: 'none' };
   }
 
-  const topScore = ragResults[0].score;
+  const topScore = ragResults[0].score; // RRF 점수
+  const topDenseScore = ragResults[0].denseScore ?? topScore; // Dense 원본 점수
   const avgScore = ragResults.reduce((sum, r) => sum + r.score, 0) / ragResults.length;
 
+  // 품질 평가는 Dense 점수 기준
   let quality: 'high' | 'medium' | 'low' | 'none';
-  if (topScore >= 0.8) quality = 'high';
-  else if (topScore >= 0.6) quality = 'medium';
+  if (topDenseScore >= 0.8) quality = 'high';
+  else if (topDenseScore >= 0.6) quality = 'medium';
   else quality = 'low';
 
-  return { hasResults: true, topScore, avgScore, quality };
+  return { hasResults: true, topScore, topDenseScore, avgScore, quality };
 }
