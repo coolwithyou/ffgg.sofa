@@ -91,16 +91,24 @@ export function DocumentProgressModal({
 
   if (!isOpen) return null;
 
+  // 단계별 상태 판정: 동일 단계의 모든 로그를 확인하여 우선순위 기반으로 상태 결정
+  // 우선순위: failed > completed > started (in_progress)
   const getStepStatus = (stepKey: string): 'pending' | 'in_progress' | 'completed' | 'failed' => {
-    const stepLog = logs.find((log) => log.step === stepKey);
-    if (!stepLog) return 'pending';
-    if (stepLog.status === 'failed') return 'failed';
-    if (stepLog.status === 'completed') return 'completed';
+    const stepLogs = logs.filter((log) => log.step === stepKey);
+    if (stepLogs.length === 0) return 'pending';
+
+    // 하나라도 실패하면 실패
+    if (stepLogs.some((log) => log.status === 'failed')) return 'failed';
+    // 완료 로그가 있으면 완료
+    if (stepLogs.some((log) => log.status === 'completed')) return 'completed';
+    // started만 있으면 진행 중
     return 'in_progress';
   };
 
+  // 단계의 마지막(최신) 로그 반환
   const getStepLog = (stepKey: string) => {
-    return logs.find((log) => log.step === stepKey);
+    const stepLogs = logs.filter((log) => log.step === stepKey);
+    return stepLogs.length > 0 ? stepLogs[stepLogs.length - 1] : undefined;
   };
 
   const isFailed = document?.status === 'failed';
@@ -108,15 +116,15 @@ export function DocumentProgressModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+      <div className="w-full max-w-md rounded-lg bg-card shadow-xl">
         {/* 헤더 */}
-        <div className="flex items-center justify-between border-b px-6 py-4">
-          <h3 className="text-lg font-semibold text-gray-900">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <h3 className="text-lg font-semibold text-foreground">
             {document?.filename || '문서 처리 상태'}
           </h3>
           <button
             onClick={onClose}
-            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <CloseIcon className="h-5 w-5" />
           </button>
@@ -126,24 +134,24 @@ export function DocumentProgressModal({
         <div className="px-6 py-4">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <LoadingSpinner className="h-8 w-8 text-blue-500" />
+              <LoadingSpinner className="h-8 w-8 text-primary" />
             </div>
           ) : error ? (
-            <div className="py-8 text-center text-red-600">{error}</div>
+            <div className="py-8 text-center text-destructive">{error}</div>
           ) : (
             <>
               {/* 프로그레스 바 */}
               {isProcessing && (
                 <div className="mb-6">
                   <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="text-gray-600">진행률</span>
-                    <span className="font-medium text-blue-600">
+                    <span className="text-muted-foreground">진행률</span>
+                    <span className="font-medium text-primary">
                       {document?.progressPercent || 0}%
                     </span>
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-gray-200">
+                  <div className="h-2 overflow-hidden rounded-full bg-muted">
                     <div
-                      className="h-full bg-blue-500 transition-all duration-300"
+                      className="h-full bg-primary transition-all duration-300"
                       style={{ width: `${document?.progressPercent || 0}%` }}
                     />
                   </div>
@@ -152,13 +160,13 @@ export function DocumentProgressModal({
 
               {/* 실패 상태 표시 */}
               {isFailed && (
-                <div className="mb-4 rounded-lg bg-red-50 p-4">
-                  <div className="flex items-center gap-2 text-red-700">
+                <div className="mb-4 rounded-lg bg-destructive/10 p-4">
+                  <div className="flex items-center gap-2 text-destructive">
                     <ErrorIcon className="h-5 w-5" />
                     <span className="font-medium">처리 실패</span>
                   </div>
                   {document?.errorMessage && (
-                    <p className="mt-2 text-sm text-red-600">
+                    <p className="mt-2 text-sm text-destructive">
                       {document.errorMessage}
                     </p>
                   )}
@@ -178,13 +186,13 @@ export function DocumentProgressModal({
                           <CheckIcon className="h-5 w-5 text-green-500" />
                         )}
                         {status === 'failed' && (
-                          <ErrorIcon className="h-5 w-5 text-red-500" />
+                          <ErrorIcon className="h-5 w-5 text-destructive" />
                         )}
                         {status === 'in_progress' && (
-                          <LoadingSpinner className="h-5 w-5 text-blue-500" />
+                          <LoadingSpinner className="h-5 w-5 text-primary" />
                         )}
                         {status === 'pending' && (
-                          <CircleIcon className="h-5 w-5 text-gray-300" />
+                          <CircleIcon className="h-5 w-5 text-muted-foreground/50" />
                         )}
                       </div>
                       <div className="flex-1">
@@ -192,29 +200,29 @@ export function DocumentProgressModal({
                           <span
                             className={`text-sm font-medium ${
                               status === 'completed'
-                                ? 'text-gray-900'
+                                ? 'text-foreground'
                                 : status === 'failed'
-                                  ? 'text-red-600'
+                                  ? 'text-destructive'
                                   : status === 'in_progress'
-                                    ? 'text-blue-600'
-                                    : 'text-gray-400'
+                                    ? 'text-primary'
+                                    : 'text-muted-foreground'
                             }`}
                           >
                             {step.label}
                           </span>
                           {log?.durationMs && (
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-muted-foreground">
                               {formatDuration(log.durationMs)}
                             </span>
                           )}
                         </div>
                         {log?.message && status !== 'pending' && (
-                          <p className="mt-0.5 text-xs text-gray-500">
+                          <p className="mt-0.5 text-xs text-muted-foreground">
                             {log.message}
                           </p>
                         )}
                         {log?.errorMessage && (
-                          <p className="mt-1 text-xs text-red-600">
+                          <p className="mt-1 text-xs text-destructive">
                             {log.errorMessage}
                           </p>
                         )}
@@ -228,21 +236,21 @@ export function DocumentProgressModal({
         </div>
 
         {/* 푸터 */}
-        <div className="flex justify-end gap-2 border-t px-6 py-4">
+        <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
           {isFailed && onReprocess && (
             <button
               onClick={() => {
                 onReprocess();
                 onClose();
               }}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
               재처리
             </button>
           )}
           <button
             onClick={onClose}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
           >
             닫기
           </button>

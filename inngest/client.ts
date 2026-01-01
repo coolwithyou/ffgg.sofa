@@ -2,11 +2,15 @@
  * Inngest 클라이언트 설정
  * 비동기 작업 큐 및 워크플로우 관리
  *
- * 개발 환경에서 Inngest가 설정되지 않으면 이벤트를 로그만 출력
+ * 개발 환경에서 Inngest가 설정되지 않으면:
+ * - 문서 업로드 이벤트: 즉시 'failed' 상태로 변경 (사용자에게 명확한 피드백)
+ * - 기타 이벤트: 로그만 출력
  */
 
 import { Inngest } from 'inngest';
 import { logger } from '@/lib/logger';
+import { db, documents } from '@/lib/db';
+import { eq } from 'drizzle-orm';
 
 /**
  * Inngest가 제대로 설정되어 있는지 확인
@@ -31,13 +35,36 @@ const realInngest = new Inngest({
   name: 'SOFA RAG Chatbot',
 });
 
-// 개발용 Mock Inngest (이벤트만 로그 출력)
+// 개발용 Mock Inngest
+// Inngest 미설정 시 문서 업로드 이벤트는 즉시 실패 처리
 const mockInngest = {
   send: async (event: { name: string; data: Record<string, unknown> }) => {
-    logger.info('[DEV] Inngest event skipped (not configured)', {
+    logger.warn('[DEV] Inngest not configured - event will not be processed', {
       eventName: event.name,
-      eventData: event.data,
+      documentId: event.data.documentId,
     });
+
+    // 문서 업로드 이벤트일 때 즉시 실패 처리
+    if (event.name === 'document/uploaded' && event.data.documentId) {
+      try {
+        await db.update(documents)
+          .set({
+            status: 'failed',
+            errorMessage: 'Inngest가 설정되지 않아 문서 처리를 시작할 수 없습니다. 환경 변수(INNGEST_EVENT_KEY, INNGEST_SIGNING_KEY)를 확인해주세요.',
+            updatedAt: new Date(),
+          })
+          .where(eq(documents.id, event.data.documentId as string));
+
+        logger.info('Document marked as failed (Inngest not configured)', {
+          documentId: event.data.documentId,
+        });
+      } catch (dbError) {
+        logger.error('Failed to update document status', dbError as Error, {
+          documentId: event.data.documentId,
+        });
+      }
+    }
+
     return { ids: [] };
   },
 };

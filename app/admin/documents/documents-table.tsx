@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { DocumentProgressModal } from '@/components/document-progress-modal';
+import { DocumentStatusBadge, isClickableStatus } from '@/components/ui/document-status-badge';
 
 interface Document {
   id: string;
@@ -334,12 +335,12 @@ export function DocumentsTable() {
                     {doc.tenantName || '-'}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusBadge
-                      status={doc.status}
-                      progressStep={doc.progressStep}
+                    <DocumentStatusBadge
+                      status={doc.status || 'uploaded'}
                       progressPercent={doc.progressPercent}
+                      errorMessage={doc.errorMessage}
                       onClick={() => {
-                        if (['processing', 'uploaded', 'failed'].includes(doc.status || '')) {
+                        if (isClickableStatus(doc.status || '')) {
                           setProgressModalDocId(doc.id);
                         }
                       }}
@@ -427,46 +428,6 @@ function StatCard({
         {!statusConfig && label}
       </p>
     </button>
-  );
-}
-
-function StatusBadge({
-  status,
-  progressStep,
-  progressPercent,
-  onClick,
-}: {
-  status: string | null;
-  progressStep: string | null;
-  progressPercent: number | null;
-  onClick?: () => void;
-}) {
-  const config = status ? STATUS_LABELS[status] : STATUS_LABELS.uploaded;
-  const isClickable = ['processing', 'uploaded', 'failed'].includes(status || '');
-
-  return (
-    <div
-      className={`flex flex-col gap-1 ${isClickable ? 'cursor-pointer' : ''}`}
-      onClick={isClickable ? onClick : undefined}
-      title={isClickable ? '클릭하여 처리 상태 보기' : undefined}
-    >
-      <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${config.color} ${isClickable ? 'hover:ring-2 hover:ring-offset-1 hover:ring-blue-300' : ''}`}>
-        {config.label}
-      </span>
-      {status === 'processing' && progressStep && (
-        <div className="flex items-center gap-1">
-          <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-500 transition-all"
-              style={{ width: `${progressPercent || 0}%` }}
-            />
-          </div>
-          <span className="text-xs text-gray-500">
-            {PROGRESS_LABELS[progressStep] || progressStep}
-          </span>
-        </div>
-      )}
-    </div>
   );
 }
 

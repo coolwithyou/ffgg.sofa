@@ -8,6 +8,7 @@
 import { useState, useEffect, useTransition } from 'react';
 import { deleteDocument, reprocessDocument, refreshDocumentStatus, type DocumentItem } from './actions';
 import { DocumentProgressModal } from '@/components/document-progress-modal';
+import { DocumentStatusBadge } from '@/components/ui/document-status-badge';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
 
 interface DocumentListProps {
@@ -163,16 +164,11 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
             </div>
 
             <div className="flex items-center gap-4">
-              <StatusBadge
+              <DocumentStatusBadge
                 status={doc.status}
                 progressPercent={doc.progressPercent}
                 errorMessage={doc.errorMessage}
-                onClick={() => {
-                  // processing, uploaded, failed 상태에서 모달 열기
-                  if (['processing', 'uploaded', 'failed'].includes(doc.status)) {
-                    setProgressModalDocId(doc.id);
-                  }
-                }}
+                onClick={() => setProgressModalDocId(doc.id)}
               />
 
               {/* 재처리 버튼 - uploaded 또는 failed 상태에서만 표시 */}
@@ -219,56 +215,6 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
         />
       )}
     </>
-  );
-}
-
-// 상태 배지 컴포넌트
-function StatusBadge({
-  status,
-  progressPercent,
-  errorMessage,
-  onClick,
-}: {
-  status: string;
-  progressPercent: number | null;
-  errorMessage: string | null;
-  onClick?: () => void;
-}) {
-  const isClickable = ['processing', 'uploaded', 'failed'].includes(status);
-  const config: Record<string, { label: string; className: string }> = {
-    uploaded: { label: '업로드됨', className: 'bg-muted text-muted-foreground' },
-    processing: { label: '처리중', className: 'bg-primary/10 text-primary' },
-    chunked: { label: '청킹완료', className: 'bg-purple-500/10 text-purple-500' },
-    reviewing: { label: '검토중', className: 'bg-yellow-500/10 text-yellow-500' },
-    approved: { label: '승인됨', className: 'bg-green-500/10 text-green-500' },
-    failed: { label: '실패', className: 'bg-destructive/10 text-destructive' },
-  };
-
-  const { label, className } = config[status] || {
-    label: status,
-    className: 'bg-muted text-muted-foreground',
-  };
-
-  return (
-    <div
-      className={`flex items-center gap-2 ${isClickable ? 'cursor-pointer' : ''}`}
-      onClick={isClickable ? onClick : undefined}
-    >
-      <span
-        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${className} ${isClickable ? 'hover:ring-2 hover:ring-offset-1 hover:ring-primary/30' : ''}`}
-        title={isClickable ? '클릭하여 처리 상태 보기' : (errorMessage || undefined)}
-      >
-        {label}
-        {status === 'processing' && progressPercent !== null && (
-          <span className="ml-1">({progressPercent}%)</span>
-        )}
-      </span>
-      {status === 'failed' && errorMessage && (
-        <span className="text-xs text-destructive" title={errorMessage}>
-          ⚠️
-        </span>
-      )}
-    </div>
   );
 }
 

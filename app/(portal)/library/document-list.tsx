@@ -9,6 +9,7 @@ import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import type { LibraryDocument, DatasetOption } from './actions';
 import { DocumentMapper } from './document-mapper';
+import { DocumentStatusBadge } from '@/components/ui/document-status-badge';
 
 type FilterType = 'all' | 'assigned' | 'unassigned';
 
@@ -132,7 +133,7 @@ export function LibraryDocumentList({ documents: initialDocuments, datasets }: L
                       <span>•</span>
                       <span>{doc.chunkCount}개 청크</span>
                       <span>•</span>
-                      <StatusBadge status={doc.status} />
+                      <DocumentStatusBadge status={doc.status} />
                     </div>
                   </div>
                   <ChevronIcon
@@ -197,29 +198,6 @@ function DatasetBadge({ datasetName }: { datasetName: string | null }) {
   return (
     <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
       미배치
-    </span>
-  );
-}
-
-// 상태 배지
-function StatusBadge({ status }: { status: string }) {
-  const config: Record<string, { label: string; className: string }> = {
-    uploaded: { label: '업로드됨', className: 'bg-muted text-muted-foreground' },
-    processing: { label: '처리중', className: 'bg-primary/10 text-primary' },
-    chunked: { label: '청킹완료', className: 'bg-purple-500/10 text-purple-500' },
-    reviewing: { label: '검토중', className: 'bg-yellow-500/10 text-yellow-500' },
-    approved: { label: '승인됨', className: 'bg-green-500/10 text-green-500' },
-    failed: { label: '실패', className: 'bg-destructive/10 text-destructive' },
-  };
-
-  const { label, className } = config[status] || {
-    label: status,
-    className: 'bg-muted text-muted-foreground',
-  };
-
-  return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>
-      {label}
     </span>
   );
 }

@@ -10,6 +10,7 @@ import { useState, useEffect, useTransition, useMemo } from 'react';
 import Link from 'next/link';
 import { FileText, Trash2, RotateCcw, ExternalLink, Search, X, Unlink } from 'lucide-react';
 import { DocumentProgressModal } from '@/components/document-progress-modal';
+import { DocumentStatusBadge } from '@/components/ui/document-status-badge';
 import { DocumentChunks } from './document-chunks';
 import { unassignDocumentFromDataset } from '@/app/(portal)/library/actions';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
@@ -316,7 +317,7 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
                         className="hover:opacity-80"
                         title="처리 상태 상세 보기"
                       >
-                        <StatusBadge
+                        <DocumentStatusBadge
                           status={doc.status}
                           progressPercent={doc.progressPercent}
                           errorMessage={doc.errorMessage}
@@ -426,50 +427,6 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
             setProgressModalDocId(null);
           }}
         />
-      )}
-    </div>
-  );
-}
-
-// 상태 배지 컴포넌트
-function StatusBadge({
-  status,
-  progressPercent,
-  errorMessage,
-}: {
-  status: string;
-  progressPercent: number | null;
-  errorMessage: string | null;
-}) {
-  const config: Record<string, { label: string; className: string }> = {
-    uploaded: { label: '업로드됨', className: 'bg-muted text-muted-foreground' },
-    processing: { label: '처리중', className: 'bg-primary/10 text-primary' },
-    chunked: { label: '청킹완료', className: 'bg-purple-500/10 text-purple-500' },
-    reviewing: { label: '검토중', className: 'bg-yellow-500/10 text-yellow-500' },
-    approved: { label: '승인됨', className: 'bg-green-500/10 text-green-500' },
-    failed: { label: '실패', className: 'bg-destructive/10 text-destructive' },
-  };
-
-  const { label, className } = config[status] || {
-    label: status,
-    className: 'bg-muted text-muted-foreground',
-  };
-
-  return (
-    <div className="flex items-center gap-1">
-      <span
-        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${className}`}
-        title={errorMessage || undefined}
-      >
-        {label}
-        {status === 'processing' && progressPercent !== null && (
-          <span className="ml-1">({progressPercent}%)</span>
-        )}
-      </span>
-      {status === 'failed' && errorMessage && (
-        <span className="text-xs text-destructive" title={errorMessage}>
-          ⚠️
-        </span>
       )}
     </div>
   );
