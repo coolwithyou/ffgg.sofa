@@ -7,7 +7,7 @@
 
 import { validateSession } from '@/lib/auth';
 import { db, documents, chunks, conversations } from '@/lib/db';
-import { eq, sql, desc } from 'drizzle-orm';
+import { eq, sql, desc, and, inArray } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 
 export interface DashboardStats {
@@ -32,10 +32,20 @@ export interface RecentConversation {
   createdAt: string;
 }
 
+export interface ProcessingDocument {
+  id: string;
+  filename: string;
+  status: 'processing' | 'uploaded';
+  progressStep: string | null;
+  progressPercent: number | null;
+  createdAt: string;
+}
+
 export interface DashboardData {
   stats: DashboardStats;
   recentDocuments: RecentDocument[];
   recentConversations: RecentConversation[];
+  processingDocuments: ProcessingDocument[];
 }
 
 /**
@@ -58,6 +68,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
       conversationStats,
       recentDocs,
       recentConversationsData,
+      processingDocsData,
     ] = await Promise.all([
       // 문서 통계
       db
@@ -110,6 +121,26 @@ export async function getDashboardData(): Promise<DashboardData | null> {
         .where(eq(conversations.tenantId, tenantId))
         .orderBy(desc(conversations.createdAt))
         .limit(5),
+
+      // 처리 중인 문서
+      db
+        .select({
+          id: documents.id,
+          filename: documents.filename,
+          status: documents.status,
+          progressStep: documents.progressStep,
+          progressPercent: documents.progressPercent,
+          createdAt: documents.createdAt,
+        })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.tenantId, tenantId),
+            inArray(documents.status, ['processing', 'uploaded'])
+          )
+        )
+        .orderBy(desc(documents.createdAt))
+        .limit(5),
     ]);
 
     // 청크 통계 집계
@@ -135,6 +166,14 @@ export async function getDashboardData(): Promise<DashboardData | null> {
         sessionId: c.sessionId.slice(0, 12) + '...',
         channel: c.channel || 'web',
         createdAt: c.createdAt?.toISOString() || new Date().toISOString(),
+      })),
+      processingDocuments: processingDocsData.map((d) => ({
+        id: d.id,
+        filename: d.filename,
+        status: d.status as 'processing' | 'uploaded',
+        progressStep: d.progressStep,
+        progressPercent: d.progressPercent,
+        createdAt: d.createdAt?.toISOString() || new Date().toISOString(),
       })),
     };
   } catch (error) {

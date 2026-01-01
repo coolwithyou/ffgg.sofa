@@ -5,6 +5,7 @@
 
 import Link from 'next/link';
 import { getDashboardData } from './actions';
+import { DocumentStatusBadge } from '@/components/ui/document-status-badge';
 
 export default async function DashboardPage() {
   const data = await getDashboardData();
@@ -24,6 +25,38 @@ export default async function DashboardPage() {
         <h1 className="text-2xl font-semibold text-foreground">대시보드</h1>
         <p className="text-muted-foreground">서비스 현황을 한눈에 확인하세요.</p>
       </div>
+
+      {/* 처리 중인 문서 배너 */}
+      {data.processingDocuments.length > 0 && (
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <LoadingSpinner className="h-4 w-4 text-primary" />
+            <h2 className="font-medium text-foreground">
+              문서 처리 중 ({data.processingDocuments.length}건)
+            </h2>
+          </div>
+          <div className="space-y-2">
+            {data.processingDocuments.map((doc) => (
+              <div key={doc.id} className="flex items-center justify-between gap-4">
+                <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                  {doc.filename}
+                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <div className="h-2 w-24 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${doc.progressPercent || 0}%` }}
+                    />
+                  </div>
+                  <span className="w-10 text-right text-xs text-muted-foreground">
+                    {doc.progressPercent || 0}%
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 통계 카드 */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -79,7 +112,7 @@ export default async function DashboardPage() {
                   <span className="truncate font-medium text-foreground">
                     {doc.title}
                   </span>
-                  <StatusBadge status={doc.status} />
+                  <DocumentStatusBadge status={doc.status} />
                 </li>
               ))}
             </ul>
@@ -180,26 +213,6 @@ function StatCard({ title, value, subValue, icon: Icon, href }: StatCardProps) {
   }
 
   return content;
-}
-
-// 상태 배지 컴포넌트
-function StatusBadge({ status }: { status: string }) {
-  const config: Record<string, { label: string; className: string }> = {
-    uploaded: { label: '업로드됨', className: 'text-muted-foreground' },
-    processing: { label: '처리중', className: 'text-primary' },
-    chunked: { label: '청킹완료', className: 'text-primary' },
-    reviewing: { label: '검토중', className: 'text-muted-foreground' },
-    approved: { label: '승인됨', className: 'text-foreground' },
-    failed: { label: '실패', className: 'text-destructive' },
-  };
-
-  const { label, className } = config[status] || { label: status, className: 'text-muted-foreground' };
-
-  return (
-    <span className={`text-sm ${className}`}>
-      {label}
-    </span>
-  );
 }
 
 // 채널 배지 컴포넌트
@@ -339,6 +352,26 @@ function SettingsIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+      />
+    </svg>
+  );
+}
+
+function LoadingSpinner({ className }: { className?: string }) {
+  return (
+    <svg className={`animate-spin ${className}`} fill="none" viewBox="0 0 24 24">
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
       />
     </svg>
   );
