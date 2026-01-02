@@ -7,8 +7,15 @@
 
 import { validateSession } from '@/lib/auth';
 import { db, tenants, documents, chunks, conversations } from '@/lib/db';
-import { sql, count, eq } from 'drizzle-orm';
+import { sql, count } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
+import {
+  getUsageOverview,
+  getForecast,
+  getCacheCostComparison,
+  detectAnomalies,
+} from '@/lib/usage/cost-calculator';
+import type { UsageOverview, Forecast, CacheCostComparison } from '@/lib/usage/types';
 
 export interface SystemStats {
   totalTenants: number;
@@ -32,9 +39,28 @@ export interface TenantUsage {
   createdAt: string;
 }
 
+// AI 사용량 요약 (운영 대시보드용)
+export interface AIUsageSummary {
+  todayCostUsd: number;
+  todayTokens: number;
+  monthCostUsd: number;
+  monthTokens: number;
+  forecastCostUsd: number;
+  cacheHitRate: number;
+  estimatedSavings: number;
+  anomalyCount: number;
+}
+
 export interface AdminDashboardData {
   stats: SystemStats;
   topTenants: TenantUsage[];
+  aiUsage: AIUsageSummary;
+  anomalies: Array<{
+    tenantId: string;
+    tenantName: string;
+    todayCost: number;
+    increaseRatio: number;
+  }>;
   recentErrors: Array<{
     id: string;
     type: string;
@@ -59,13 +85,19 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // 병렬로 통계 조회
+    // 병렬로 통계 조회 (기존 5개 + AI 사용량 4개)
     const [
       tenantStats,
       documentCount,
       chunkStats,
       conversationStats,
       topTenantsData,
+      // AI 사용량 데이터
+      todayUsage,
+      monthUsage,
+      forecast,
+      cacheCost,
+      anomaliesRaw,
     ] = await Promise.all([
       // 테넌트 통계
       db
@@ -126,6 +158,17 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
         ORDER BY conv_count DESC
         LIMIT 10
       `),
+
+      // AI 사용량: 오늘
+      getUsageOverview('today'),
+      // AI 사용량: 이번 달
+      getUsageOverview('month'),
+      // 월말 예측
+      getForecast(),
+      // 캐시 비용 비교
+      getCacheCostComparison('month'),
+      // 이상 징후 감지
+      detectAnomalies(2.0),
     ]);
 
     const stats: SystemStats = {
@@ -161,6 +204,43 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
         : (row.created_at ? String(row.created_at) : new Date().toISOString()),
     }));
 
+    // 캐시 히트율 계산
+    const totalCacheRequests = cacheCost.cachedRequests + cacheCost.nonCachedRequests;
+    const cacheHitRate = totalCacheRequests > 0
+      ? (cacheCost.cachedRequests / totalCacheRequests) * 100
+      : 0;
+
+    // AI 사용량 요약 생성
+    const aiUsage: AIUsageSummary = {
+      todayCostUsd: todayUsage.totalCostUsd,
+      todayTokens: todayUsage.totalTokens,
+      monthCostUsd: monthUsage.totalCostUsd,
+      monthTokens: monthUsage.totalTokens,
+      forecastCostUsd: forecast.projectedMonthlyUsage,
+      cacheHitRate,
+      estimatedSavings: cacheCost.estimatedSavings,
+      anomalyCount: anomaliesRaw.length,
+    };
+
+    // 이상 징후 테넌트 이름 조회
+    const anomalyTenantIds = anomaliesRaw.map((a) => a.tenantId);
+    const anomalyTenantNames = new Map<string, string>();
+    if (anomalyTenantIds.length > 0) {
+      const tenantRecords = await db
+        .select({ id: tenants.id, name: tenants.name })
+        .from(tenants);
+      for (const t of tenantRecords) {
+        anomalyTenantNames.set(t.id, t.name);
+      }
+    }
+
+    const anomalies = anomaliesRaw.slice(0, 5).map((a) => ({
+      tenantId: a.tenantId,
+      tenantName: anomalyTenantNames.get(a.tenantId) || 'Unknown',
+      todayCost: a.todayCost,
+      increaseRatio: a.increaseRatio,
+    }));
+
     logger.info('Admin dashboard data fetched', {
       operatorId: session.userId,
       stats: {
@@ -168,11 +248,17 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
         documents: stats.totalDocuments,
         conversations: stats.totalConversations,
       },
+      aiUsage: {
+        todayCost: aiUsage.todayCostUsd,
+        anomalyCount: aiUsage.anomalyCount,
+      },
     });
 
     return {
       stats,
       topTenants,
+      aiUsage,
+      anomalies,
       recentErrors: [], // 에러 로그 테이블이 있다면 여기서 조회
     };
   } catch (error) {

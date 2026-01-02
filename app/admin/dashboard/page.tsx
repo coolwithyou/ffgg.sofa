@@ -5,6 +5,7 @@
 
 import Link from 'next/link';
 import { getAdminDashboardData } from './actions';
+import { formatCompactNumber } from '@/lib/format';
 
 export default async function AdminDashboardPage() {
   const data = await getAdminDashboardData();
@@ -24,6 +25,29 @@ export default async function AdminDashboardPage() {
         <h1 className="text-2xl font-semibold text-foreground">운영 대시보드</h1>
         <p className="text-muted-foreground">전체 시스템 현황을 확인하세요.</p>
       </div>
+
+      {/* 이상 징후 알림 */}
+      {data.anomalies.length > 0 && (
+        <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4">
+          <div className="flex items-center gap-2">
+            <span className="text-yellow-500">⚠️</span>
+            <h3 className="font-medium text-foreground">이상 사용량 감지</h3>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {data.anomalies.length}개 테넌트에서 비정상적인 사용량 증가가 감지되었습니다.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {data.anomalies.map((a) => (
+              <span
+                key={a.tenantId}
+                className="rounded bg-yellow-500/20 px-2 py-0.5 text-xs text-yellow-600 dark:text-yellow-400"
+              >
+                {a.tenantName} (+{(a.increaseRatio * 100).toFixed(0)}%)
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 주요 통계 */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -46,6 +70,43 @@ export default async function AdminDashboardPage() {
           value={data.stats.todayConversations}
           subValue={`주간 ${data.stats.weeklyConversations}`}
         />
+      </div>
+
+      {/* AI 사용량 요약 */}
+      <div className="rounded-lg border border-border bg-card p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground">AI 사용량</h2>
+          <Link
+            href="/admin/usage"
+            className="text-sm text-primary hover:text-primary/80"
+          >
+            상세 보기
+          </Link>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <AIStatCard
+            title="오늘 비용"
+            value={`$${data.aiUsage.todayCostUsd.toFixed(2)}`}
+            subValue={`${formatCompactNumber(data.aiUsage.todayTokens)} tokens`}
+          />
+          <AIStatCard
+            title="이번 달"
+            value={`$${data.aiUsage.monthCostUsd.toFixed(2)}`}
+            subValue={`${formatCompactNumber(data.aiUsage.monthTokens)} tokens`}
+          />
+          <AIStatCard
+            title="월말 예측"
+            value={`$${data.aiUsage.forecastCostUsd.toFixed(2)}`}
+            subValue="예상 비용"
+            highlight={data.aiUsage.forecastCostUsd > data.aiUsage.monthCostUsd * 1.5}
+          />
+          <AIStatCard
+            title="캐시 효율"
+            value={`${data.aiUsage.cacheHitRate.toFixed(1)}%`}
+            subValue={`$${data.aiUsage.estimatedSavings.toFixed(2)} 절감`}
+            positive={data.aiUsage.cacheHitRate >= 50}
+          />
+        </div>
       </div>
 
       {/* 상세 통계 */}
@@ -179,6 +240,35 @@ function StatCard({ title, value, subValue }: StatCardProps) {
       <p className="text-sm font-medium text-muted-foreground">{title}</p>
       <p className="mt-2 text-3xl font-bold text-foreground">{value.toLocaleString()}</p>
       {subValue && <p className="mt-1 text-sm text-muted-foreground">{subValue}</p>}
+    </div>
+  );
+}
+
+// AI 사용량 카드 컴포넌트
+interface AIStatCardProps {
+  title: string;
+  value: string;
+  subValue: string;
+  highlight?: boolean;
+  positive?: boolean;
+}
+
+function AIStatCard({ title, value, subValue, highlight, positive }: AIStatCardProps) {
+  return (
+    <div className="rounded-lg bg-muted/50 p-4">
+      <p className="text-sm font-medium text-muted-foreground">{title}</p>
+      <p
+        className={`mt-1 text-2xl font-bold tabular-nums ${
+          highlight
+            ? 'text-yellow-500'
+            : positive
+              ? 'text-green-500'
+              : 'text-foreground'
+        }`}
+      >
+        {value}
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{subValue}</p>
     </div>
   );
 }
