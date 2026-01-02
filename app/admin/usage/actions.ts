@@ -14,9 +14,24 @@ import {
   getForecast,
   getTopTenantsByUsage,
   detectAnomalies,
+  // 인사이트 대시보드 쿼리 함수
+  getTokenEfficiencyByModel,
+  getTokenUsageByFeature,
+  getCacheHitRateTrend,
+  getCacheCostComparison,
+  getUsageByDayHour,
+  getUsageByChannel,
+  getChunkDistribution,
+  getPipelineLatency,
 } from '@/lib/usage/cost-calculator';
 import { getAllTenantBudgetStatuses } from '@/lib/tier/budget-limits';
-import type { UsageOverview, DailyUsage, Forecast, BudgetStatus } from '@/lib/usage/types';
+import type {
+  UsageOverview,
+  DailyUsage,
+  Forecast,
+  BudgetStatus,
+  InsightsDashboardData,
+} from '@/lib/usage/types';
 
 export interface UsageDashboardData {
   overview: {
@@ -154,6 +169,108 @@ export async function getForecastAction(): Promise<Forecast | null> {
     return await getForecast();
   } catch (error) {
     console.error('Failed to get forecast:', error);
+    return null;
+  }
+}
+
+/**
+ * AI 인사이트 통합 대시보드 데이터 조회
+ * 기존 사용량 데이터 + 심층 분석 인사이트를 포함합니다.
+ */
+export async function getInsightsDashboardData(): Promise<InsightsDashboardData | null> {
+  const session = await validateSession();
+  if (!session || (session.role !== 'internal_operator' && session.role !== 'admin')) {
+    return null;
+  }
+
+  try {
+    // 모든 쿼리 병렬 실행 (기존 7개 + 새로운 8개 = 15개)
+    const [
+      // 기존 대시보드 데이터
+      todayOverview,
+      monthOverview,
+      trend,
+      forecast,
+      topTenantRaw,
+      budgetStatuses,
+      anomaliesRaw,
+      // 새로운 인사이트 데이터
+      tokenEfficiency,
+      featureDistribution,
+      cacheHitTrend,
+      cacheCostComparison,
+      usageHeatmap,
+      channelUsage,
+      chunkDistribution,
+      pipelineLatency,
+    ] = await Promise.all([
+      // 기존 7개
+      getUsageOverview('today'),
+      getUsageOverview('month'),
+      getUsageTrend(30),
+      getForecast(),
+      getTopTenantsByUsage('month', 10),
+      getAllTenantBudgetStatuses(),
+      detectAnomalies(2.0),
+      // 새로운 8개
+      getTokenEfficiencyByModel('month'),
+      getTokenUsageByFeature('month'),
+      getCacheHitRateTrend(30),
+      getCacheCostComparison('month'),
+      getUsageByDayHour(30),
+      getUsageByChannel(30),
+      getChunkDistribution(),
+      getPipelineLatency(),
+    ]);
+
+    // 테넌트 이름 조회
+    const tenantIds = [
+      ...new Set([
+        ...topTenantRaw.map((t) => t.tenantId),
+        ...anomaliesRaw.map((a) => a.tenantId),
+      ]),
+    ];
+
+    const tenantNames = new Map<string, string>();
+    if (tenantIds.length > 0) {
+      const tenantRecords = await db
+        .select({ id: tenants.id, name: tenants.name })
+        .from(tenants);
+
+      for (const t of tenantRecords) {
+        tenantNames.set(t.id, t.name);
+      }
+    }
+
+    return {
+      // 기존 대시보드 데이터
+      overview: {
+        today: todayOverview,
+        month: monthOverview,
+      },
+      trend,
+      forecast,
+      topTenants: topTenantRaw.map((t) => ({
+        ...t,
+        tenantName: tenantNames.get(t.tenantId) || 'Unknown',
+      })),
+      budgetStatuses,
+      anomalies: anomaliesRaw.map((a) => ({
+        ...a,
+        tenantName: tenantNames.get(a.tenantId) || 'Unknown',
+      })),
+      // 새로운 인사이트 데이터
+      tokenEfficiency,
+      featureDistribution,
+      cacheHitTrend,
+      cacheCostComparison,
+      usageHeatmap,
+      channelUsage,
+      chunkDistribution,
+      pipelineLatency,
+    };
+  } catch (error) {
+    console.error('Failed to get insights dashboard data:', error);
     return null;
   }
 }

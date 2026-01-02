@@ -4,7 +4,7 @@
  */
 
 import { db } from '@/lib/db';
-import { tokenUsageLogs, llmModels } from '@/drizzle/schema';
+import { tokenUsageLogs, llmModels, responseTimeLogs } from '@/drizzle/schema';
 import { eq, sql, and, gte, lte, desc } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import type {
@@ -14,6 +14,14 @@ import type {
   ModelProvider,
   ModelId,
   FeatureType,
+  TokenEfficiency,
+  FeatureDistribution,
+  CacheHitTrend,
+  CacheCostComparison,
+  HourlyUsageCell,
+  ChannelUsage,
+  ChunkDistribution,
+  PipelineLatency,
 } from './types';
 
 /**
@@ -405,4 +413,326 @@ export async function detectAnomalies(
   }
 
   return anomalies.sort((a, b) => b.increaseRatio - a.increaseRatio);
+}
+
+// ============================================================
+// AI 인사이트 대시보드 쿼리 함수
+// ============================================================
+
+/**
+ * 모델별 토큰 효율성 분석
+ * 입력/출력 토큰 비율과 비용 효율성을 계산합니다.
+ */
+export async function getTokenEfficiencyByModel(
+  period: 'week' | 'month'
+): Promise<TokenEfficiency[]> {
+  const now = new Date();
+  const startDate =
+    period === 'week'
+      ? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      : new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // 모델 표시 이름 조회
+  const modelNames = await db
+    .select({
+      provider: llmModels.provider,
+      modelId: llmModels.modelId,
+      displayName: llmModels.displayName,
+    })
+    .from(llmModels);
+
+  const modelNameMap = new Map<string, string>();
+  for (const m of modelNames) {
+    modelNameMap.set(`${m.provider}:${m.modelId}`, m.displayName);
+  }
+
+  const results = await db
+    .select({
+      modelId: tokenUsageLogs.modelId,
+      avgInputTokens: sql<number>`AVG(${tokenUsageLogs.inputTokens})`,
+      avgOutputTokens: sql<number>`AVG(${tokenUsageLogs.outputTokens})`,
+      totalCost: sql<number>`COALESCE(SUM(${tokenUsageLogs.totalCostUsd}), 0)`,
+      requestCount: sql<number>`COUNT(*)`,
+      totalInput: sql<number>`COALESCE(SUM(${tokenUsageLogs.inputTokens}), 0)`,
+      totalOutput: sql<number>`COALESCE(SUM(${tokenUsageLogs.outputTokens}), 0)`,
+    })
+    .from(tokenUsageLogs)
+    .where(gte(tokenUsageLogs.createdAt, startDate))
+    .groupBy(tokenUsageLogs.modelId);
+
+  return results.map((r) => ({
+    modelId: r.modelId as ModelId,
+    displayName: modelNameMap.get(`openai:${r.modelId}`) ||
+      modelNameMap.get(`google:${r.modelId}`) ||
+      modelNameMap.get(`anthropic:${r.modelId}`) ||
+      r.modelId,
+    avgInputTokens: Math.round(r.avgInputTokens || 0),
+    avgOutputTokens: Math.round(r.avgOutputTokens || 0),
+    totalCost: r.totalCost,
+    requestCount: r.requestCount,
+    ioRatio: r.totalInput > 0 ? r.totalOutput / r.totalInput : 0,
+  }));
+}
+
+/**
+ * Feature별 토큰 분포
+ * 기능별 토큰 사용량 비율을 분석합니다.
+ */
+export async function getTokenUsageByFeature(
+  period: 'week' | 'month'
+): Promise<FeatureDistribution[]> {
+  const now = new Date();
+  const startDate =
+    period === 'week'
+      ? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      : new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const results = await db
+    .select({
+      featureType: tokenUsageLogs.featureType,
+      inputTokens: sql<number>`COALESCE(SUM(${tokenUsageLogs.inputTokens}), 0)`,
+      outputTokens: sql<number>`COALESCE(SUM(${tokenUsageLogs.outputTokens}), 0)`,
+      totalTokens: sql<number>`COALESCE(SUM(${tokenUsageLogs.totalTokens}), 0)`,
+    })
+    .from(tokenUsageLogs)
+    .where(gte(tokenUsageLogs.createdAt, startDate))
+    .groupBy(tokenUsageLogs.featureType);
+
+  const totalTokens = results.reduce((sum, r) => sum + r.totalTokens, 0);
+
+  return results.map((r) => ({
+    featureType: r.featureType as FeatureType,
+    inputTokens: r.inputTokens,
+    outputTokens: r.outputTokens,
+    totalTokens: r.totalTokens,
+    percentage: totalTokens > 0 ? (r.totalTokens / totalTokens) * 100 : 0,
+  }));
+}
+
+/**
+ * 일별 캐시 히트율 추이
+ * responseTimeLogs에서 캐시 효율성을 시계열로 분석합니다.
+ */
+export async function getCacheHitRateTrend(
+  days: number = 30
+): Promise<CacheHitTrend[]> {
+  const now = new Date();
+  const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+  const results = await db
+    .select({
+      date: sql<string>`DATE(${responseTimeLogs.createdAt})`,
+      hitCount: sql<number>`SUM(CASE WHEN ${responseTimeLogs.cacheHit} = true THEN 1 ELSE 0 END)`,
+      totalCount: sql<number>`COUNT(*)`,
+    })
+    .from(responseTimeLogs)
+    .where(gte(responseTimeLogs.createdAt, startDate))
+    .groupBy(sql`DATE(${responseTimeLogs.createdAt})`)
+    .orderBy(sql`DATE(${responseTimeLogs.createdAt})`);
+
+  return results.map((r) => ({
+    date: r.date,
+    hitCount: r.hitCount,
+    totalCount: r.totalCount,
+    hitRate: r.totalCount > 0 ? (r.hitCount / r.totalCount) * 100 : 0,
+  }));
+}
+
+/**
+ * 캐시 비용 비교
+ * 캐시 히트/미스 요청 수와 추정 절감 비용을 분석합니다.
+ */
+export async function getCacheCostComparison(
+  period: 'week' | 'month'
+): Promise<CacheCostComparison> {
+  const now = new Date();
+  const startDate =
+    period === 'week'
+      ? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      : new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // 캐시 히트/미스 카운트
+  const [cacheStats] = await db
+    .select({
+      cachedRequests: sql<number>`SUM(CASE WHEN ${responseTimeLogs.cacheHit} = true THEN 1 ELSE 0 END)`,
+      nonCachedRequests: sql<number>`SUM(CASE WHEN ${responseTimeLogs.cacheHit} = false THEN 1 ELSE 0 END)`,
+      cachedTokens: sql<number>`COALESCE(SUM(CASE WHEN ${responseTimeLogs.cacheHit} = true THEN ${responseTimeLogs.estimatedTokens} ELSE 0 END), 0)`,
+    })
+    .from(responseTimeLogs)
+    .where(gte(responseTimeLogs.createdAt, startDate));
+
+  // 비캐시 요청의 평균 비용 계산 (tokenUsageLogs에서)
+  const [avgCost] = await db
+    .select({
+      avgCostPerRequest: sql<number>`COALESCE(AVG(${tokenUsageLogs.totalCostUsd}), 0)`,
+    })
+    .from(tokenUsageLogs)
+    .where(
+      and(
+        gte(tokenUsageLogs.createdAt, startDate),
+        eq(tokenUsageLogs.featureType, 'chat')
+      )
+    );
+
+  // 캐시된 요청 수 × 평균 비용 = 추정 절감액
+  const estimatedSavings =
+    (cacheStats?.cachedRequests || 0) * (avgCost?.avgCostPerRequest || 0);
+
+  return {
+    cachedRequests: cacheStats?.cachedRequests || 0,
+    nonCachedRequests: cacheStats?.nonCachedRequests || 0,
+    estimatedSavings,
+  };
+}
+
+/**
+ * 시간대별 사용량 (Heatmap용)
+ * 요일×시간 조합별 사용량을 분석합니다.
+ */
+export async function getUsageByDayHour(
+  days: number = 30
+): Promise<HourlyUsageCell[]> {
+  const now = new Date();
+  const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+  const results = await db
+    .select({
+      dayOfWeek: sql<number>`EXTRACT(DOW FROM ${tokenUsageLogs.createdAt})`,
+      hour: sql<number>`EXTRACT(HOUR FROM ${tokenUsageLogs.createdAt})`,
+      count: sql<number>`COUNT(*)`,
+      cost: sql<number>`COALESCE(SUM(${tokenUsageLogs.totalCostUsd}), 0)`,
+    })
+    .from(tokenUsageLogs)
+    .where(gte(tokenUsageLogs.createdAt, startDate))
+    .groupBy(
+      sql`EXTRACT(DOW FROM ${tokenUsageLogs.createdAt})`,
+      sql`EXTRACT(HOUR FROM ${tokenUsageLogs.createdAt})`
+    );
+
+  // 최대값 찾아서 intensity 정규화
+  const maxCount = Math.max(...results.map((r) => r.count), 1);
+
+  return results.map((r) => ({
+    dayOfWeek: r.dayOfWeek,
+    hour: r.hour,
+    count: r.count,
+    cost: r.cost,
+    intensity: r.count / maxCount,
+  }));
+}
+
+/**
+ * 채널별 사용량 추이
+ * 웹/카카오 채널별 일간 사용량을 분석합니다.
+ */
+export async function getUsageByChannel(
+  days: number = 30
+): Promise<ChannelUsage[]> {
+  const now = new Date();
+  const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+  const results = await db
+    .select({
+      date: sql<string>`DATE(${responseTimeLogs.createdAt})`,
+      web: sql<number>`SUM(CASE WHEN ${responseTimeLogs.channel} = 'web' THEN 1 ELSE 0 END)`,
+      kakao: sql<number>`SUM(CASE WHEN ${responseTimeLogs.channel} = 'kakao' THEN 1 ELSE 0 END)`,
+      total: sql<number>`COUNT(*)`,
+    })
+    .from(responseTimeLogs)
+    .where(gte(responseTimeLogs.createdAt, startDate))
+    .groupBy(sql`DATE(${responseTimeLogs.createdAt})`)
+    .orderBy(sql`DATE(${responseTimeLogs.createdAt})`);
+
+  return results.map((r) => ({
+    date: r.date,
+    web: r.web,
+    kakao: r.kakao,
+    total: r.total,
+  }));
+}
+
+/**
+ * 청크 수 분포
+ * RAG 검색에서 사용된 청크 수 분포를 분석합니다.
+ */
+export async function getChunkDistribution(): Promise<ChunkDistribution[]> {
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // 범위별 집계
+  const results = await db
+    .select({
+      range: sql<string>`
+        CASE
+          WHEN ${responseTimeLogs.chunksUsed} <= 2 THEN '1-2'
+          WHEN ${responseTimeLogs.chunksUsed} <= 4 THEN '3-4'
+          WHEN ${responseTimeLogs.chunksUsed} <= 6 THEN '5-6'
+          WHEN ${responseTimeLogs.chunksUsed} <= 8 THEN '7-8'
+          ELSE '9+'
+        END
+      `,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(responseTimeLogs)
+    .where(gte(responseTimeLogs.createdAt, startDate))
+    .groupBy(sql`
+      CASE
+        WHEN ${responseTimeLogs.chunksUsed} <= 2 THEN '1-2'
+        WHEN ${responseTimeLogs.chunksUsed} <= 4 THEN '3-4'
+        WHEN ${responseTimeLogs.chunksUsed} <= 6 THEN '5-6'
+        WHEN ${responseTimeLogs.chunksUsed} <= 8 THEN '7-8'
+        ELSE '9+'
+      END
+    `);
+
+  const totalCount = results.reduce((sum, r) => sum + r.count, 0);
+
+  // 범위 순서대로 정렬
+  const rangeOrder = ['1-2', '3-4', '5-6', '7-8', '9+'];
+  const sortedResults = rangeOrder.map((range) => {
+    const found = results.find((r) => r.range === range);
+    return {
+      range,
+      count: found?.count || 0,
+      percentage:
+        totalCount > 0 ? ((found?.count || 0) / totalCount) * 100 : 0,
+    };
+  });
+
+  return sortedResults;
+}
+
+/**
+ * 파이프라인 지연시간
+ * RAG 파이프라인 각 단계별 평균 지연시간을 분석합니다.
+ */
+export async function getPipelineLatency(): Promise<PipelineLatency> {
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const [result] = await db
+    .select({
+      llmAvgMs: sql<number>`COALESCE(AVG(${responseTimeLogs.llmDurationMs}), 0)`,
+      searchAvgMs: sql<number>`COALESCE(AVG(${responseTimeLogs.searchDurationMs}), 0)`,
+      rewriteAvgMs: sql<number>`COALESCE(AVG(${responseTimeLogs.rewriteDurationMs}), 0)`,
+      totalAvgMs: sql<number>`COALESCE(AVG(${responseTimeLogs.totalDurationMs}), 0)`,
+    })
+    .from(responseTimeLogs)
+    .where(gte(responseTimeLogs.createdAt, startDate));
+
+  const llmAvgMs = Math.round(result?.llmAvgMs || 0);
+  const searchAvgMs = Math.round(result?.searchAvgMs || 0);
+  const rewriteAvgMs = Math.round(result?.rewriteAvgMs || 0);
+  const totalAvgMs = Math.round(result?.totalAvgMs || 0);
+
+  // 기타 = 전체 - (LLM + 검색 + 재작성)
+  const otherAvgMs = Math.max(0, totalAvgMs - llmAvgMs - searchAvgMs - rewriteAvgMs);
+
+  return {
+    llmAvgMs,
+    searchAvgMs,
+    rewriteAvgMs,
+    otherAvgMs,
+    totalAvgMs,
+  };
 }
