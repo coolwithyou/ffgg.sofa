@@ -6,6 +6,7 @@
  */
 
 import type { UsageOverview } from '@/lib/usage/types';
+import { formatCompactNumber, formatWithCommas } from '@/lib/format';
 
 interface CostBreakdownChartProps {
   overview: UsageOverview;
@@ -132,20 +133,29 @@ export function CostBreakdownChart({ overview }: CostBreakdownChartProps) {
           <div className="grid gap-2 text-sm sm:grid-cols-3">
             <div className="flex justify-between rounded bg-muted/50 px-3 py-2">
               <span className="text-muted-foreground">총 토큰</span>
-              <span className="font-medium text-foreground">
-                {overview.totalTokens.toLocaleString()}
+              <span
+                className="font-medium text-foreground"
+                title={`${formatWithCommas(overview.totalTokens)} 토큰`}
+              >
+                {formatCompactNumber(overview.totalTokens)}
               </span>
             </div>
             <div className="flex justify-between rounded bg-muted/50 px-3 py-2">
               <span className="text-muted-foreground">입력 토큰</span>
-              <span className="font-medium text-foreground">
-                {overview.inputTokens.toLocaleString()}
+              <span
+                className="font-medium text-foreground"
+                title={`${formatWithCommas(overview.inputTokens)} 토큰`}
+              >
+                {formatCompactNumber(overview.inputTokens)}
               </span>
             </div>
             <div className="flex justify-between rounded bg-muted/50 px-3 py-2">
               <span className="text-muted-foreground">출력 토큰</span>
-              <span className="font-medium text-foreground">
-                {overview.outputTokens.toLocaleString()}
+              <span
+                className="font-medium text-foreground"
+                title={`${formatWithCommas(overview.outputTokens)} 토큰`}
+              >
+                {formatCompactNumber(overview.outputTokens)}
               </span>
             </div>
           </div>
@@ -180,14 +190,23 @@ export function CostBreakdownChart({ overview }: CostBreakdownChartProps) {
                         <span className="text-xs text-muted-foreground">({model.provider})</span>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                      {model.inputTokens.toLocaleString()}
+                    <td
+                      className="px-3 py-2 text-right tabular-nums text-foreground"
+                      title={formatWithCommas(model.inputTokens)}
+                    >
+                      {formatCompactNumber(model.inputTokens)}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                      {model.outputTokens.toLocaleString()}
+                    <td
+                      className="px-3 py-2 text-right tabular-nums text-foreground"
+                      title={formatWithCommas(model.outputTokens)}
+                    >
+                      {formatCompactNumber(model.outputTokens)}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                      {(model.inputTokens + model.outputTokens).toLocaleString()}
+                    <td
+                      className="px-3 py-2 text-right tabular-nums text-foreground"
+                      title={formatWithCommas(model.inputTokens + model.outputTokens)}
+                    >
+                      {formatCompactNumber(model.inputTokens + model.outputTokens)}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground">
                       ${model.totalCostUsd.toFixed(4)}
@@ -198,14 +217,23 @@ export function CostBreakdownChart({ overview }: CostBreakdownChartProps) {
               <tfoot>
                 <tr className="border-t border-border bg-muted/30 font-medium">
                   <td className="px-3 py-2 text-foreground">합계</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                    {overview.inputTokens.toLocaleString()}
+                  <td
+                    className="px-3 py-2 text-right tabular-nums text-foreground"
+                    title={formatWithCommas(overview.inputTokens)}
+                  >
+                    {formatCompactNumber(overview.inputTokens)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                    {overview.outputTokens.toLocaleString()}
+                  <td
+                    className="px-3 py-2 text-right tabular-nums text-foreground"
+                    title={formatWithCommas(overview.outputTokens)}
+                  >
+                    {formatCompactNumber(overview.outputTokens)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                    {overview.totalTokens.toLocaleString()}
+                  <td
+                    className="px-3 py-2 text-right tabular-nums text-foreground"
+                    title={formatWithCommas(overview.totalTokens)}
+                  >
+                    {formatCompactNumber(overview.totalTokens)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-foreground">
                     ${overview.totalCostUsd.toFixed(4)}
