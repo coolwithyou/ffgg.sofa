@@ -1,4 +1,5 @@
 import type { PublicPageConfig } from '@/lib/public-page/types';
+import type { WidgetConfig } from '@/lib/widget/types';
 
 // 챗봇 기본 정보 (목록용)
 export interface ConsoleChatbot {
@@ -8,6 +9,10 @@ export interface ConsoleChatbot {
   publicPageEnabled: boolean;
   publicPageConfig: PublicPageConfig;
   tenantId: string;
+  // 위젯 관련 필드
+  widgetEnabled: boolean;
+  widgetApiKey: string | null;
+  widgetConfig: WidgetConfig;
 }
 
 // 편집 모드
@@ -35,8 +40,17 @@ export interface ConsoleState {
   // 원본 설정 (변경사항 비교용)
   originalPageConfig: PublicPageConfig | null;
 
-  // 저장 상태
+  // Page 저장 상태
   saveStatus: SaveStatus;
+
+  // Widget 설정 (현재 선택된 챗봇의)
+  widgetConfig: WidgetConfig;
+
+  // Widget 원본 설정 (변경사항 비교용)
+  originalWidgetConfig: WidgetConfig | null;
+
+  // Widget 저장 상태 (분리 관리)
+  widgetSaveStatus: SaveStatus;
 }
 
 // Context 액션 타입
@@ -44,6 +58,7 @@ export interface ConsoleActions {
   setMode: (mode: ConsoleMode) => void;
   selectChatbot: (index: number) => void;
   navigateChatbot: (direction: 'prev' | 'next') => void;
+  // Page 설정 액션
   updatePageConfig: (partial: Partial<PublicPageConfig>) => void;
   updateHeaderConfig: (partial: Partial<PublicPageConfig['header']>) => void;
   updateThemeConfig: (partial: Partial<PublicPageConfig['theme']>) => void;
@@ -51,6 +66,12 @@ export interface ConsoleActions {
   updateChatbotConfig: (partial: Partial<PublicPageConfig['chatbot']>) => void;
   setSaveStatus: (status: SaveStatus) => void;
   setOriginalPageConfig: (config: PublicPageConfig) => void;
+  // Widget 설정 액션
+  updateWidgetConfig: (partial: Partial<WidgetConfig>) => void;
+  updateWidgetTheme: (partial: Partial<WidgetConfig['theme']>) => void;
+  setWidgetSaveStatus: (status: SaveStatus) => void;
+  setOriginalWidgetConfig: (config: WidgetConfig) => void;
+  // 공통 액션
   reloadChatbots: () => Promise<void>;
 }
 

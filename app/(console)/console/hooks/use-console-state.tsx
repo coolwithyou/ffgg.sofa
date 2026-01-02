@@ -20,6 +20,11 @@ import {
   parsePublicPageConfig,
   type PublicPageConfig,
 } from '@/lib/public-page/types';
+import {
+  DEFAULT_CONFIG as DEFAULT_WIDGET_CONFIG,
+  parseWidgetConfig,
+  type WidgetConfig,
+} from '@/lib/widget/types';
 
 // Context 생성
 const ConsoleContext = createContext<ConsoleContextValue | null>(null);
@@ -42,6 +47,9 @@ export function ConsoleProvider({
   const [isLoading, setIsLoading] = useState(initialChatbots.length === 0);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
 
+  // Widget 저장 상태 (분리 관리)
+  const [widgetSaveStatus, setWidgetSaveStatus] = useState<SaveStatus>('saved');
+
   // 현재 챗봇 (파생 상태)
   const currentChatbot = useMemo(
     () => chatbots[currentChatbotIndex] ?? null,
@@ -57,12 +65,27 @@ export function ConsoleProvider({
   const [originalPageConfig, setOriginalPageConfig] =
     useState<PublicPageConfig | null>(null);
 
+  // Widget 설정 (현재 챗봇 기준)
+  const [widgetConfig, setWidgetConfig] = useState<WidgetConfig>(
+    currentChatbot?.widgetConfig ?? { ...DEFAULT_WIDGET_CONFIG, tenantId: '' }
+  );
+
+  // Widget 원본 설정 (변경사항 비교용)
+  const [originalWidgetConfig, setOriginalWidgetConfig] =
+    useState<WidgetConfig | null>(null);
+
   // 챗봇 변경 시 설정 동기화
   useEffect(() => {
     if (currentChatbot) {
+      // Page 설정 동기화
       setPageConfig(currentChatbot.publicPageConfig);
       setOriginalPageConfig(currentChatbot.publicPageConfig);
       setSaveStatus('saved');
+
+      // Widget 설정 동기화
+      setWidgetConfig(currentChatbot.widgetConfig);
+      setOriginalWidgetConfig(currentChatbot.widgetConfig);
+      setWidgetSaveStatus('saved');
     }
   }, [currentChatbot]);
 
@@ -82,6 +105,10 @@ export function ConsoleProvider({
         publicPageEnabled: bot.publicPageEnabled ?? false,
         publicPageConfig: parsePublicPageConfig(bot.publicPageConfig),
         tenantId: bot.tenantId,
+        // Widget 관련 필드
+        widgetEnabled: bot.widgetEnabled ?? false,
+        widgetApiKey: bot.widgetApiKey ?? null,
+        widgetConfig: parseWidgetConfig(bot.widgetConfig, bot.tenantId),
       }));
 
       setChatbots(mapped);
@@ -181,6 +208,26 @@ export function ConsoleProvider({
     []
   );
 
+  // Widget 설정 업데이트
+  const updateWidgetConfig = useCallback(
+    (partial: Partial<WidgetConfig>) => {
+      setWidgetConfig((prev) => ({ ...prev, ...partial }));
+      setWidgetSaveStatus('unsaved');
+    },
+    []
+  );
+
+  const updateWidgetTheme = useCallback(
+    (partial: Partial<WidgetConfig['theme']>) => {
+      setWidgetConfig((prev) => ({
+        ...prev,
+        theme: { ...prev.theme, ...partial },
+      }));
+      setWidgetSaveStatus('unsaved');
+    },
+    []
+  );
+
   // Context 값
   const value: ConsoleContextValue = useMemo(
     () => ({
@@ -193,6 +240,10 @@ export function ConsoleProvider({
       pageConfig,
       originalPageConfig,
       saveStatus,
+      // Widget 상태
+      widgetConfig,
+      originalWidgetConfig,
+      widgetSaveStatus,
       // 액션
       setMode,
       selectChatbot,
@@ -204,6 +255,12 @@ export function ConsoleProvider({
       updateChatbotConfig,
       setSaveStatus,
       setOriginalPageConfig,
+      // Widget 액션
+      updateWidgetConfig,
+      updateWidgetTheme,
+      setWidgetSaveStatus,
+      setOriginalWidgetConfig,
+      // 공통 액션
       reloadChatbots,
     }),
     [
@@ -215,6 +272,9 @@ export function ConsoleProvider({
       pageConfig,
       originalPageConfig,
       saveStatus,
+      widgetConfig,
+      originalWidgetConfig,
+      widgetSaveStatus,
       selectChatbot,
       navigateChatbot,
       updatePageConfig,
@@ -222,6 +282,8 @@ export function ConsoleProvider({
       updateThemeConfig,
       updateSeoConfig,
       updateChatbotConfig,
+      updateWidgetConfig,
+      updateWidgetTheme,
       reloadChatbots,
     ]
   );
@@ -274,4 +336,25 @@ export function usePageConfig() {
 export function useSaveStatus() {
   const { saveStatus, setSaveStatus } = useConsole();
   return { saveStatus, setSaveStatus };
+}
+
+export function useWidgetConfig() {
+  const {
+    widgetConfig,
+    originalWidgetConfig,
+    widgetSaveStatus,
+    updateWidgetConfig,
+    updateWidgetTheme,
+    setWidgetSaveStatus,
+    setOriginalWidgetConfig,
+  } = useConsole();
+  return {
+    widgetConfig,
+    originalWidgetConfig,
+    widgetSaveStatus,
+    updateWidgetConfig,
+    updateWidgetTheme,
+    setWidgetSaveStatus,
+    setOriginalWidgetConfig,
+  };
 }

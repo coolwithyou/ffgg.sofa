@@ -103,3 +103,74 @@ export interface WidgetChatResponse {
     score: number;
   }>;
 }
+
+/**
+ * JSON 객체를 WidgetConfig로 파싱
+ * DB에서 읽은 jsonb 값을 타입 안전한 WidgetConfig로 변환
+ */
+export function parseWidgetConfig(
+  json: unknown,
+  tenantId: string
+): WidgetConfig {
+  if (!json || typeof json !== 'object') {
+    return { ...DEFAULT_CONFIG, tenantId };
+  }
+
+  const obj = json as Record<string, unknown>;
+  const themeObj = (obj.theme as Record<string, unknown>) || {};
+
+  return {
+    tenantId: (obj.tenantId as string) || tenantId,
+    position:
+      (obj.position as WidgetConfig['position']) || DEFAULT_CONFIG.position,
+    theme: {
+      primaryColor:
+        (themeObj.primaryColor as string) || DEFAULT_THEME.primaryColor,
+      backgroundColor:
+        (themeObj.backgroundColor as string) || DEFAULT_THEME.backgroundColor,
+      textColor: (themeObj.textColor as string) || DEFAULT_THEME.textColor,
+      fontFamily: (themeObj.fontFamily as string) || DEFAULT_THEME.fontFamily,
+      borderRadius:
+        typeof themeObj.borderRadius === 'number'
+          ? themeObj.borderRadius
+          : DEFAULT_THEME.borderRadius,
+      buttonSize:
+        typeof themeObj.buttonSize === 'number'
+          ? themeObj.buttonSize
+          : DEFAULT_THEME.buttonSize,
+    },
+    title: (obj.title as string) || DEFAULT_CONFIG.title,
+    subtitle: (obj.subtitle as string) || DEFAULT_CONFIG.subtitle,
+    placeholder: (obj.placeholder as string) || DEFAULT_CONFIG.placeholder,
+    welcomeMessage:
+      (obj.welcomeMessage as string) || DEFAULT_CONFIG.welcomeMessage,
+    buttonIcon:
+      (obj.buttonIcon as WidgetConfig['buttonIcon']) ||
+      DEFAULT_CONFIG.buttonIcon,
+  };
+}
+
+/**
+ * WidgetConfig를 DB 저장용 JSON으로 변환
+ */
+export function toWidgetConfigJson(
+  config: WidgetConfig
+): Record<string, unknown> {
+  return {
+    tenantId: config.tenantId,
+    position: config.position,
+    theme: {
+      primaryColor: config.theme.primaryColor,
+      backgroundColor: config.theme.backgroundColor,
+      textColor: config.theme.textColor,
+      fontFamily: config.theme.fontFamily,
+      borderRadius: config.theme.borderRadius,
+      buttonSize: config.theme.buttonSize,
+    },
+    title: config.title,
+    subtitle: config.subtitle,
+    placeholder: config.placeholder,
+    welcomeMessage: config.welcomeMessage,
+    buttonIcon: config.buttonIcon,
+  };
+}
