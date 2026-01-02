@@ -96,9 +96,13 @@ export function useBlocks(): UseBlocksReturn {
    */
   const updateBlock = useCallback(
     (id: string, updates: Partial<Block>) => {
-      const updated = blocks.map((block) =>
-        block.id === id ? { ...block, ...updates } : block
-      );
+      const updated = blocks.map((block): Block => {
+        if (block.id === id) {
+          // 타입 보존을 위해 명시적 타입 단언
+          return { ...block, ...updates } as Block;
+        }
+        return block;
+      });
       setBlocks(updated);
     },
     [blocks, setBlocks]
@@ -109,9 +113,12 @@ export function useBlocks(): UseBlocksReturn {
    */
   const toggleBlockVisibility = useCallback(
     (id: string) => {
-      const updated = blocks.map((block) =>
-        block.id === id ? { ...block, visible: !block.visible } : block
-      );
+      const updated = blocks.map((block): Block => {
+        if (block.id === id) {
+          return { ...block, visible: !block.visible } as Block;
+        }
+        return block;
+      });
       setBlocks(updated);
     },
     [blocks, setBlocks]

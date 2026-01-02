@@ -18,6 +18,7 @@ import {
   toPublicPageConfigJson,
   DEFAULT_PUBLIC_PAGE_CONFIG,
 } from '@/lib/public-page/types';
+import { blocksArraySchema } from '@/lib/public-page/block-schema';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -56,6 +57,7 @@ const updateSchema = z.object({
           ogImage: z.string().optional(),
         })
         .optional(),
+      blocks: blocksArraySchema.optional(),
     })
     .optional(),
 });
@@ -285,6 +287,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           header: { ...existingConfig.header, ...config.header },
           theme: { ...existingConfig.theme, ...config.theme },
           seo: { ...existingConfig.seo, ...config.seo },
+          // blocks는 전체 교체 (deep merge 아님)
+          blocks: config.blocks ?? existingConfig.blocks,
         })
       : chatbot.publicPageConfig;
 
