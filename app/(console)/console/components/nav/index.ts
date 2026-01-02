@@ -1,3 +1,2 @@
-export { PrimaryNav } from './primary-nav';
-export { SecondaryPanel, SecondaryPanelSection } from './secondary-panel';
+export { AppSidebar } from './app-sidebar';
 export { navItems, findNavItem, findActiveNavItem, type NavItem } from './nav-config';
