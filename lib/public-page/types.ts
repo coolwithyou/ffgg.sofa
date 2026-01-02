@@ -5,6 +5,8 @@
  * 각 챗봇별로 고유한 슬러그 URL을 통해 접근할 수 있습니다.
  */
 
+import type { Block } from './block-types';
+
 /**
  * 공개 페이지 전체 설정
  */
@@ -13,6 +15,8 @@ export interface PublicPageConfig {
   theme: ThemeConfig;
   seo: SEOConfig;
   chatbot: ChatbotBlockConfig;
+  /** 블록 배열 (Link in Bio 스타일 에디터용) */
+  blocks?: Block[];
 }
 
 /**
@@ -89,6 +93,7 @@ export const DEFAULT_PUBLIC_PAGE_CONFIG: PublicPageConfig = {
     minHeight: 400,
     maxHeight: 600,
   },
+  blocks: [],
 };
 
 /**
@@ -114,6 +119,7 @@ export function toPublicPageConfigJson(
       ...DEFAULT_PUBLIC_PAGE_CONFIG.chatbot,
       ...config.chatbot,
     },
+    blocks: config.blocks ?? DEFAULT_PUBLIC_PAGE_CONFIG.blocks,
   };
 }
 
@@ -146,5 +152,6 @@ export function parsePublicPageConfig(
       ...DEFAULT_PUBLIC_PAGE_CONFIG.chatbot,
       ...(obj.chatbot as Partial<ChatbotBlockConfig>),
     },
+    blocks: Array.isArray(obj.blocks) ? (obj.blocks as Block[]) : [],
   };
 }

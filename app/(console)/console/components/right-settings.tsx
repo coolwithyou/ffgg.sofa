@@ -3,16 +3,19 @@
 import Link from 'next/link';
 import { useConsole, useConsoleMode, useCurrentChatbot } from '../hooks/use-console-state';
 import { useAutoSave } from '../hooks/use-auto-save';
+import { useBlocks } from '../hooks/use-blocks';
 import { HeaderSettings } from './settings/header-settings';
 import { ThemeSettings } from './settings/theme-settings';
 import { SeoSettings } from './settings/seo-settings';
 import { ChatbotSettings } from './settings/chatbot-settings';
+import { BlockPalette } from '../appearance/components/block-editor/block-palette';
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import {
@@ -22,6 +25,8 @@ import {
   MessageSquare,
   ExternalLink,
   Rocket,
+  LayoutGrid,
+  Settings,
 } from 'lucide-react';
 
 /**
@@ -105,8 +110,11 @@ export function RightSettings() {
     );
   }
 
+  // 블록 관리 훅
+  const { blocks, addBlock } = useBlocks();
+
   return (
-    <aside className="w-80 overflow-y-auto border-l border-border bg-card">
+    <aside className="flex w-80 flex-col overflow-hidden border-l border-border bg-card">
       {/* 헤더 */}
       <div className="border-b border-border p-4">
         <h2 className="text-lg font-semibold text-foreground">페이지 설정</h2>
@@ -134,64 +142,87 @@ export function RightSettings() {
         </Button>
       </div>
 
-      {/* 설정 아코디언 */}
-      <Accordion
-        type="multiple"
-        defaultValue={['header', 'theme']}
-        className="p-4"
-      >
-        {/* 헤더 설정 */}
-        <AccordionItem value="header" className="border-border">
-          <AccordionTrigger className="hover:no-underline">
-            <span className="flex items-center gap-2">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              헤더 설정
-            </span>
-          </AccordionTrigger>
-          <AccordionContent>
-            <HeaderSettings />
-          </AccordionContent>
-        </AccordionItem>
+      {/* 탭: 블록 / 설정 */}
+      <Tabs defaultValue="blocks" className="flex flex-1 flex-col overflow-hidden">
+        <div className="border-b border-border px-4 pt-2">
+          <TabsList className="w-full">
+            <TabsTrigger value="blocks" className="flex-1 gap-2">
+              <LayoutGrid className="h-4 w-4" />
+              블록
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="flex-1 gap-2">
+              <Settings className="h-4 w-4" />
+              설정
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-        {/* 챗봇 설정 */}
-        <AccordionItem value="chatbot" className="border-border">
-          <AccordionTrigger className="hover:no-underline">
-            <span className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
-              챗봇 설정
-            </span>
-          </AccordionTrigger>
-          <AccordionContent>
-            <ChatbotSettings />
-          </AccordionContent>
-        </AccordionItem>
+        {/* 블록 탭 */}
+        <TabsContent value="blocks" className="flex-1 overflow-y-auto p-4 mt-0">
+          <BlockPalette blocks={blocks} onAddBlock={addBlock} />
+        </TabsContent>
 
-        {/* 테마 설정 */}
-        <AccordionItem value="theme" className="border-border">
-          <AccordionTrigger className="hover:no-underline">
-            <span className="flex items-center gap-2">
-              <Palette className="h-4 w-4 text-muted-foreground" />
-              테마 설정
-            </span>
-          </AccordionTrigger>
-          <AccordionContent>
-            <ThemeSettings />
-          </AccordionContent>
-        </AccordionItem>
+        {/* 설정 탭 */}
+        <TabsContent value="settings" className="flex-1 overflow-y-auto mt-0">
+          <Accordion
+            type="multiple"
+            defaultValue={['header', 'theme']}
+            className="p-4"
+          >
+            {/* 헤더 설정 */}
+            <AccordionItem value="header" className="border-border">
+              <AccordionTrigger className="hover:no-underline">
+                <span className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  헤더 설정
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <HeaderSettings />
+              </AccordionContent>
+            </AccordionItem>
 
-        {/* SEO 설정 */}
-        <AccordionItem value="seo" className="border-border">
-          <AccordionTrigger className="hover:no-underline">
-            <span className="flex items-center gap-2">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              SEO 설정
-            </span>
-          </AccordionTrigger>
-          <AccordionContent>
-            <SeoSettings />
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+            {/* 챗봇 설정 */}
+            <AccordionItem value="chatbot" className="border-border">
+              <AccordionTrigger className="hover:no-underline">
+                <span className="flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                  챗봇 설정
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <ChatbotSettings />
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* 테마 설정 */}
+            <AccordionItem value="theme" className="border-border">
+              <AccordionTrigger className="hover:no-underline">
+                <span className="flex items-center gap-2">
+                  <Palette className="h-4 w-4 text-muted-foreground" />
+                  테마 설정
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <ThemeSettings />
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* SEO 설정 */}
+            <AccordionItem value="seo" className="border-border">
+              <AccordionTrigger className="hover:no-underline">
+                <span className="flex items-center gap-2">
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                  SEO 설정
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <SeoSettings />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </TabsContent>
+      </Tabs>
     </aside>
   );
 }
