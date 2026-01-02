@@ -334,14 +334,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </Link>
         </div>
 
-        <Separator />
+        <Separator className="-mx-2 w-[calc(100%+1rem)]" />
 
         {/* 챗봇 선택기 */}
         <div className="p-2">
           <SidebarChatbotSwitcher />
         </div>
 
-        <Separator />
+        <Separator className="-mx-2 w-[calc(100%+1rem)]" />
 
         {/* 저장 상태 */}
         <div className="flex items-center justify-center py-2">
