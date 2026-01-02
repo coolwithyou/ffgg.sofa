@@ -72,9 +72,20 @@ export async function smartChunk(
   }
 
   // 4. 품질 점수 계산
-  return chunks.map((chunk) => ({
+  const scoredChunks = chunks.map((chunk) => ({
     ...chunk,
     qualityScore: calculateQualityScore(chunk),
+  }));
+
+  // 5. 제목/구분자만 있는 청크 자동 필터링
+  const filteredChunks = scoredChunks.filter(
+    (chunk) => !isHeaderOrSeparatorOnly(chunk.content)
+  );
+
+  // 6. 인덱스 재정렬
+  return filteredChunks.map((chunk, idx) => ({
+    ...chunk,
+    index: idx,
   }));
 }
 
@@ -274,6 +285,50 @@ function findLastSentenceEnd(text: string): number {
   }
 
   return lastMatch || text.length;
+}
+
+/**
+ * 제목/구분자만 있는 청크인지 확인
+ * 이런 청크는 RAG 검색에서 의미가 없으므로 자동 필터링
+ */
+export function isHeaderOrSeparatorOnly(content: string): boolean {
+  const trimmed = content.trim();
+
+  // 빈 콘텐츠
+  if (!trimmed) return true;
+
+  // 마크다운 헤더만 있는 경우 (## 제목, # 제목 등)
+  // 헤더 라인만 있고 실제 내용이 없는 경우
+  const lines = trimmed.split('\n').filter((line) => line.trim());
+
+  // 모든 라인이 헤더거나 구분자인 경우 필터링
+  const meaningfulLines = lines.filter((line) => {
+    const l = line.trim();
+
+    // 마크다운 헤더 (#, ##, ### 등)
+    if (/^#{1,6}\s+.+$/.test(l)) return false;
+
+    // 마크다운 구분자 (---, ***, ___, === 등)
+    if (/^[-*_=]{3,}$/.test(l)) return false;
+
+    // HTML 스타일 구분자
+    if (/^<hr\s*\/?>$/i.test(l)) return false;
+
+    // 빈 라인이나 공백만 있는 라인
+    if (!l) return false;
+
+    return true;
+  });
+
+  // 의미 있는 라인이 없으면 필터링 대상
+  if (meaningfulLines.length === 0) return true;
+
+  // 의미 있는 내용이 너무 짧은 경우 (20자 미만)
+  // 예: "## Part 2\n주요" 같은 경우도 필터링
+  const meaningfulContent = meaningfulLines.join(' ').trim();
+  if (meaningfulContent.length < 20) return true;
+
+  return false;
 }
 
 /**
