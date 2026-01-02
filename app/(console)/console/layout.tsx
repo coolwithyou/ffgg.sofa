@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { ConsoleProvider } from './hooks/use-console-state';
+import { ToastProvider } from '@/components/ui/toast';
 
 export const metadata = {
   title: 'Console Editor - SOFA',
@@ -12,10 +13,12 @@ interface ConsoleLayoutProps {
 
 export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
   return (
-    <ConsoleProvider>
-      <div className="h-screen w-screen overflow-hidden bg-background">
-        {children}
-      </div>
-    </ConsoleProvider>
+    <ToastProvider>
+      <ConsoleProvider>
+        <div className="h-screen w-screen overflow-hidden bg-background">
+          {children}
+        </div>
+      </ConsoleProvider>
+    </ToastProvider>
   );
 }
