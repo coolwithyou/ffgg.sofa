@@ -53,10 +53,15 @@ export function ConsoleProvider({
     currentChatbot?.publicPageConfig ?? DEFAULT_PUBLIC_PAGE_CONFIG
   );
 
+  // 원본 설정 (변경사항 비교용)
+  const [originalPageConfig, setOriginalPageConfig] =
+    useState<PublicPageConfig | null>(null);
+
   // 챗봇 변경 시 설정 동기화
   useEffect(() => {
     if (currentChatbot) {
       setPageConfig(currentChatbot.publicPageConfig);
+      setOriginalPageConfig(currentChatbot.publicPageConfig);
       setSaveStatus('saved');
     }
   }, [currentChatbot]);
@@ -175,6 +180,7 @@ export function ConsoleProvider({
       currentChatbot,
       isLoading,
       pageConfig,
+      originalPageConfig,
       saveStatus,
       // 액션
       setMode,
@@ -185,6 +191,7 @@ export function ConsoleProvider({
       updateThemeConfig,
       updateSeoConfig,
       setSaveStatus,
+      setOriginalPageConfig,
       reloadChatbots,
     }),
     [
@@ -194,6 +201,7 @@ export function ConsoleProvider({
       currentChatbot,
       isLoading,
       pageConfig,
+      originalPageConfig,
       saveStatus,
       selectChatbot,
       navigateChatbot,

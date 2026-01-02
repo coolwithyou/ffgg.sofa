@@ -5,9 +5,21 @@ import { LeftSidebar } from './components/left-sidebar';
 import { CenterPreview } from './components/center-preview';
 import { RightSettings } from './components/right-settings';
 import { useConsole } from './hooks/use-console-state';
+import { useAutoSave } from './hooks/use-auto-save';
 
+/**
+ * 콘솔 메인 페이지
+ *
+ * 3-컬럼 레이아웃:
+ * - 좌측: 모드 탭 + 챗봇 목록
+ * - 중앙: 디바이스 프레임 프리뷰
+ * - 우측: 설정 패널
+ */
 export default function ConsolePage() {
   const { isLoading } = useConsole();
+
+  // 자동 저장 훅 활성화
+  useAutoSave();
 
   if (isLoading) {
     return (

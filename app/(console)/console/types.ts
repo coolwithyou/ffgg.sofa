@@ -32,6 +32,9 @@ export interface ConsoleState {
   // Page 설정 (현재 선택된 챗봇의)
   pageConfig: PublicPageConfig;
 
+  // 원본 설정 (변경사항 비교용)
+  originalPageConfig: PublicPageConfig | null;
+
   // 저장 상태
   saveStatus: SaveStatus;
 }
@@ -46,6 +49,7 @@ export interface ConsoleActions {
   updateThemeConfig: (partial: Partial<PublicPageConfig['theme']>) => void;
   updateSeoConfig: (partial: Partial<PublicPageConfig['seo']>) => void;
   setSaveStatus: (status: SaveStatus) => void;
+  setOriginalPageConfig: (config: PublicPageConfig) => void;
   reloadChatbots: () => Promise<void>;
 }
 

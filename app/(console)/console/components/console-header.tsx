@@ -1,44 +1,46 @@
 'use client';
 
 import Link from 'next/link';
-import { useSaveStatus, useCurrentChatbot } from '../hooks/use-console-state';
-import { Check, Loader2, AlertCircle, ExternalLink } from 'lucide-react';
+import { useCurrentChatbot } from '../hooks/use-console-state';
+import { useAutoSave } from '../hooks/use-auto-save';
+import { SaveStatusIndicator } from './save-status-indicator';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/toast';
+import { ExternalLink, Rocket } from 'lucide-react';
 
+/**
+ * 콘솔 헤더
+ *
+ * 좌측: 로고
+ * 중앙: 저장 상태
+ * 우측: 미리보기 링크 + 발행 버튼
+ */
 export function ConsoleHeader() {
-  const { saveStatus } = useSaveStatus();
   const { currentChatbot } = useCurrentChatbot();
+  const { saveStatus, saveNow } = useAutoSave();
+  const toast = useToast();
 
-  // 저장 상태 표시
-  const renderSaveStatus = () => {
-    switch (saveStatus) {
-      case 'saved':
-        return (
-          <span className="flex items-center gap-1 text-sm text-green-500">
-            <Check className="h-4 w-4" />
-            저장됨
-          </span>
-        );
-      case 'saving':
-        return (
-          <span className="flex items-center gap-1 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            저장 중...
-          </span>
-        );
-      case 'unsaved':
-        return (
-          <span className="flex items-center gap-1 text-sm text-yellow-500">
-            <AlertCircle className="h-4 w-4" />
-            저장되지 않음
-          </span>
-        );
-      case 'error':
-        return (
-          <span className="flex items-center gap-1 text-sm text-destructive">
-            <AlertCircle className="h-4 w-4" />
-            저장 실패
-          </span>
-        );
+  const handlePublish = async () => {
+    if (!currentChatbot) return;
+
+    // 저장되지 않은 변경사항이 있으면 먼저 저장
+    if (saveStatus === 'unsaved') {
+      saveNow();
+    }
+
+    try {
+      const response = await fetch(
+        `/api/chatbots/${currentChatbot.id}/public-page/publish`,
+        { method: 'POST' }
+      );
+
+      if (!response.ok) {
+        throw new Error('발행에 실패했습니다');
+      }
+
+      toast.success('발행 완료', '변경사항이 공개 페이지에 적용되었습니다.');
+    } catch (error) {
+      toast.error('발행 실패', '잠시 후 다시 시도해주세요.');
     }
   };
 
@@ -53,29 +55,34 @@ export function ConsoleHeader() {
       </div>
 
       {/* 중앙: 저장 상태 */}
-      <div className="flex items-center gap-4">
-        {renderSaveStatus()}
+      <div className="absolute left-1/2 -translate-x-1/2">
+        <SaveStatusIndicator />
       </div>
 
-      {/* 우측: 액션 버튼 */}
-      <div className="flex items-center gap-2">
+      {/* 우측: 미리보기 + 발행 */}
+      <div className="flex items-center gap-3">
         {currentChatbot?.slug && currentChatbot.publicPageEnabled && (
-          <a
-            href={`/${currentChatbot.slug}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
-          >
-            <ExternalLink className="h-4 w-4" />
-            미리보기
-          </a>
+          <Button variant="ghost" size="sm" asChild>
+            <Link
+              href={`/${currentChatbot.slug}`}
+              target="_blank"
+              className="flex items-center gap-1.5"
+            >
+              <ExternalLink className="h-4 w-4" />
+              미리보기
+            </Link>
+          </Button>
         )}
-        <button
-          className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+
+        <Button
+          size="sm"
+          onClick={handlePublish}
           disabled={saveStatus === 'saving'}
+          className="flex items-center gap-1.5"
         >
+          <Rocket className="h-4 w-4" />
           발행하기
-        </button>
+        </Button>
       </div>
     </header>
   );
