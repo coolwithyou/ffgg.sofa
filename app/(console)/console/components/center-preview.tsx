@@ -1,20 +1,20 @@
 'use client';
 
 import { useCurrentChatbot } from '../hooks/use-console-state';
-import { ChatbotCarousel } from './chatbot-carousel';
+import { DeviceFrame } from './device-frame';
+import { PreviewContent } from './preview-content';
 
 /**
  * 중앙 프리뷰 영역
  *
- * Phase 4에서 ChatbotCarousel로 업데이트:
- * - GSAP 기반 슬라이드 애니메이션
- * - 키보드 네비게이션 지원 (좌/우 화살표, 1-9 숫자키)
- * - 접근성 고려 (ARIA 속성, prefers-reduced-motion)
+ * 현재 선택된 챗봇의 디바이스 프리뷰를 표시합니다.
+ * - 충분한 패딩으로 shadow 효과 확보
+ * - 세로 중앙 정렬로 상하 영역 균등 배치
  */
 export function CenterPreview() {
-  const { chatbots } = useCurrentChatbot();
+  const { currentChatbot } = useCurrentChatbot();
 
-  if (chatbots.length === 0) {
+  if (!currentChatbot) {
     return (
       <main className="flex flex-1 items-center justify-center bg-muted/30">
         <div className="text-center">
@@ -30,8 +30,29 @@ export function CenterPreview() {
   }
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center bg-muted/30 p-8">
-      <ChatbotCarousel />
+    <main className="flex flex-1 flex-col items-center justify-center bg-muted/30">
+      {/*
+        DeviceFrame 주위에 충분한 여백 확보
+        - p-12: shadow-2xl이 잘리지 않도록 48px 패딩
+        - min-h-0: flex 컨테이너에서 스크롤 가능하도록
+      */}
+      <div className="flex min-h-0 items-center justify-center p-12">
+        <DeviceFrame>
+          <PreviewContent />
+        </DeviceFrame>
+      </div>
+
+      {/* 현재 챗봇 정보 */}
+      <div className="pb-4 text-center">
+        <span className="text-sm font-medium text-foreground">
+          {currentChatbot.name}
+        </span>
+        {currentChatbot.slug && (
+          <span className="ml-2 text-xs text-muted-foreground">
+            /{currentChatbot.slug}
+          </span>
+        )}
+      </div>
     </main>
   );
 }
