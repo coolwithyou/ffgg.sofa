@@ -27,7 +27,7 @@ export function PublicPageView({
   config,
   widgetConfig,
 }: PublicPageViewProps) {
-  const { header, theme } = config;
+  const { header, theme, chatbot } = config;
 
   // 테마 CSS 변수 설정
   const themeStyles = {
@@ -57,7 +57,7 @@ export function PublicPageView({
         fontFamily: 'var(--pp-font-family)',
       }}
     >
-      <div className="mx-auto flex min-h-screen max-w-2xl flex-col px-4 py-8">
+      <div className="mx-auto max-w-2xl px-4 py-8">
         {/* 헤더 블록 */}
         <HeaderBlock
           title={headerTitle}
@@ -75,11 +75,13 @@ export function PublicPageView({
           placeholder={placeholder}
           primaryColor={theme.primaryColor}
           textColor={theme.textColor}
+          minHeight={chatbot.minHeight}
+          maxHeight={chatbot.maxHeight}
         />
 
         {/* 푸터 (브랜드 표시) */}
         {header.showBrandName && (
-          <footer className="mt-auto pt-8 text-center">
+          <footer className="pt-8 text-center">
             <p className="text-sm opacity-50">Powered by SOFA</p>
           </footer>
         )}

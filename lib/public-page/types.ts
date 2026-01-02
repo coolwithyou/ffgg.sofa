@@ -12,6 +12,17 @@ export interface PublicPageConfig {
   header: HeaderConfig;
   theme: ThemeConfig;
   seo: SEOConfig;
+  chatbot: ChatbotBlockConfig;
+}
+
+/**
+ * 챗봇 블록 설정
+ */
+export interface ChatbotBlockConfig {
+  /** 최소 높이 (px) - 기본 400 */
+  minHeight: number;
+  /** 최대 높이 (px) - 기본 600 */
+  maxHeight: number;
 }
 
 /**
@@ -74,6 +85,10 @@ export const DEFAULT_PUBLIC_PAGE_CONFIG: PublicPageConfig = {
     description: '',
     ogImage: '',
   },
+  chatbot: {
+    minHeight: 400,
+    maxHeight: 600,
+  },
 };
 
 /**
@@ -94,6 +109,10 @@ export function toPublicPageConfigJson(
     seo: {
       ...DEFAULT_PUBLIC_PAGE_CONFIG.seo,
       ...config.seo,
+    },
+    chatbot: {
+      ...DEFAULT_PUBLIC_PAGE_CONFIG.chatbot,
+      ...config.chatbot,
     },
   };
 }
@@ -122,6 +141,10 @@ export function parsePublicPageConfig(
     seo: {
       ...DEFAULT_PUBLIC_PAGE_CONFIG.seo,
       ...(obj.seo as Partial<SEOConfig>),
+    },
+    chatbot: {
+      ...DEFAULT_PUBLIC_PAGE_CONFIG.chatbot,
+      ...(obj.chatbot as Partial<ChatbotBlockConfig>),
     },
   };
 }

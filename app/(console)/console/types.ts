@@ -48,6 +48,7 @@ export interface ConsoleActions {
   updateHeaderConfig: (partial: Partial<PublicPageConfig['header']>) => void;
   updateThemeConfig: (partial: Partial<PublicPageConfig['theme']>) => void;
   updateSeoConfig: (partial: Partial<PublicPageConfig['seo']>) => void;
+  updateChatbotConfig: (partial: Partial<PublicPageConfig['chatbot']>) => void;
   setSaveStatus: (status: SaveStatus) => void;
   setOriginalPageConfig: (config: PublicPageConfig) => void;
   reloadChatbots: () => Promise<void>;

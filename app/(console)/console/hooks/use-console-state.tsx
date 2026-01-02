@@ -170,6 +170,17 @@ export function ConsoleProvider({
     []
   );
 
+  const updateChatbotConfig = useCallback(
+    (partial: Partial<PublicPageConfig['chatbot']>) => {
+      setPageConfig((prev) => ({
+        ...prev,
+        chatbot: { ...prev.chatbot, ...partial },
+      }));
+      setSaveStatus('unsaved');
+    },
+    []
+  );
+
   // Context 값
   const value: ConsoleContextValue = useMemo(
     () => ({
@@ -190,6 +201,7 @@ export function ConsoleProvider({
       updateHeaderConfig,
       updateThemeConfig,
       updateSeoConfig,
+      updateChatbotConfig,
       setSaveStatus,
       setOriginalPageConfig,
       reloadChatbots,
@@ -209,6 +221,7 @@ export function ConsoleProvider({
       updateHeaderConfig,
       updateThemeConfig,
       updateSeoConfig,
+      updateChatbotConfig,
       reloadChatbots,
     ]
   );
@@ -246,6 +259,7 @@ export function usePageConfig() {
     updateHeaderConfig,
     updateThemeConfig,
     updateSeoConfig,
+    updateChatbotConfig,
   } = useConsole();
   return {
     pageConfig,
@@ -253,6 +267,7 @@ export function usePageConfig() {
     updateHeaderConfig,
     updateThemeConfig,
     updateSeoConfig,
+    updateChatbotConfig,
   };
 }
 

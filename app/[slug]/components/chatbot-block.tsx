@@ -20,6 +20,10 @@ interface ChatbotBlockProps {
   placeholder: string;
   primaryColor: string;
   textColor: string;
+  /** 채팅 영역 최소 높이 (px) */
+  minHeight?: number;
+  /** 채팅 영역 최대 높이 (px) */
+  maxHeight?: number;
 }
 
 interface Message {
@@ -39,6 +43,8 @@ export function ChatbotBlock({
   welcomeMessage,
   placeholder,
   primaryColor,
+  minHeight = 400,
+  maxHeight = 600,
 }: ChatbotBlockProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -122,9 +128,12 @@ export function ChatbotBlock({
   const isInputValid = inputValue.trim().length > 0 && inputValue.length <= MAX_MESSAGE_LENGTH;
 
   return (
-    <div className="flex flex-1 flex-col rounded-2xl border border-border bg-card shadow-lg">
+    <div
+      className="flex flex-col rounded-2xl border border-border bg-card shadow-lg"
+      style={{ minHeight, maxHeight }}
+    >
       {/* 메시지 목록 */}
-      <div className="flex-1 overflow-y-auto p-4" style={{ maxHeight: '60vh', minHeight: '300px' }}>
+      <div className="flex-1 overflow-y-auto p-4">
         <div className="space-y-4">
           {messages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} primaryColor={primaryColor} />

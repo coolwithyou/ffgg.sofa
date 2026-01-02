@@ -4,25 +4,27 @@ import { useConsoleMode, useCurrentChatbot } from '../hooks/use-console-state';
 import { HeaderSettings } from './settings/header-settings';
 import { ThemeSettings } from './settings/theme-settings';
 import { SeoSettings } from './settings/seo-settings';
+import { ChatbotSettings } from './settings/chatbot-settings';
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { FileText, Palette, Search } from 'lucide-react';
+import { FileText, Palette, Search, MessageSquare } from 'lucide-react';
 
 /**
  * 우측 설정 패널
  *
  * 아코디언 UI로 섹션별 설정을 관리합니다:
  * - 헤더 설정: 제목, 설명, 로고, 브랜드명 표시
+ * - 챗봇 설정: 채팅 영역 최소/최대 높이
  * - 테마 설정: 배경색, 주요색, 텍스트색, 폰트
  * - SEO 설정: 페이지 타이틀, 메타 설명, OG 이미지
  *
  * 기본 상태:
  * - 헤더, 테마: 펼쳐진 상태 (자주 사용)
- * - SEO: 접힌 상태 (덜 자주 사용)
+ * - 챗봇, SEO: 접힌 상태 (덜 자주 사용)
  */
 export function RightSettings() {
   const { mode } = useConsoleMode();
@@ -74,6 +76,19 @@ export function RightSettings() {
           </AccordionTrigger>
           <AccordionContent>
             <HeaderSettings />
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* 챗봇 설정 */}
+        <AccordionItem value="chatbot" className="border-border">
+          <AccordionTrigger className="hover:no-underline">
+            <span className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+              챗봇 설정
+            </span>
+          </AccordionTrigger>
+          <AccordionContent>
+            <ChatbotSettings />
           </AccordionContent>
         </AccordionItem>
 
