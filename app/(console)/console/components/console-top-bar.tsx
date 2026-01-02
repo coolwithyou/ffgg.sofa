@@ -4,16 +4,17 @@ import Link from 'next/link';
 import { useCurrentChatbot } from '../hooks/use-console-state';
 import { useAutoSave } from '../hooks/use-auto-save';
 import { SaveStatusIndicator } from './save-status-indicator';
+import { ChatbotSwitcher } from './chatbot-switcher';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
-import { ExternalLink, Rocket, Command } from 'lucide-react';
+import { ExternalLink, Rocket, Command, Sofa } from 'lucide-react';
 
 /**
  * Console Top Bar
  *
  * 전체 Console 상단에 고정되는 바
  *
- * 좌측: (PrimaryNav의 로고로 대체됨)
+ * 좌측: 챗봇 선택기 (프로젝트 컨텍스트)
  * 중앙: 저장 상태
  * 우측: 미리보기 링크 + 발행 버튼
  */
@@ -48,16 +49,22 @@ export function ConsoleTopBar() {
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-card px-4">
-      {/* 좌측: 현재 챗봇 정보 */}
-      <div className="flex items-center gap-3 pl-20">
-        {currentChatbot && (
-          <>
-            <span className="text-sm font-medium text-foreground">
-              {currentChatbot.name}
-            </span>
-            <span className="text-xs text-muted-foreground">Console</span>
-          </>
-        )}
+      {/* 좌측: 로고 + 챗봇 선택기 */}
+      <div className="flex items-center gap-4">
+        {/* 로고 */}
+        <Link
+          href="/"
+          className="flex items-center gap-2 text-lg font-bold tracking-tight text-primary"
+        >
+          <Sofa className="h-5 w-5" />
+          <span className="hidden sm:inline">SOFA</span>
+        </Link>
+
+        {/* 구분선 */}
+        <div className="h-6 w-px bg-border" />
+
+        {/* 챗봇 선택기 */}
+        <ChatbotSwitcher />
       </div>
 
       {/* 중앙: 저장 상태 */}

@@ -29,17 +29,7 @@ export function PrimaryNav({ activeId, onSelect }: PrimaryNavProps) {
     activeId ?? findActiveNavItem(pathname)?.id ?? 'appearance';
 
   return (
-    <nav className="flex w-20 flex-col border-r border-border bg-card">
-      {/* 로고 영역 */}
-      <div className="flex h-14 items-center justify-center border-b border-border">
-        <Link
-          href="/"
-          className="text-lg font-bold tracking-tight text-primary"
-        >
-          SOFA
-        </Link>
-      </div>
-
+    <nav className="flex w-20 flex-col border-r border-border bg-card pt-2">
       {/* 메뉴 아이템 */}
       <div className="flex flex-1 flex-col gap-1 p-2">
         {navItems.map((item) => {

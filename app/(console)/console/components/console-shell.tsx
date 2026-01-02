@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation';
 import {
   PrimaryNav,
   SecondaryPanel,
-  ChatbotSelector,
   findActiveNavItem,
   type NavItem,
 } from './nav';
@@ -47,9 +46,6 @@ export function ConsoleShell({ children }: ConsoleShellProps) {
     setActiveNavItem(item);
   };
 
-  // 현재 메뉴가 Appearance인지 확인 (챗봇 선택기 표시용)
-  const showChatbotSelector = activeNavItem?.id === 'appearance';
-
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       {/* 상단 바 */}
@@ -64,9 +60,7 @@ export function ConsoleShell({ children }: ConsoleShellProps) {
         />
 
         {/* 2차 패널 (240px, 조건부) */}
-        <SecondaryPanel activeNavItem={activeNavItem}>
-          {showChatbotSelector && <ChatbotSelector />}
-        </SecondaryPanel>
+        <SecondaryPanel activeNavItem={activeNavItem} />
 
         {/* 메인 컨텐츠 영역 */}
         <main className="flex-1 overflow-auto">
