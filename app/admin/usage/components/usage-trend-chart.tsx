@@ -59,7 +59,7 @@ export function UsageTrendChart({ trend }: UsageTrendChartProps) {
         </div>
 
         {/* 차트 바 */}
-        <div className="ml-14 flex h-full items-end gap-0.5">
+        <div className="ml-14 flex h-full items-stretch gap-0.5">
           {trend.map((day, index) => {
             const height = (day.totalCostUsd / maxCost) * 100;
             // 서버에서 전달 시 Date가 string으로 직렬화되므로 안전하게 변환
@@ -71,7 +71,7 @@ export function UsageTrendChart({ trend }: UsageTrendChartProps) {
             return (
               <div
                 key={dateKey}
-                className="group relative flex flex-1 flex-col items-center"
+                className="group relative flex h-full flex-1 flex-col items-center"
               >
                 {/* 바 */}
                 <div className="flex h-full w-full items-end justify-center">
