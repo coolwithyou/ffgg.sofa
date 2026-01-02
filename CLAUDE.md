@@ -209,6 +209,127 @@ function MyComponent() {
 
 ---
 
+## Console UI/UX 디자인 시스템
+
+### 폰트
+- **Pretendard Variable**: 한글 최적화 가변 폰트
+- 제목: `font-semibold`, `leading-snug` (1.375), `tracking-tight`
+- 본문: `font-normal`, `leading-relaxed` (1.625)
+- 한글: `word-break: keep-all`
+
+### 카드 컴포넌트 시스템
+
+**Card 컴포넌트** (`components/ui/card.tsx`)는 `cva`를 사용한 variants 시스템 적용:
+
+| Size | Border Radius | Padding | 용도 |
+|------|---------------|---------|------|
+| `sm` | `rounded-lg` (8px) | `p-4` (16px) | 리스트 아이템, 작은 카드 |
+| `md` | `rounded-xl` (12px) | `p-6` (24px) | 기본 카드 (default) |
+| `lg` | `rounded-2xl` (16px) | `p-8` (32px) | 대형 카드, 빈 상태 |
+
+```tsx
+// 사용 예시
+<Card size="md" variant="default">
+  <CardHeader>
+    <CardTitle>제목</CardTitle>
+    <CardDescription>설명</CardDescription>
+  </CardHeader>
+  <CardContent>내용</CardContent>
+</Card>
+```
+
+### 간격 시스템
+
+| 용도 | 값 | Tailwind |
+|------|-----|----------|
+| 카드 간격 | 24px | `gap-6` |
+| 섹션 간격 | 32px | `gap-8` |
+| 리스트 아이템 간격 | 16px | `gap-4` |
+| 폼 필드 간격 | 16px | `space-y-4` |
+
+### 2-레벨 네비게이션 구조
+
+Console은 다음과 같은 레이아웃 구조를 사용:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ [🛋️ SOFA] | [🤖 챗봇명 ▾]       저장됨          [⌘K] [👁] [🚀 발행] │ ← TopBar (56px)
+├─────────┬───────────┬───────────────────────────────────────────────┤
+│ 🏠 홈   │ 서브메뉴  │                                               │
+│─────────│           │                                               │
+│ 📚 지식 │           │             메인 콘텐츠 영역                   │
+│─────────│           │                                               │
+│ 🎨 디자인│           │                                               │
+│─────────│           │                                               │
+│ ⚙️ 설정 │           │                                               │
+└─────────┴───────────┴───────────────────────────────────────────────┘
+   80px      240px                      나머지
+```
+
+- **TopBar**: 로고 + 프로젝트 선택기 + 저장 상태 + 액션 버튼 (Vercel 스타일)
+- **Primary Nav**: 80px 고정폭, 아이콘 + 짧은 라벨 수직 배치
+- **Secondary Panel**: 240px, 1차 메뉴에 따른 서브메뉴 표시
+
+### 프로젝트 스위처 패턴 (Vercel/GitHub 스타일)
+
+프로젝트(챗봇)가 모든 메뉴의 컨텍스트일 때, 선택기는 항상 보이는 TopBar에 배치:
+
+```tsx
+<header className="flex h-14 items-center justify-between border-b border-border bg-card px-4">
+  {/* 좌측: 로고 + 프로젝트 선택기 */}
+  <div className="flex items-center gap-4">
+    <Link href="/" className="flex items-center gap-2 text-lg font-bold text-primary">
+      <Sofa className="h-5 w-5" />
+      <span>SOFA</span>
+    </Link>
+    <div className="h-6 w-px bg-border" />  {/* 구분선 */}
+    <ProjectSwitcher />
+  </div>
+
+  {/* 중앙: 상태 */}
+  <div className="absolute left-1/2 -translate-x-1/2">
+    <SaveStatus />
+  </div>
+
+  {/* 우측: 액션 */}
+  <div className="flex items-center gap-2">
+    <Button>발행</Button>
+  </div>
+</header>
+```
+
+### 설정 페이지 카드 블록 패턴
+
+기능 단위로 카드를 그룹핑하여 Progressive Disclosure 구현:
+
+```tsx
+<div className="space-y-6">
+  {/* 기본 정보 */}
+  <Card size="md">
+    <CardHeader>
+      <div className="flex items-center gap-2">
+        <Bot className="h-5 w-5 text-muted-foreground" />
+        <CardTitle>기본 정보</CardTitle>
+      </div>
+      <CardDescription>챗봇의 이름과 설명을 설정합니다</CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      {/* 폼 필드들 */}
+    </CardContent>
+  </Card>
+
+  {/* 위험 영역 */}
+  <Card size="md" variant="ghost" className="border-destructive/30">
+    <CardHeader>
+      <CardTitle className="text-destructive">위험 영역</CardTitle>
+    </CardHeader>
+    <CardContent>...</CardContent>
+  </Card>
+</div>
+```
+
+---
+
 ## 기타 개발 지침
 
 ### 커밋 컨벤션
