@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { isDocumentStalled, getReprocessType } from '@/lib/constants/document';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
 
@@ -59,6 +60,7 @@ export function DocumentProgressModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { confirm } = useAlertDialog();
+  const router = useRouter();
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -101,8 +103,25 @@ export function DocumentProgressModal({
   // 우선순위: failed > completed > started (in_progress)
   const getStepStatus = (stepKey: string): 'pending' | 'in_progress' | 'completed' | 'failed' => {
     const stepLogs = logs.filter((log) => log.step === stepKey);
-    if (stepLogs.length === 0) return 'pending';
 
+    // 'started' 단계 특별 처리: 다음 단계가 시작되었으면 완료로 간주
+    if (stepKey === 'started') {
+      const hasNextStepStarted = logs.some(
+        (log) => log.step !== 'started' && log.step !== 'failed'
+      );
+      const isDocumentFinished = ['reviewing', 'approved', 'failed'].includes(document?.status || '');
+
+      if (hasNextStepStarted || isDocumentFinished) {
+        return 'completed';
+      }
+      if (stepLogs.length > 0) {
+        return 'in_progress';
+      }
+      return 'pending';
+    }
+
+    // 기존 로직
+    if (stepLogs.length === 0) return 'pending';
     // 하나라도 실패하면 실패
     if (stepLogs.some((log) => log.status === 'failed')) return 'failed';
     // 완료 로그가 있으면 완료
@@ -151,6 +170,14 @@ export function DocumentProgressModal({
     }
 
     onReprocess?.();
+    onClose();
+  };
+
+  // 검토하기 버튼 클릭 핸들러 (reviewing 상태에서 검토 페이지로 이동)
+  // 해당 문서의 승인대기(pending) 청크만 필터링된 목록으로 이동
+  const handleReviewClick = () => {
+    if (!document) return;
+    router.push(`/review?documentId=${document.id}&status=pending`);
     onClose();
   };
 
@@ -226,6 +253,19 @@ export function DocumentProgressModal({
                 </div>
               )}
 
+              {/* 승인 대기 상태 표시 (처리 완료 후) */}
+              {isReviewing && !isStalled && (
+                <div className="mb-4 rounded-lg bg-yellow-500/10 p-4">
+                  <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-500">
+                    <CheckCircleIcon className="h-5 w-5" />
+                    <span className="font-medium">처리 완료 - 승인 대기</span>
+                  </div>
+                  <p className="mt-2 text-sm text-yellow-600 dark:text-yellow-500">
+                    문서 처리가 완료되었습니다. 일부 청크가 품질 기준(85점) 미달로 수동 승인이 필요합니다.
+                  </p>
+                </div>
+              )}
+
               {/* 단계별 상태 */}
               <div className="space-y-3">
                 {PROCESSING_STEPS.map((step) => {
@@ -295,15 +335,23 @@ export function DocumentProgressModal({
 
         {/* 푸터 */}
         <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
-          {canReprocess && onReprocess && (
+          {/* 승인 대기 상태: 검토하기 버튼 */}
+          {isReviewing && !isStalled && (
+            <button
+              onClick={handleReviewClick}
+              className="rounded-lg bg-yellow-500 px-4 py-2 text-sm font-medium text-white hover:bg-yellow-600"
+            >
+              검토하기
+            </button>
+          )}
+          {/* 실패/중단/업로드 상태: 재처리 버튼 */}
+          {canReprocess && onReprocess && !isReviewing && (
             <button
               onClick={handleReprocessClick}
               className={`rounded-lg px-4 py-2 text-sm font-medium ${
                 isStalled
                   ? 'bg-orange-500 text-white hover:bg-orange-600'
-                  : isReviewing
-                    ? 'bg-yellow-500 text-white hover:bg-yellow-600'
-                    : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'bg-primary text-primary-foreground hover:bg-primary/90'
               }`}
             >
               재처리
@@ -374,6 +422,19 @@ function CircleIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <circle cx="12" cy="12" r="10" strokeWidth={2} />
+    </svg>
+  );
+}
+
+function CheckCircleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
     </svg>
   );
 }

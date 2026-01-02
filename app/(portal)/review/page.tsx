@@ -1,12 +1,38 @@
 /**
  * 청크 검토 페이지
  * 문서 청크를 검토하고 승인/거부/수정
+ * [v2] URL searchParams로 초기 필터 지원 (documentId, status)
  */
 
 import { Suspense } from 'react';
 import { ReviewContent } from './_components/review-content';
+import type { FilterState } from './_components/review-filters';
+import type { ChunkStatus } from '@/lib/review/types';
 
-export default function ReviewPage() {
+interface ReviewPageProps {
+  searchParams: Promise<{
+    documentId?: string;
+    status?: string | string[];
+  }>;
+}
+
+export default async function ReviewPage({ searchParams }: ReviewPageProps) {
+  const params = await searchParams;
+
+  // URL 쿼리에서 초기 필터 구성
+  const initialFilters: Partial<FilterState> = {};
+
+  if (params.documentId) {
+    initialFilters.documentId = params.documentId;
+    // documentName은 첫 청크 로드 후 자동 설정됨
+  }
+
+  if (params.status) {
+    initialFilters.status = Array.isArray(params.status)
+      ? (params.status as ChunkStatus[])
+      : ([params.status] as ChunkStatus[]);
+  }
+
   return (
     <div className="space-y-6">
       {/* 페이지 타이틀 */}
@@ -25,7 +51,7 @@ export default function ReviewPage() {
           </div>
         }
       >
-        <ReviewContent />
+        <ReviewContent initialFilters={initialFilters} />
       </Suspense>
     </div>
   );

@@ -23,7 +23,12 @@ interface ChunkListResponse {
   hasMore: boolean;
 }
 
-export function ReviewContent() {
+interface ReviewContentProps {
+  /** URL 쿼리 파라미터에서 전달받은 초기 필터 값 */
+  initialFilters?: Partial<FilterState>;
+}
+
+export function ReviewContent({ initialFilters }: ReviewContentProps) {
   const [chunks, setChunks] = useState<ChunkItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -35,7 +40,11 @@ export function ReviewContent() {
   const { error: showError } = useToast();
 
   const [filters, setFilters] = useState<FilterState>({
-    status: [],
+    // 문서 필터 (URL 파라미터에서)
+    documentId: initialFilters?.documentId,
+    documentName: initialFilters?.documentName,
+    // 기존 필터
+    status: initialFilters?.status || [],
     minQualityScore: undefined,
     maxQualityScore: undefined,
     search: '',
@@ -56,6 +65,11 @@ export function ReviewContent() {
       const params = new URLSearchParams();
       params.set('page', page.toString());
       params.set('limit', limit.toString());
+
+      // 문서 필터
+      if (filters.documentId) {
+        params.set('documentId', filters.documentId);
+      }
 
       if (filters.status.length > 0) {
         filters.status.forEach((s) => params.append('status', s));
@@ -102,6 +116,17 @@ export function ReviewContent() {
       setChunks(data.chunks);
       setTotal(data.total);
       setHasMore(data.hasMore);
+
+      // documentId가 설정되어 있지만 documentName이 없으면 첫 번째 청크에서 추출
+      if (filters.documentId && !filters.documentName && data.chunks.length > 0) {
+        const firstChunk = data.chunks[0];
+        if ('documentName' in firstChunk && firstChunk.documentName) {
+          setFilters((prev) => ({
+            ...prev,
+            documentName: firstChunk.documentName,
+          }));
+        }
+      }
     } catch (error) {
       console.error('Error fetching chunks:', error);
     } finally {

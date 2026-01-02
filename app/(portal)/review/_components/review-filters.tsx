@@ -10,6 +10,10 @@ import Link from 'next/link';
 import type { ChunkStatus, SearchabilityStatus } from '@/lib/review/types';
 
 export interface FilterState {
+  // 문서별 필터
+  documentId?: string;
+  documentName?: string;
+  // 기존 필터
   status: ChunkStatus[];
   minQualityScore?: number;
   maxQualityScore?: number;
@@ -117,6 +121,9 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
   const clearFilters = () => {
     setSearchInput('');
     onChange({
+      // 문서 필터 유지 (별도 해제 버튼 사용)
+      documentId: filters.documentId,
+      documentName: filters.documentName,
       status: [],
       minQualityScore: undefined,
       maxQualityScore: undefined,
@@ -132,6 +139,14 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
     });
   };
 
+  const clearDocumentFilter = () => {
+    onChange({
+      ...filters,
+      documentId: undefined,
+      documentName: undefined,
+    });
+  };
+
   const hasActiveFilters =
     filters.status.length > 0 ||
     filters.minQualityScore !== undefined ||
@@ -144,9 +159,27 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
     filters.maxContentLength !== undefined;
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <div className="flex flex-wrap items-center gap-4">
-        {/* 상태 필터 */}
+    <div className="space-y-3">
+      {/* 문서 필터 표시 */}
+      {filters.documentId && (
+        <div className="flex items-center gap-2 rounded-lg bg-primary/10 px-4 py-2">
+          <DocumentIcon className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium text-primary">
+            {filters.documentName || '문서'}의 청크만 표시 중
+          </span>
+          <button
+            onClick={clearDocumentFilter}
+            className="ml-auto rounded-full p-1 text-primary hover:bg-primary/20"
+            title="문서 필터 해제"
+          >
+            <CloseIcon className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* 상태 필터 */}
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-foreground">상태:</span>
           <div className="flex gap-1">
@@ -348,6 +381,7 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
           순차 리뷰
         </Link>
       </div>
+      </div>
     </div>
   );
 }
@@ -374,6 +408,32 @@ function ChartIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+      />
+    </svg>
+  );
+}
+
+function DocumentIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+      />
+    </svg>
+  );
+}
+
+function CloseIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M6 18L18 6M6 6l12 12"
       />
     </svg>
   );
