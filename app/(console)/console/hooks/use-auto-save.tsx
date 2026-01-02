@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
+import { toast } from 'sonner';
 import { useConsole } from './use-console-state';
 import { AUTO_SAVE_CONFIG } from '../config/auto-save.config';
 import type { PublicPageConfig } from '@/lib/public-page/types';
@@ -105,6 +106,7 @@ export function useAutoSave(options?: UseAutoSaveOptions) {
         setOriginalPageConfig(config);
         setSaveStatus('saved');
         clearError();
+        toast.success('저장됨');
         onSaveSuccess?.();
       } catch (err) {
         console.error('Auto save failed:', err);
@@ -123,6 +125,7 @@ export function useAutoSave(options?: UseAutoSaveOptions) {
 
         setError(saveError);
         setSaveStatus('error');
+        toast.error('저장 실패', { description: errorMessage });
         onSaveError?.(saveError);
 
         // 자동 재시도

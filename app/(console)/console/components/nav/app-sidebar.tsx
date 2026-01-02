@@ -44,7 +44,6 @@ import { navItems, type NavItem } from './nav-config';
 import { useCurrentChatbot } from '../../hooks/use-console-state';
 import { Bot, Check, Plus, Sofa } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { SaveStatusIndicator } from '../save-status-indicator';
 
 /**
  * SidebarHeader의 ChatbotSwitcher
@@ -315,14 +314,14 @@ function NavUser() {
  * AppSidebar
  *
  * 항상 펼쳐진 상태의 메인 사이드바
- * - SidebarHeader: 로고 + 챗봇 선택기 + 저장 상태
+ * - SidebarHeader: 로고 + 챗봇 선택기
  * - SidebarContent: 메인 네비게이션 메뉴 (각 메뉴 아이템 폴드 가능)
  * - SidebarFooter: 사용자 메뉴
  */
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar {...props}>
-      <SidebarHeader className="gap-0">
+      <SidebarHeader className="gap-0 p-0">
         {/* 로고 */}
         <div className="flex h-14 items-center gap-2 px-4">
           <Link
@@ -334,19 +333,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </Link>
         </div>
 
-        <Separator className="-mx-2 w-[calc(100%+1rem)]" />
+        <Separator />
 
         {/* 챗봇 선택기 */}
         <div className="p-2">
           <SidebarChatbotSwitcher />
         </div>
 
-        <Separator className="-mx-2 w-[calc(100%+1rem)]" />
-
-        {/* 저장 상태 */}
-        <div className="flex items-center justify-center py-2">
-          <SaveStatusIndicator />
-        </div>
+        <Separator />
       </SidebarHeader>
 
       <SidebarContent>
