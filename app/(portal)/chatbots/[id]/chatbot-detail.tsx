@@ -19,12 +19,14 @@ import {
   Check,
   X,
   User,
+  Link2,
 } from 'lucide-react';
 import { DatasetManager } from './dataset-manager';
 import { WidgetSettings } from './widget-settings';
 import { KakaoSettings } from './kakao-settings';
 import { LlmSettings } from './llm-settings';
 import { PersonaSettings } from './persona-settings';
+import { PublicPageSettings } from './public-page-settings';
 
 interface ChatbotData {
   id: string;
@@ -34,6 +36,8 @@ interface ChatbotData {
   isDefault: boolean;
   widgetEnabled: boolean;
   kakaoEnabled: boolean;
+  publicPageEnabled: boolean;
+  slug: string | null;
   llmConfig: {
     temperature?: number;
     maxTokens?: number;
@@ -65,7 +69,7 @@ interface ChatbotDetailProps {
   chatbotId: string;
 }
 
-type TabType = 'datasets' | 'widget' | 'kakao' | 'settings' | 'persona';
+type TabType = 'datasets' | 'widget' | 'kakao' | 'public-page' | 'settings' | 'persona';
 
 export function ChatbotDetail({ chatbotId }: ChatbotDetailProps) {
   const router = useRouter();
@@ -169,6 +173,7 @@ export function ChatbotDetail({ chatbotId }: ChatbotDetailProps) {
     { id: 'datasets' as const, label: '데이터셋', icon: Database },
     { id: 'widget' as const, label: '위젯 배포', icon: Globe },
     { id: 'kakao' as const, label: '카카오 연동', icon: MessageCircle },
+    { id: 'public-page' as const, label: '공개 페이지', icon: Link2 },
     { id: 'settings' as const, label: 'LLM 설정', icon: Settings },
     { id: 'persona' as const, label: '페르소나', icon: User },
   ];
@@ -293,6 +298,12 @@ export function ChatbotDetail({ chatbotId }: ChatbotDetailProps) {
             <span>카카오 연동됨</span>
           </div>
         )}
+        {chatbot.publicPageEnabled && chatbot.slug && (
+          <div className="flex items-center gap-2 rounded-full bg-purple-500/10 px-3 py-1 text-sm text-purple-500">
+            <Link2 className="h-4 w-4" />
+            <span>공개 페이지 활성화됨</span>
+          </div>
+        )}
       </div>
 
       {/* 탭 */}
@@ -337,6 +348,14 @@ export function ChatbotDetail({ chatbotId }: ChatbotDetailProps) {
         {activeTab === 'kakao' && (
           <KakaoSettings
             chatbotId={chatbotId}
+            hasDatasets={chatbot.stats.datasetCount > 0}
+            onUpdate={fetchChatbot}
+          />
+        )}
+        {activeTab === 'public-page' && (
+          <PublicPageSettings
+            chatbotId={chatbotId}
+            chatbotName={chatbot.name}
             hasDatasets={chatbot.stats.datasetCount > 0}
             onUpdate={fetchChatbot}
           />

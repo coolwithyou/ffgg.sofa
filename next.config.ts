@@ -107,6 +107,49 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // 공개 페이지 (슬러그 기반) - iframe 완전 차단
+        // /widget, /api, /_next 등 시스템 경로 제외
+        source: "/:slug([a-z0-9][a-z0-9-]{1,28}[a-z0-9])",
+        headers: [
+          {
+            key: "X-XSS-Protection",
+            value: "1; mode=block",
+          },
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+          // 공개 페이지는 iframe 차단 (클릭재킹 방지)
+          {
+            key: "X-Frame-Options",
+            value: "DENY",
+          },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob: https:",
+              "font-src 'self' data:",
+              "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech",
+              "frame-ancestors 'none'", // iframe 완전 차단
+              "base-uri 'self'",
+              "form-action 'self'",
+            ].join("; "),
+          },
+          // 공개 페이지 캐싱 (ISR 지원)
+          {
+            key: "Cache-Control",
+            value: "public, s-maxage=300, stale-while-revalidate=600",
+          },
+        ],
+      },
+      {
         // API 라우트에 대한 추가 헤더
         source: "/api/:path*",
         headers: [

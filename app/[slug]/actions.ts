@@ -4,12 +4,14 @@
  * 공개 페이지 서버 액션
  *
  * 공개 페이지에서의 채팅 메시지 처리를 담당합니다.
- * - IP 기반 Rate Limiting 적용 (Phase 4에서 구현)
+ * - IP 기반 Rate Limiting 적용
  * - 채널: 'public_page'로 구분
  */
 
+import { headers } from 'next/headers';
 import { processChat } from '@/lib/chat';
 import { logger } from '@/lib/logger';
+import { checkPublicPageRateLimit } from '@/lib/middleware/rate-limit';
 
 // 메시지 최대 길이 제한
 const MAX_MESSAGE_LENGTH = 4000;
@@ -47,8 +49,23 @@ export async function sendPublicPageMessage(
   }
 
   try {
-    // TODO: Phase 4에서 Rate Limiting 추가
-    // await checkRateLimit(request.ip);
+    // IP 기반 Rate Limiting
+    const headersList = await headers();
+    const ip =
+      headersList.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      headersList.get('x-real-ip') ||
+      'unknown';
+
+    const rateLimitResult = await checkPublicPageRateLimit(ip);
+
+    if (!rateLimitResult.allowed) {
+      const errorMessage =
+        rateLimitResult.reason === 'daily'
+          ? '일일 메시지 한도에 도달했습니다. 내일 다시 시도해주세요.'
+          : '잠시 후 다시 시도해주세요. (요청이 너무 많습니다)';
+
+      throw new Error(errorMessage);
+    }
 
     const response = await processChat(tenantId, {
       message: message.trim(),

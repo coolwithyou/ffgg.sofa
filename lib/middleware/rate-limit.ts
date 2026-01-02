@@ -75,6 +75,11 @@ export const RATE_LIMITS = {
     standard: { requests: 1000, window: '1d' },
     premium: { requests: 10000, window: '1d' },
   },
+  // 공개 페이지 요청 제한 (IP 기반)
+  publicPage: {
+    chat: { requests: 30, window: '1h' }, // 시간당 30개 메시지
+    chatDaily: { requests: 200, window: '1d' }, // 일일 200개 메시지
+  },
 } as const;
 
 type WindowString = '1m' | '15m' | '1h' | '1d';
@@ -238,6 +243,9 @@ export const RATE_LIMIT_CONFIGS = {
   apiPremium: { requests: 1000, window: '1m' as const },
   upload: { requests: 10, window: '1h' as const },
   login: { requests: 5, window: '15m' as const },
+  // 공개 페이지 전용
+  publicPageChat: { requests: 30, window: '1h' as const },
+  publicPageChatDaily: { requests: 200, window: '1d' as const },
 } as const;
 
 /**
@@ -277,6 +285,80 @@ export async function checkRateLimitWithConfig(
   } catch (error) {
     logger.error('Rate limit check failed', error as Error, { identifier });
     return { allowed: true, remaining: config.requests };
+  }
+}
+
+/**
+ * 공개 페이지 전용 Rate Limit 체크
+ * 시간당 + 일일 제한을 동시에 체크합니다.
+ *
+ * @param ip - 클라이언트 IP 주소
+ * @returns 허용 여부 및 남은 요청 수
+ */
+export async function checkPublicPageRateLimit(ip: string): Promise<{
+  allowed: boolean;
+  remaining: number;
+  retryAfter?: number;
+  reason?: 'hourly' | 'daily';
+}> {
+  // 시간당 제한 체크
+  const hourlyLimiter = getRateLimiter(
+    'publicPage:chat',
+    RATE_LIMIT_CONFIGS.publicPageChat.requests,
+    RATE_LIMIT_CONFIGS.publicPageChat.window
+  );
+
+  // 일일 제한 체크
+  const dailyLimiter = getRateLimiter(
+    'publicPage:chatDaily',
+    RATE_LIMIT_CONFIGS.publicPageChatDaily.requests,
+    RATE_LIMIT_CONFIGS.publicPageChatDaily.window
+  );
+
+  // Redis 없으면 항상 허용 (개발 환경)
+  if (!hourlyLimiter || !dailyLimiter) {
+    return { allowed: true, remaining: RATE_LIMIT_CONFIGS.publicPageChat.requests };
+  }
+
+  try {
+    // 두 제한을 병렬로 체크
+    const [hourlyResult, dailyResult] = await Promise.all([
+      hourlyLimiter.limit(ip),
+      dailyLimiter.limit(ip),
+    ]);
+
+    // 시간당 제한 초과
+    if (!hourlyResult.success) {
+      const retryAfter = Math.ceil((hourlyResult.reset - Date.now()) / 1000);
+      logger.warn('Public page hourly rate limit exceeded', { ip, reset: hourlyResult.reset });
+      return {
+        allowed: false,
+        remaining: 0,
+        retryAfter,
+        reason: 'hourly',
+      };
+    }
+
+    // 일일 제한 초과
+    if (!dailyResult.success) {
+      const retryAfter = Math.ceil((dailyResult.reset - Date.now()) / 1000);
+      logger.warn('Public page daily rate limit exceeded', { ip, reset: dailyResult.reset });
+      return {
+        allowed: false,
+        remaining: 0,
+        retryAfter,
+        reason: 'daily',
+      };
+    }
+
+    return {
+      allowed: true,
+      remaining: Math.min(hourlyResult.remaining, dailyResult.remaining),
+    };
+  } catch (error) {
+    logger.error('Public page rate limit check failed', error as Error, { ip });
+    // 에러 시 허용 (fail-open)
+    return { allowed: true, remaining: RATE_LIMIT_CONFIGS.publicPageChat.requests };
   }
 }
 
