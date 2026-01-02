@@ -6,8 +6,13 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-pretendard);
+
+  /* 한글 타이포그래피 확장 */
+  --line-height-korean: 1.75;
+  --line-height-korean-heading: 1.4;
+  --letter-spacing-korean: -0.01em;
+  --letter-spacing-korean-tight: -0.02em;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -47,7 +52,23 @@
 }
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.75rem; /* 12px - 2024 트렌드 반영 */
+
+  /* ===== 카드 시스템 ===== */
+  --card-padding-sm: 1rem;        /* 16px - 컴팩트 */
+  --card-padding-md: 1.5rem;      /* 24px - 기본 */
+  --card-padding-lg: 2rem;        /* 32px - 대형 */
+  --card-gap: 1.5rem;             /* 24px - 카드 간격 */
+  --section-gap: 2rem;            /* 32px - 섹션 간격 */
+
+  /* ===== 타이포그래피 스케일 ===== */
+  --text-title-lg: 1.5rem;        /* 24px - 페이지 제목 */
+  --text-title-md: 1.25rem;       /* 20px - 섹션 제목 */
+  --text-title-sm: 1.125rem;      /* 18px - 카드 제목 */
+  --text-body: 1rem;              /* 16px - 본문 */
+  --text-caption: 0.875rem;       /* 14px - 캡션 */
+  --text-micro: 0.75rem;          /* 12px - 메타 정보 */
+
   /* Scrollbar */
   --scrollbar-thumb: oklch(0.556 0 0 / 0.25);
   --scrollbar-thumb-hover: oklch(0.556 0 0 / 0.5);
@@ -136,6 +157,9 @@
   }
   body {
     @apply bg-background text-foreground;
+    word-break: keep-all; /* 한글 단어 단위 줄바꿈 */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   /* Webkit scrollbar (Chrome, Edge, Safari) */
