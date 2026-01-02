@@ -6,6 +6,7 @@
  */
 
 import type { UsageOverview, Forecast } from '@/lib/usage/types';
+import { formatCompactNumber, formatCurrency } from '@/lib/format';
 
 interface UsageOverviewCardsProps {
   todayOverview: UsageOverview;
@@ -28,7 +29,8 @@ export function UsageOverviewCards({
       <StatCard
         title="오늘 사용량"
         value={formatCurrency(todayOverview.totalCostUsd)}
-        subValue={`${formatNumber(todayOverview.totalTokens)} 토큰`}
+        subValue={`${formatCompactNumber(todayOverview.totalTokens)} 토큰`}
+        subValueTooltip={`${todayOverview.totalTokens.toLocaleString('ko-KR')} 토큰`}
         trend={null}
       />
 
@@ -36,7 +38,8 @@ export function UsageOverviewCards({
       <StatCard
         title="이번 달 누적"
         value={formatCurrency(monthOverview.totalCostUsd)}
-        subValue={`${formatNumber(monthOverview.totalTokens)} 토큰`}
+        subValue={`${formatCompactNumber(monthOverview.totalTokens)} 토큰`}
+        subValueTooltip={`${monthOverview.totalTokens.toLocaleString('ko-KR')} 토큰`}
         trend={null}
       />
 
@@ -75,17 +78,20 @@ interface StatCardProps {
   title: string;
   value: string;
   subValue?: string;
+  subValueTooltip?: string;
   trend: 'increasing' | 'stable' | 'decreasing' | null;
   trendLabel?: string;
 }
 
-function StatCard({ title, value, subValue, trend, trendLabel }: StatCardProps) {
+function StatCard({ title, value, subValue, subValueTooltip, trend, trendLabel }: StatCardProps) {
   return (
     <div className="rounded-lg border border-border bg-card p-6">
       <p className="text-sm font-medium text-muted-foreground">{title}</p>
       <p className="mt-2 text-3xl font-bold text-foreground">{value}</p>
       {subValue && (
-        <p className="mt-1 text-sm text-muted-foreground">{subValue}</p>
+        <p className="mt-1 text-sm text-muted-foreground" title={subValueTooltip}>
+          {subValue}
+        </p>
       )}
       {trend && trendLabel && (
         <div className={`mt-2 flex items-center gap-1 text-sm ${getTrendTextColor(trend)}`}>
@@ -95,20 +101,6 @@ function StatCard({ title, value, subValue, trend, trendLabel }: StatCardProps) 
       )}
     </div>
   );
-}
-
-function formatCurrency(value: number): string {
-  return `$${value.toFixed(2)}`;
-}
-
-function formatNumber(value: number): string {
-  if (value >= 1000000) {
-    return `${(value / 1000000).toFixed(1)}M`;
-  }
-  if (value >= 1000) {
-    return `${(value / 1000).toFixed(1)}K`;
-  }
-  return value.toLocaleString();
 }
 
 function getTrendLabel(trend: 'increasing' | 'stable' | 'decreasing'): string {

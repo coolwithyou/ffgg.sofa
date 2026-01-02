@@ -6,9 +6,15 @@
  */
 
 import type { DailyUsage } from '@/lib/usage/types';
+import { formatCompactNumber, formatWithCommas } from '@/lib/format';
+
+/**
+ * 서버에서 전달된 DailyUsage의 date 필드는 JSON 직렬화로 인해 string으로 변환됨
+ */
+type SerializedDailyUsage = Omit<DailyUsage, 'date'> & { date: string | Date };
 
 interface UsageTrendChartProps {
-  trend: DailyUsage[];
+  trend: SerializedDailyUsage[];
 }
 
 export function UsageTrendChart({ trend }: UsageTrendChartProps) {
@@ -56,13 +62,15 @@ export function UsageTrendChart({ trend }: UsageTrendChartProps) {
         <div className="ml-14 flex h-full items-end gap-0.5">
           {trend.map((day, index) => {
             const height = (day.totalCostUsd / maxCost) * 100;
-            const date = new Date(day.date);
+            // 서버에서 전달 시 Date가 string으로 직렬화되므로 안전하게 변환
+            const date = toDate(day.date);
+            const dateKey = typeof day.date === 'string' ? day.date : day.date.toISOString();
             const isToday = isDateToday(date);
             const isWeekend = date.getDay() === 0 || date.getDay() === 6;
 
             return (
               <div
-                key={day.date.toISOString()}
+                key={dateKey}
                 className="group relative flex flex-1 flex-col items-center"
               >
                 {/* 바 */}
@@ -83,7 +91,9 @@ export function UsageTrendChart({ trend }: UsageTrendChartProps) {
                 <div className="absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-foreground px-2 py-1 text-xs text-background group-hover:block">
                   <div className="font-medium">{formatDate(date)}</div>
                   <div>${day.totalCostUsd.toFixed(4)}</div>
-                  <div>{day.totalTokens.toLocaleString()} 토큰</div>
+                  <div title={`${formatWithCommas(day.totalTokens)} 토큰`}>
+                    {formatCompactNumber(day.totalTokens)} 토큰
+                  </div>
                 </div>
 
                 {/* X축 라벨 (일부만 표시) */}
@@ -117,6 +127,13 @@ export function UsageTrendChart({ trend }: UsageTrendChartProps) {
       </div>
     </div>
   );
+}
+
+/**
+ * string 또는 Date를 안전하게 Date 객체로 변환
+ */
+function toDate(value: string | Date): Date {
+  return value instanceof Date ? value : new Date(value);
 }
 
 function isDateToday(date: Date): boolean {

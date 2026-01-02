@@ -5,6 +5,8 @@
  * 사용량이 많은 상위 테넌트 목록을 표시합니다.
  */
 
+import { formatCompactNumber, formatWithCommas } from '@/lib/format';
+
 interface TopTenant {
   tenantId: string;
   tenantName: string;
@@ -90,8 +92,11 @@ export function TenantUsageTable({ topTenants }: TenantUsageTableProps) {
                       </span>
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-right text-sm text-foreground">
-                    {tenant.totalTokens.toLocaleString()}
+                  <td
+                    className="whitespace-nowrap px-3 py-3 text-right text-sm text-foreground"
+                    title={`${formatWithCommas(tenant.totalTokens)} 토큰`}
+                  >
+                    {formatCompactNumber(tenant.totalTokens)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-right">
                     <span className="font-medium text-foreground">
