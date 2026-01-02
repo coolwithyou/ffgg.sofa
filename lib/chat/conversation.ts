@@ -15,7 +15,7 @@ import type { ChatMessage, ConversationContext } from './types';
 export async function getOrCreateConversation(
   tenantId: string,
   sessionId: string | undefined,
-  channel: 'web' | 'kakao' = 'web'
+  channel: 'web' | 'kakao' | 'public_page' = 'web'
 ): Promise<ConversationContext> {
   // 세션 ID가 없으면 새로 생성
   const sid = sessionId || uuidv4();
@@ -33,7 +33,7 @@ export async function getOrCreateConversation(
       id: conv.id, // UUID 반환
       tenantId,
       sessionId: sid,
-      channel: conv.channel as 'web' | 'kakao',
+      channel: conv.channel as 'web' | 'kakao' | 'public_page',
       messages: (conv.messages as ChatMessage[]) || [],
     };
   }

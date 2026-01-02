@@ -164,6 +164,28 @@ export const chatbots = pgTable(
     kakaoBotId: text('kakao_bot_id').unique(),
     kakaoConfig: jsonb('kakao_config').default({}),
 
+    // 공개 페이지 설정
+    slug: text('slug').unique(), // 공개 URL 슬러그 (3-30자, 영소문자/숫자/하이픈)
+    publicPageEnabled: boolean('public_page_enabled').default(false),
+    publicPageConfig: jsonb('public_page_config').default({
+      header: {
+        title: '',
+        description: '',
+        logoUrl: '',
+        showBrandName: true,
+      },
+      theme: {
+        backgroundColor: '#ffffff',
+        primaryColor: '#3B82F6',
+        textColor: '#1f2937',
+      },
+      seo: {
+        title: '',
+        description: '',
+        ogImage: '',
+      },
+    }),
+
     // LLM 설정
     llmConfig: jsonb('llm_config').default({
       temperature: 0.7,
@@ -194,6 +216,8 @@ export const chatbots = pgTable(
     index('idx_chatbots_widget_api_key').on(table.widgetApiKey),
     index('idx_chatbots_kakao_bot_id').on(table.kakaoBotId),
     index('idx_chatbots_default').on(table.tenantId, table.isDefault),
+    index('idx_chatbots_slug').on(table.slug),
+    index('idx_chatbots_public_page').on(table.slug, table.publicPageEnabled),
   ]
 );
 

@@ -22,7 +22,7 @@ export interface TrackingContext {
 export interface GenerateOptions {
   maxTokens?: number;
   temperature?: number;
-  channel?: 'web' | 'kakao';
+  channel?: 'web' | 'kakao' | 'public_page';
   /** 첫 번째 턴 여부 (기본: true). false면 간결한 응답 생성 */
   isFirstTurn?: boolean;
   /** 토큰 추적용 컨텍스트 */
@@ -137,11 +137,12 @@ const KAKAO_SYSTEM_PROMPT = `당신은 카카오톡에서 고객 질문에 답�
 /**
  * 채널과 턴 정보에 따라 적절한 시스템 프롬프트를 생성합니다.
  */
-function buildSystemPrompt(channel: 'web' | 'kakao', isFirstTurn: boolean): string {
+function buildSystemPrompt(channel: 'web' | 'kakao' | 'public_page', isFirstTurn: boolean): string {
   if (channel === 'kakao') {
     return KAKAO_SYSTEM_PROMPT;
   }
 
+  // web과 public_page는 동일한 프롬프트 사용
   return WEB_SYSTEM_PROMPT_BASE + (isFirstTurn ? WEB_FIRST_TURN_SUFFIX : WEB_FOLLOWUP_TURN_SUFFIX);
 }
 

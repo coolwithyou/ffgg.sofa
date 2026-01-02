@@ -16,7 +16,7 @@ export interface ChatMessage {
 export interface ChatRequest {
   message: string;
   sessionId?: string;
-  channel?: 'web' | 'kakao';
+  channel?: 'web' | 'kakao' | 'public_page';
   chatbotId?: string;
 }
 
@@ -38,7 +38,7 @@ export interface ConversationContext {
   id: string; // UUID - DB 기본 키 (토큰 추적용)
   tenantId: string;
   sessionId: string;
-  channel: 'web' | 'kakao';
+  channel: 'web' | 'kakao' | 'public_page';
   chatbotId?: string;
   messages: ChatMessage[];
 }

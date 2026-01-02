@@ -18,7 +18,7 @@ export interface ResponseTimeParams {
   tenantId: string;
   chatbotId?: string;
   conversationId?: string;
-  channel: 'web' | 'kakao';
+  channel: 'web' | 'kakao' | 'public_page';
   totalDurationMs: number;
   timings: Record<string, number>;
   cacheHit: boolean;
@@ -130,7 +130,7 @@ export async function trackCacheHitResponseTime(params: {
   tenantId: string;
   chatbotId?: string;
   conversationId?: string;
-  channel: 'web' | 'kakao';
+  channel: 'web' | 'kakao' | 'public_page';
   totalDurationMs: number;
   cacheLookupMs: number;
 }): Promise<void> {

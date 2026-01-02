@@ -25,7 +25,11 @@ const PUBLIC_PATHS = [
 // 동적 공개 경로 패턴 (인증 불필요)
 const PUBLIC_PATH_PATTERNS = [
   /^\/widget\/[^/]+$/, // /widget/[tenantId] - 챗봇 위젯 iframe
+  /^\/[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/, // /[slug] - 공개 페이지 (3-30자)
 ];
+
+// 공개 페이지 슬러그 패턴 (X-Frame-Options 처리용)
+const PUBLIC_PAGE_PATTERN = /^\/[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 // API 공개 경로 (인증 불필요)
 const PUBLIC_API_PATHS = [
@@ -82,7 +86,14 @@ function isIgnoredPath(pathname: string): boolean {
  * 위젯 경로인지 확인 (iframe 임베드 허용)
  */
 function isWidgetPath(pathname: string): boolean {
-  return PUBLIC_PATH_PATTERNS.some((pattern) => pattern.test(pathname));
+  return /^\/widget\/[^/]+$/.test(pathname);
+}
+
+/**
+ * 공개 페이지 경로인지 확인 (iframe 차단)
+ */
+function isPublicPagePath(pathname: string): boolean {
+  return PUBLIC_PAGE_PATTERN.test(pathname);
 }
 
 /**
