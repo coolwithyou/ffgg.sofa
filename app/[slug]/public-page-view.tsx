@@ -4,13 +4,27 @@
  * 공개 페이지 클라이언트 뷰
  *
  * Linktree 스타일 독립 페이지 레이아웃
- * - 헤더 블록: 타이틀, 설명, 로고
- * - 챗봇 블록: 채팅 인터페이스
+ * - blocks 배열 기반 렌더링 (WYSIWYG)
+ * - 편집 모드에서는 동일한 UI에 편집 컨트롤 오버레이
+ * - 보기 모드에서는 순수 콘텐츠만 표시
+ *
+ * 주의: 편집 모드에서는 외부에서 DndContext (BlockEditorProvider)로 감싸야 합니다.
+ * SortableContext만 내부에서 제공하여 블록 정렬을 지원합니다.
  */
 
+import { useMemo } from 'react';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import type { PublicPageConfig } from '@/lib/public-page/types';
-import { HeaderBlock } from './components/header-block';
-import { ChatbotBlock } from './components/chatbot-block';
+import {
+  type Block,
+  createHeaderBlock,
+  createChatbotBlock,
+} from '@/lib/public-page/block-types';
+import { BlockRenderer } from './components/block-renderer';
+import { EditableBlockWrapper } from './components/editable-block-wrapper';
 
 interface PublicPageViewProps {
   chatbotId: string;
@@ -18,6 +32,18 @@ interface PublicPageViewProps {
   tenantId: string;
   config: PublicPageConfig;
   widgetConfig?: Record<string, unknown> | null;
+  /** 편집 모드 여부 */
+  isEditing?: boolean;
+  /** 선택된 블록 ID */
+  selectedBlockId?: string | null;
+  /** 블록 선택 콜백 */
+  onSelectBlock?: (id: string | null) => void;
+  /** 블록 가시성 토글 콜백 */
+  onToggleVisibility?: (id: string) => void;
+  /** 블록 삭제 콜백 */
+  onDeleteBlock?: (id: string) => void;
+  /** 블록 순서 변경 콜백 */
+  onReorderBlocks?: (activeId: string, overId: string) => void;
 }
 
 export function PublicPageView({
@@ -26,6 +52,12 @@ export function PublicPageView({
   tenantId,
   config,
   widgetConfig,
+  isEditing = false,
+  selectedBlockId,
+  onSelectBlock,
+  onToggleVisibility,
+  onDeleteBlock,
+  onReorderBlocks,
 }: PublicPageViewProps) {
   const { header, theme, chatbot } = config;
 
@@ -47,6 +79,80 @@ export function PublicPageView({
   const placeholder =
     (widgetConfig?.placeholder as string) || '메시지를 입력하세요...';
 
+  /**
+   * 블록 배열 생성
+   * - config.blocks가 있으면 사용
+   * - 없으면 기존 header/chatbot 설정에서 기본 블록 생성 (하위 호환성)
+   */
+  const blocks = useMemo<Block[]>(() => {
+    if (config.blocks && config.blocks.length > 0) {
+      return [...config.blocks].sort((a, b) => a.order - b.order);
+    }
+
+    // 하위 호환성: blocks 배열이 없으면 기본 블록 생성
+    const defaultBlocks: Block[] = [
+      createHeaderBlock('default-header', 0),
+      createChatbotBlock('default-chatbot', 1),
+    ];
+    return defaultBlocks;
+  }, [config.blocks]);
+
+  // 배경 클릭 시 선택 해제
+  const handleBackgroundClick = () => {
+    if (isEditing) {
+      onSelectBlock?.(null);
+    }
+  };
+
+  // 블록 렌더링 공통 props
+  const blockRendererProps = {
+    config,
+    chatbotId,
+    tenantId,
+    chatbotName,
+    welcomeMessage,
+    placeholder,
+    isEditing,
+  };
+
+  /**
+   * 블록 콘텐츠 렌더링
+   * - 편집 모드: EditableBlockWrapper로 감싸기 (외부 BlockEditorProvider 필요)
+   * - 보기 모드: BlockRenderer만 렌더링
+   */
+  const renderBlocks = () => {
+    // 보기 모드: 순수 블록만 렌더링
+    if (!isEditing) {
+      return blocks.map((block) => (
+        <BlockRenderer key={block.id} block={block} {...blockRendererProps} />
+      ));
+    }
+
+    // 편집 모드: SortableContext와 편집 래퍼 적용
+    // 주의: 외부에서 DndContext (BlockEditorProvider)로 감싸야 정상 작동
+    return (
+      <SortableContext
+        items={blocks.map((b) => b.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="space-y-4">
+          {blocks.map((block) => (
+            <EditableBlockWrapper
+              key={block.id}
+              block={block}
+              isSelected={selectedBlockId === block.id}
+              onSelect={() => onSelectBlock?.(block.id)}
+              onToggleVisibility={() => onToggleVisibility?.(block.id)}
+              onDelete={() => onDeleteBlock?.(block.id)}
+            >
+              <BlockRenderer block={block} {...blockRendererProps} />
+            </EditableBlockWrapper>
+          ))}
+        </div>
+      </SortableContext>
+    );
+  };
+
   return (
     <main
       className="min-h-screen"
@@ -56,28 +162,13 @@ export function PublicPageView({
         color: 'var(--pp-text-color)',
         fontFamily: 'var(--pp-font-family)',
       }}
+      onClick={handleBackgroundClick}
     >
       <div className="mx-auto max-w-2xl px-4 py-8">
-        {/* 헤더 블록 */}
-        <HeaderBlock
-          title={headerTitle}
-          description={header.description}
-          logoUrl={header.logoUrl}
-          showBrandName={header.showBrandName}
-          primaryColor={theme.primaryColor}
-        />
-
-        {/* 챗봇 블록 */}
-        <ChatbotBlock
-          chatbotId={chatbotId}
-          tenantId={tenantId}
-          welcomeMessage={welcomeMessage}
-          placeholder={placeholder}
-          primaryColor={theme.primaryColor}
-          textColor={theme.textColor}
-          minHeight={chatbot.minHeight}
-          maxHeight={chatbot.maxHeight}
-        />
+        {/* 편집 모드 좌측 여백 확보 (편집 컨트롤용) */}
+        <div className={isEditing ? 'pl-12' : ''}>
+          {renderBlocks()}
+        </div>
 
         {/* 푸터 (브랜드 표시) */}
         {header.showBrandName && (
