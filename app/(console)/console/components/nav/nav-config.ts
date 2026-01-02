@@ -1,9 +1,8 @@
 import {
   LayoutDashboard,
-  BookOpen,
+  Bot,
   Palette,
   Settings,
-  Bot,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -28,9 +27,9 @@ export interface NavItem {
  *
  * 구조:
  * - Dashboard: 챗봇 개요, 최근 활동
- * - Knowledge: 문서, 데이터셋, FAQ (Phase 2)
- * - Appearance: Page, Widget (현재 Console Editor)
- * - Settings: 일반, AI, 연동
+ * - Chatbot: 문서, 데이터셋, FAQ, 검수 (챗봇 지식 관리)
+ * - Appearance: Page(공개 페이지), Widget(위젯 설정)
+ * - Settings: 일반, AI, 연동(카카오 등)
  */
 export const navItems: NavItem[] = [
   {
@@ -40,14 +39,14 @@ export const navItems: NavItem[] = [
     href: '/console/dashboard',
   },
   {
-    id: 'knowledge',
-    label: '지식',
-    icon: BookOpen,
+    id: 'chatbot',
+    label: '챗봇',
+    icon: Bot,
     subItems: [
-      { id: 'documents', label: '문서', href: '/console/knowledge' },
-      { id: 'datasets', label: '데이터셋', href: '/console/knowledge/datasets' },
-      { id: 'faq', label: 'FAQ', href: '/console/knowledge/faq' },
-      { id: 'review', label: '검수', href: '/console/knowledge/review' },
+      { id: 'documents', label: '문서', href: '/console/chatbot' },
+      { id: 'datasets', label: '데이터셋', href: '/console/chatbot/datasets' },
+      { id: 'faq', label: 'FAQ', href: '/console/chatbot/faq' },
+      { id: 'review', label: '검수', href: '/console/chatbot/review' },
     ],
   },
   {
@@ -55,8 +54,8 @@ export const navItems: NavItem[] = [
     label: '디자인',
     icon: Palette,
     subItems: [
-      { id: 'page', label: 'Page', href: '/console/appearance' },
-      { id: 'widget', label: 'Widget', href: '/console/appearance/widget' },
+      { id: 'page', label: '공개 페이지', href: '/console/appearance' },
+      { id: 'widget', label: '위젯', href: '/console/appearance/widget' },
     ],
   },
   {
@@ -67,17 +66,6 @@ export const navItems: NavItem[] = [
       { id: 'general', label: '일반', href: '/console/settings' },
       { id: 'ai', label: 'AI', href: '/console/settings/ai' },
       { id: 'integrations', label: '연동', href: '/console/settings/integrations' },
-    ],
-  },
-  {
-    id: 'chatbot',
-    label: '챗봇',
-    icon: Bot,
-    subItems: [
-      { id: 'chatbot-datasets', label: '데이터셋 연결', href: '/console/chatbot/datasets' },
-      { id: 'chatbot-widget', label: '위젯', href: '/console/chatbot/widget' },
-      { id: 'chatbot-kakao', label: '카카오', href: '/console/chatbot/kakao' },
-      { id: 'chatbot-public-page', label: '공개 페이지', href: '/console/chatbot/public-page' },
     ],
   },
 ];

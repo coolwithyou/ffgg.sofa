@@ -170,7 +170,7 @@ export function SequentialReview() {
               : '검토할 청크가 없습니다.'}
           </p>
           <Link
-            href="/console/knowledge/review"
+            href="/console/chatbot/review"
             className="mt-6 inline-block rounded-md bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
             목록으로 돌아가기
@@ -231,7 +231,7 @@ export function SequentialReview() {
         <div className="border-t border-border bg-muted/50 px-6 py-4">
           <div className="flex items-center justify-between">
             <Link
-              href={`/console/knowledge/review/${chunk.id}`}
+              href={`/console/chatbot/review/${chunk.id}`}
               className="text-sm text-primary hover:underline"
             >
               상세 보기 / 편집
@@ -293,7 +293,7 @@ function Header({ stats }: { stats: ReviewStats }) {
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-4">
         <Link
-          href="/console/knowledge/review"
+          href="/console/chatbot/review"
           className="flex h-10 w-10 items-center justify-center rounded-full bg-muted hover:bg-muted/80"
         >
           <BackIcon className="h-5 w-5 text-muted-foreground" />

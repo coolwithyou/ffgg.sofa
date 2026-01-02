@@ -127,7 +127,7 @@ export function ChunkDetail({ chunkId }: ChunkDetailProps) {
           throw new Error('Failed to delete');
         }
 
-        router.push('/console/knowledge/review');
+        router.push('/console/chatbot/review');
       } catch (err) {
         showError('삭제 실패', '삭제에 실패했습니다.');
       }
@@ -147,7 +147,7 @@ export function ChunkDetail({ chunkId }: ChunkDetailProps) {
       <div className="rounded-lg border border-border bg-card p-8 text-center">
         <p className="text-destructive">{error || '청크를 찾을 수 없습니다.'}</p>
         <Link
-          href="/console/knowledge/review"
+          href="/console/chatbot/review"
           className="mt-4 inline-block text-primary hover:underline"
         >
           목록으로 돌아가기
@@ -162,7 +162,7 @@ export function ChunkDetail({ chunkId }: ChunkDetailProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link
-            href="/console/knowledge/review"
+            href="/console/chatbot/review"
             className="flex h-10 w-10 items-center justify-center rounded-full bg-muted hover:bg-muted/80"
           >
             <BackIcon className="h-5 w-5 text-muted-foreground" />

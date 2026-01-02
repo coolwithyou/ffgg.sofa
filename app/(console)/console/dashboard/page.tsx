@@ -86,7 +86,7 @@ export default async function ConsoleDashboardPage() {
           title="전체 문서"
           value={data.stats.totalDocuments}
           icon={DocumentIcon}
-          href="/console/knowledge"
+          href="/console/chatbot"
         />
         <StatCard
           title="승인된 청크"
@@ -99,7 +99,7 @@ export default async function ConsoleDashboardPage() {
           value={data.stats.pendingChunks}
           icon={ClockIcon}
           color="yellow"
-          href="/console/knowledge/review"
+          href="/console/chatbot/review"
         />
         <StatCard
           title="최근 7일 상담"
@@ -117,7 +117,7 @@ export default async function ConsoleDashboardPage() {
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-foreground">최근 문서</h2>
             <Link
-              href="/console/knowledge"
+              href="/console/chatbot"
               className="text-sm text-primary hover:text-primary/80"
             >
               전체 보기
@@ -178,7 +178,7 @@ export default async function ConsoleDashboardPage() {
         <h2 className="mb-4 text-lg font-semibold text-foreground">빠른 시작</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <QuickAction
-            href="/console/knowledge"
+            href="/console/chatbot"
             icon={UploadIcon}
             title="문서 업로드"
             description="PDF, TXT 파일을 업로드하세요"

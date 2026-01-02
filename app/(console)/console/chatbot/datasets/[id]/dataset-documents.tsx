@@ -13,7 +13,7 @@ import { FileText, Trash2, RotateCcw, ExternalLink, Search, X, Unlink } from 'lu
 import { DocumentProgressModal } from '@/components/document-progress-modal';
 import { DocumentStatusBadge } from '@/components/ui/document-status-badge';
 import { DocumentChunks } from './document-chunks';
-import { unassignDocumentFromDataset } from '@/app/(console)/console/knowledge/actions';
+import { unassignDocumentFromDataset } from '@/app/(console)/console/chatbot/actions';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
 import { useToast } from '@/components/ui/toast';
 
@@ -223,7 +223,7 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
           이 데이터셋에 업로드된 문서가 없습니다.
         </p>
         <Link
-          href={`/console/knowledge?datasetId=${datasetId}`}
+          href={`/console/chatbot?datasetId=${datasetId}`}
           className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           문서 업로드하기
@@ -241,7 +241,7 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
             문서 목록 ({documents.length})
           </h2>
           <Link
-            href={`/console/knowledge?datasetId=${datasetId}`}
+            href={`/console/chatbot?datasetId=${datasetId}`}
             className="flex items-center gap-1 text-sm text-primary hover:underline"
           >
             업로드

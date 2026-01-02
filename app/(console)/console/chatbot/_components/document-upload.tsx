@@ -396,7 +396,7 @@ export function DocumentUpload() {
             </div>
             {datasets.length === 0 && !isLoadingDatasets && (
               <p className="mt-2 text-sm text-muted-foreground">
-                먼저 <a href="/console/knowledge/datasets" className="text-primary hover:underline">데이터셋을 생성</a>하세요.
+                먼저 <a href="/console/chatbot/datasets" className="text-primary hover:underline">데이터셋을 생성</a>하세요.
               </p>
             )}
           </div>

@@ -376,7 +376,7 @@ export function ReviewFilters({ filters, onChange }: ReviewFiltersProps) {
 
         {/* 순차 리뷰 모드 링크 - Console 경로로 업데이트 */}
         <Link
-          href="/console/knowledge/review/sequential"
+          href="/console/chatbot/review/sequential"
           className="ml-auto rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           순차 리뷰

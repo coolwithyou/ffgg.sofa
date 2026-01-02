@@ -107,7 +107,7 @@ export async function saveFAQDraft(
         and(eq(faqDrafts.id, data.id), eq(faqDrafts.tenantId, session.tenantId))
       );
 
-    revalidatePath('/console/knowledge/faq');
+    revalidatePath('/console/chatbot/faq');
     return { id: data.id, success: true };
   }
 
@@ -122,7 +122,7 @@ export async function saveFAQDraft(
     })
     .returning({ id: faqDrafts.id });
 
-  revalidatePath('/console/knowledge/faq');
+  revalidatePath('/console/chatbot/faq');
   return { id: newDraft.id, success: true };
 }
 
@@ -137,7 +137,7 @@ export async function deleteFAQDraft(id: string): Promise<void> {
     .delete(faqDrafts)
     .where(and(eq(faqDrafts.id, id), eq(faqDrafts.tenantId, session.tenantId)));
 
-  revalidatePath('/console/knowledge/faq');
+  revalidatePath('/console/chatbot/faq');
 }
 
 // 문서로 내보내기 (업로드)
@@ -379,8 +379,8 @@ export async function uploadQAAsDocument(
     }
   }
 
-  revalidatePath('/console/knowledge/faq');
-  revalidatePath('/console/knowledge');
+  revalidatePath('/console/chatbot/faq');
+  revalidatePath('/console/chatbot');
 
   return { documentId: newDocumentId, success: true, updatedQAPair };
 }
@@ -429,7 +429,7 @@ export async function unlockQA(
       and(eq(faqDrafts.id, draftId), eq(faqDrafts.tenantId, session.tenantId))
     );
 
-  revalidatePath('/console/knowledge/faq');
+  revalidatePath('/console/chatbot/faq');
 
   return { success: true, updatedQAPair };
 }

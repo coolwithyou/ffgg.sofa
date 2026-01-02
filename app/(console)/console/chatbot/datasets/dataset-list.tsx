@@ -142,7 +142,7 @@ export function DatasetList({ datasets }: DatasetListProps) {
                   <>
                     <div className="flex items-center gap-2">
                       <Link
-                        href={`/console/knowledge/datasets/${dataset.id}`}
+                        href={`/console/chatbot/datasets/${dataset.id}`}
                         className="truncate font-medium text-foreground hover:text-primary"
                       >
                         {dataset.name}

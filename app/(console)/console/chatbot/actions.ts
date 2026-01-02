@@ -163,7 +163,7 @@ export async function deleteDocument(documentId: string): Promise<{ success: boo
     // 삭제 (cascade로 청크도 함께 삭제됨)
     await db.delete(documents).where(eq(documents.id, documentId));
 
-    revalidatePath('/console/knowledge');
+    revalidatePath('/console/chatbot');
 
     logger.info('Document deleted', { documentId, tenantId: session.tenantId });
     return { success: true };
@@ -235,7 +235,7 @@ export async function reprocessDocument(documentId: string): Promise<{ success: 
       },
     });
 
-    revalidatePath('/console/knowledge');
+    revalidatePath('/console/chatbot');
 
     logger.info('Document reprocess triggered', {
       documentId,
@@ -498,9 +498,9 @@ export async function moveDocumentToDataset(
       })
       .where(eq(datasets.id, targetDatasetId));
 
-    revalidatePath('/console/knowledge');
-    revalidatePath('/console/knowledge/datasets');
-    revalidatePath(`/console/knowledge/datasets/${targetDatasetId}`);
+    revalidatePath('/console/chatbot');
+    revalidatePath('/console/chatbot/datasets');
+    revalidatePath(`/console/chatbot/datasets/${targetDatasetId}`);
 
     return { success: true };
   } catch (error) {
@@ -616,9 +616,9 @@ export async function duplicateDocumentToDataset(
       })
       .where(eq(datasets.id, targetDatasetId));
 
-    revalidatePath('/console/knowledge');
-    revalidatePath('/console/knowledge/datasets');
-    revalidatePath(`/console/knowledge/datasets/${targetDatasetId}`);
+    revalidatePath('/console/chatbot');
+    revalidatePath('/console/chatbot/datasets');
+    revalidatePath(`/console/chatbot/datasets/${targetDatasetId}`);
 
     return { success: true, newDocumentId: newDoc.id, copiedChunkCount };
   } catch (error) {
@@ -692,9 +692,9 @@ export async function unassignDocumentFromDataset(
       })
       .where(eq(datasets.id, sourceDatasetId));
 
-    revalidatePath('/console/knowledge');
-    revalidatePath('/console/knowledge/datasets');
-    revalidatePath(`/console/knowledge/datasets/${sourceDatasetId}`);
+    revalidatePath('/console/chatbot');
+    revalidatePath('/console/chatbot/datasets');
+    revalidatePath(`/console/chatbot/datasets/${sourceDatasetId}`);
 
     return { success: true };
   } catch (error) {

@@ -72,7 +72,7 @@ export async function createDataset(data: {
       })
       .returning();
 
-    revalidatePath('/console/knowledge/datasets');
+    revalidatePath('/console/chatbot/datasets');
     return { success: true, datasetId: newDataset.id };
   } catch (error) {
     console.error('Dataset creation error:', error);
@@ -111,7 +111,7 @@ export async function updateDataset(
       })
       .where(eq(datasets.id, id));
 
-    revalidatePath('/console/knowledge/datasets');
+    revalidatePath('/console/chatbot/datasets');
     return { success: true };
   } catch (error) {
     console.error('Dataset update error:', error);
@@ -156,7 +156,7 @@ export async function setDefaultDataset(
       .set({ isDefault: true, updatedAt: new Date() })
       .where(eq(datasets.id, id));
 
-    revalidatePath('/console/knowledge/datasets');
+    revalidatePath('/console/chatbot/datasets');
     return { success: true };
   } catch (error) {
     console.error('Set default dataset error:', error);
@@ -191,7 +191,7 @@ export async function deleteDataset(
 
     await db.delete(datasets).where(eq(datasets.id, id));
 
-    revalidatePath('/console/knowledge/datasets');
+    revalidatePath('/console/chatbot/datasets');
     return { success: true };
   } catch (error) {
     console.error('Dataset delete error:', error);

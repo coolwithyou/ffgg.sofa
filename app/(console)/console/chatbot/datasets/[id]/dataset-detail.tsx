@@ -165,7 +165,7 @@ export function DatasetDetail({ datasetId }: DatasetDetailProps) {
           {error || '데이터셋을 찾을 수 없습니다'}
         </h3>
         <Link
-          href="/console/knowledge/datasets"
+          href="/console/chatbot/datasets"
           className="mt-4 inline-flex items-center gap-2 text-sm text-primary hover:underline"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -181,7 +181,7 @@ export function DatasetDetail({ datasetId }: DatasetDetailProps) {
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-4">
           <Link
-            href="/console/knowledge/datasets"
+            href="/console/chatbot/datasets"
             className="mt-1 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -260,7 +260,7 @@ export function DatasetDetail({ datasetId }: DatasetDetailProps) {
 
         {/* 업로드 버튼 */}
         <Link
-          href={`/console/knowledge?datasetId=${datasetId}`}
+          href={`/console/chatbot?datasetId=${datasetId}`}
           className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Upload className="h-4 w-4" />
