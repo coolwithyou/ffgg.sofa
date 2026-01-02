@@ -1,6 +1,8 @@
 'use client';
 
-import { useConsoleMode, useCurrentChatbot } from '../hooks/use-console-state';
+import Link from 'next/link';
+import { useConsole, useConsoleMode, useCurrentChatbot } from '../hooks/use-console-state';
+import { useAutoSave } from '../hooks/use-auto-save';
 import { HeaderSettings } from './settings/header-settings';
 import { ThemeSettings } from './settings/theme-settings';
 import { SeoSettings } from './settings/seo-settings';
@@ -11,7 +13,16 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { FileText, Palette, Search, MessageSquare } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/toast';
+import {
+  FileText,
+  Palette,
+  Search,
+  MessageSquare,
+  ExternalLink,
+  Rocket,
+} from 'lucide-react';
 
 /**
  * 우측 설정 패널
@@ -29,6 +40,50 @@ import { FileText, Palette, Search, MessageSquare } from 'lucide-react';
 export function RightSettings() {
   const { mode } = useConsoleMode();
   const { currentChatbot } = useCurrentChatbot();
+  const { saveStatus, saveNow } = useAutoSave();
+  const { success, error: showError } = useToast();
+  const { reloadChatbots } = useConsole();
+
+  // 발행 핸들러
+  const handlePublish = async () => {
+    if (!currentChatbot) return;
+
+    // 저장 중이면 완료될 때까지 대기
+    if (saveStatus === 'saving') {
+      await saveNow();
+    }
+
+    // 이미 공개된 상태면 페이지로 이동
+    if (currentChatbot.publicPageEnabled) {
+      window.open(`/${currentChatbot.slug}`, '_blank');
+      return;
+    }
+
+    try {
+      // POST /api/chatbots/:id/public-page 호출하여 활성화
+      const response = await fetch(
+        `/api/chatbots/${currentChatbot.id}/public-page`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: true }),
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || '발행에 실패했습니다');
+      }
+
+      // 챗봇 목록 새로고침
+      await reloadChatbots();
+
+      success('발행 완료', `${currentChatbot.name} 페이지가 공개되었습니다.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '발행 중 오류가 발생했습니다';
+      showError('발행 실패', message);
+    }
+  };
 
   if (!currentChatbot) {
     return (
@@ -58,6 +113,25 @@ export function RightSettings() {
         <p className="mt-1 text-sm text-muted-foreground">
           {currentChatbot.name}의 공개 페이지를 커스터마이징하세요.
         </p>
+      </div>
+
+      {/* 액션 버튼 */}
+      <div className="flex gap-2 border-b border-border p-4">
+        <Button variant="outline" size="sm" className="flex-1" asChild>
+          <Link href={`/${currentChatbot.slug}`} target="_blank">
+            <ExternalLink className="mr-2 h-4 w-4" />
+            미리보기
+          </Link>
+        </Button>
+        <Button
+          size="sm"
+          className="flex-1"
+          onClick={handlePublish}
+          disabled={saveStatus === 'saving'}
+        >
+          <Rocket className="mr-2 h-4 w-4" />
+          {currentChatbot.publicPageEnabled ? '공개됨' : '발행하기'}
+        </Button>
       </div>
 
       {/* 설정 아코디언 */}

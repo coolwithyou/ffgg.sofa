@@ -31,18 +31,6 @@ export function CenterPreview() {
 
   return (
     <main className="flex flex-1 flex-col bg-muted/30">
-      {/* 현재 챗봇 정보 */}
-      <div className="flex-shrink-0 border-b border-border bg-background/50 px-4 py-2 text-center backdrop-blur-sm">
-        <span className="text-sm font-medium text-foreground">
-          {currentChatbot.name}
-        </span>
-        {currentChatbot.slug && (
-          <span className="ml-2 text-xs text-muted-foreground">
-            /{currentChatbot.slug}
-          </span>
-        )}
-      </div>
-
       {/* 프리뷰 영역 - 실제 서비스와 동일한 레이아웃 */}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto h-full max-w-2xl">
@@ -50,7 +38,7 @@ export function CenterPreview() {
             프리뷰 컨테이너
             - 양쪽 여백으로 에디터 컨텍스트 구분
             - 그림자로 콘텐츠 영역 강조
-            - 라운드 코너 (상단만, 하단은 스크롤 영역)
+            - 라운드 코너
           */}
           <div className="mx-4 my-4 min-h-[calc(100%-2rem)] overflow-hidden rounded-xl shadow-2xl">
             <PreviewContent />

@@ -23,8 +23,6 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarRail,
-  useSidebar,
 } from '@/components/ui/sidebar';
 import {
   Collapsible,
@@ -44,20 +42,18 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 import { navItems, type NavItem } from './nav-config';
 import { useCurrentChatbot } from '../../hooks/use-console-state';
-import { Bot, Check, Plus, Search } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { Bot, Check, Plus, Sofa } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import { SaveStatusIndicator } from '../save-status-indicator';
 
 /**
  * SidebarHeader의 ChatbotSwitcher
  *
- * 축소 시 아이콘만 표시, 확장 시 전체 선택기 표시
+ * 드롭다운으로 챗봇을 전환할 수 있는 선택기
  */
 function SidebarChatbotSwitcher() {
   const { chatbots, currentChatbot, currentChatbotIndex, selectChatbot } =
     useCurrentChatbot();
-  const { state } = useSidebar();
-  const isCollapsed = state === 'collapsed';
 
   const handleSelect = (index: number) => {
     selectChatbot(index);
@@ -71,7 +67,6 @@ function SidebarChatbotSwitcher() {
             <SidebarMenuButton
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-              tooltip={isCollapsed ? currentChatbot?.name : undefined}
             >
               {/* 챗봇 아이콘 */}
               <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary/10">
@@ -240,9 +235,6 @@ function NavMain() {
  * 사용자 메뉴 (SidebarFooter)
  */
 function NavUser() {
-  const { state } = useSidebar();
-  const isCollapsed = state === 'collapsed';
-
   // TODO: 실제 사용자 정보로 교체
   const user = {
     name: '사용자',
@@ -258,7 +250,6 @@ function NavUser() {
             <SidebarMenuButton
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-              tooltip={isCollapsed ? user.name : undefined}
             >
               <Avatar className="size-8 rounded-lg">
                 <AvatarImage src={user.avatar} alt={user.name} />
@@ -323,18 +314,39 @@ function NavUser() {
 /**
  * AppSidebar
  *
- * shadcn/ui Sidebar-07 패턴 기반의 메인 사이드바
- * - collapsible="icon": 축소 시 아이콘만 표시
- * - SidebarHeader: 챗봇 선택기
- * - SidebarContent: 메인 네비게이션 메뉴
+ * 항상 펼쳐진 상태의 메인 사이드바
+ * - SidebarHeader: 로고 + 챗봇 선택기 + 저장 상태
+ * - SidebarContent: 메인 네비게이션 메뉴 (각 메뉴 아이템 폴드 가능)
  * - SidebarFooter: 사용자 메뉴
- * - SidebarRail: 축소/확장 레일
  */
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
-    <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
-        <SidebarChatbotSwitcher />
+    <Sidebar {...props}>
+      <SidebarHeader className="gap-0">
+        {/* 로고 */}
+        <div className="flex h-14 items-center gap-2 px-4">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-lg font-bold tracking-tight text-primary"
+          >
+            <Sofa className="h-5 w-5" />
+            <span>SOFA</span>
+          </Link>
+        </div>
+
+        <Separator className="mx-4 w-auto" />
+
+        {/* 챗봇 선택기 */}
+        <div className="p-2">
+          <SidebarChatbotSwitcher />
+        </div>
+
+        <Separator className="mx-4 w-auto" />
+
+        {/* 저장 상태 */}
+        <div className="flex items-center justify-center py-2">
+          <SaveStatusIndicator />
+        </div>
       </SidebarHeader>
 
       <SidebarContent>
@@ -344,8 +356,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter>
         <NavUser />
       </SidebarFooter>
-
-      <SidebarRail />
     </Sidebar>
   );
 }
