@@ -9,13 +9,12 @@ import Link from 'next/link';
 import {
   Code2,
   Settings,
-  ToggleLeft,
-  ToggleRight,
   Database,
   AlertCircle,
   ExternalLink,
   Eye,
 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { ChatbotWithWidgetStatus, toggleWidgetStatus } from './actions';
 import { EmbedModal } from './embed-modal';
 
@@ -133,28 +132,28 @@ export function WidgetList({ chatbots }: WidgetListProps) {
 
                 {/* 상태 */}
                 <td className="px-4 py-4">
-                  <button
-                    onClick={() => handleToggle(chatbot)}
-                    disabled={loading === chatbot.id}
-                    className="flex items-center gap-2 disabled:opacity-50"
-                  >
+                  <div className="flex items-center gap-3">
                     {loading === chatbot.id ? (
-                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                    ) : chatbot.widgetEnabled ? (
-                      <ToggleRight className="h-6 w-6 text-green-500" />
+                      <div className="flex h-[30px] w-[52px] items-center justify-center">
+                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      </div>
                     ) : (
-                      <ToggleLeft className="h-6 w-6 text-muted-foreground" />
+                      <Switch
+                        size="lg"
+                        checked={chatbot.widgetEnabled}
+                        onCheckedChange={() => handleToggle(chatbot)}
+                      />
                     )}
                     <span
-                      className={
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
                         chatbot.widgetEnabled
-                          ? 'text-sm font-medium text-green-500'
-                          : 'text-sm text-muted-foreground'
-                      }
+                          ? 'bg-green-500/10 text-green-500'
+                          : 'bg-muted text-muted-foreground'
+                      }`}
                     >
                       {chatbot.widgetEnabled ? '활성화' : '비활성화'}
                     </span>
-                  </button>
+                  </div>
                 </td>
 
                 {/* 데이터셋 */}
