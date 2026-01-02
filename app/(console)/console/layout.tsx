@@ -25,7 +25,7 @@ export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
     <ToastProvider>
       <ConsoleProvider>
         <ConsoleShell>{children}</ConsoleShell>
-        <Toaster position="bottom-right" />
+        <Toaster position="top-center" />
       </ConsoleProvider>
     </ToastProvider>
   );
