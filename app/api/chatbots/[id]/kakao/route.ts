@@ -21,6 +21,8 @@ const enableKakaoSchema = z.object({
 
 // 카카오 설정 수정 스키마
 const updateKakaoConfigSchema = z.object({
+  // 봇 ID (비활성화 상태에서도 저장 가능)
+  botId: z.string().min(1).max(100).optional(),
   // 스킬 설정
   skillUrl: z.string().url().optional(),
   skillTimeout: z.number().min(1000).max(30000).optional(),
@@ -73,8 +75,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .from(chatbotDatasets)
       .where(eq(chatbotDatasets.chatbotId, id));
 
-    // 스킬 서버 URL 생성
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sofa.example.com';
+    // 스킬 서버 URL 생성 (실제 요청 도메인 반영)
+    const host = request.headers.get('host') || '';
+    const protocol = request.headers.get('x-forwarded-proto') || 'https';
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
     const skillUrl = `${baseUrl}/api/kakao/skill`;
 
     return NextResponse.json({
@@ -197,7 +201,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .where(eq(chatbots.id, id))
       .returning();
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sofa.example.com';
+    // 스킬 서버 URL 생성 (실제 요청 도메인 반영)
+    const host = request.headers.get('host') || '';
+    const protocol = request.headers.get('x-forwarded-proto') || 'https';
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
 
     return NextResponse.json({
       message: enabled ? '카카오 연동이 활성화되었습니다' : '카카오 연동이 비활성화되었습니다',
@@ -253,9 +260,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const configUpdate = parseResult.data;
+    const { botId, ...configUpdate } = parseResult.data;
 
-    // 기존 설정과 병합
+    // 기존 설정과 병합 (botId는 별도 컬럼)
     const updatedConfig = {
       ...(chatbot.kakaoConfig as object || {}),
       ...configUpdate,
@@ -265,6 +272,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const [updated] = await db
       .update(chatbots)
       .set({
+        ...(botId !== undefined && { kakaoBotId: botId }),
         kakaoConfig: updatedConfig,
         updatedAt: new Date(),
       })
@@ -273,6 +281,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({
       message: '카카오 설정이 수정되었습니다',
+      botId: updated.kakaoBotId,
       config: updated.kakaoConfig,
     });
   } catch (error) {

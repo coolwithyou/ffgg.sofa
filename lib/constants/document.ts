@@ -91,7 +91,7 @@ export function getDocumentStatusLabel(status: string, isStalled: boolean): stri
     uploaded: '업로드됨',
     processing: '처리중',
     chunked: '청킹완료',
-    reviewing: '검토중',
+    reviewing: '승인 대기',
     approved: '승인됨',
     failed: '실패',
   };

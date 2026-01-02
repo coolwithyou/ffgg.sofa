@@ -10,6 +10,7 @@ import { ReviewTable } from './review-table';
 import { ReviewFilters, type FilterState } from './review-filters';
 import { ReviewActions } from './review-actions';
 import { StatusSummary } from './status-summary';
+import { ChunkDetailDialog } from './chunk-detail-dialog';
 import type { ChunkReviewItem, ChunkReviewItemWithMetrics, ChunkStatus } from '@/lib/review/types';
 import { useToast } from '@/components/ui/toast';
 // 메트릭 포함 여부에 따른 응답 타입
@@ -38,6 +39,10 @@ export function ReviewContent({ initialFilters }: ReviewContentProps) {
   const [isPending, startTransition] = useTransition();
   const [isLoading, setIsLoading] = useState(true);
   const { error: showError } = useToast();
+
+  // 다이얼로그 상태
+  const [selectedChunkId, setSelectedChunkId] = useState<string | null>(null);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
 
   const [filters, setFilters] = useState<FilterState>({
     // 문서 필터 (URL 파라미터에서)
@@ -228,6 +233,39 @@ export function ReviewContent({ initialFilters }: ReviewContentProps) {
     });
   };
 
+  // 상세 보기 다이얼로그 열기
+  const handleViewClick = (chunkId: string) => {
+    setSelectedChunkId(chunkId);
+    setIsDetailDialogOpen(true);
+  };
+
+  // 다이얼로그 닫기
+  const handleCloseDialog = () => {
+    setIsDetailDialogOpen(false);
+    setSelectedChunkId(null);
+  };
+
+  // 청크 업데이트 콜백 (다이얼로그에서 상태/내용 변경 시)
+  const handleChunkUpdated = (chunkId: string, updates: Partial<ChunkReviewItem>) => {
+    setChunks((prev) =>
+      prev.map((chunk) =>
+        chunk.id === chunkId ? { ...chunk, ...updates } : chunk
+      )
+    );
+  };
+
+  // 청크 삭제 콜백
+  const handleChunkDeleted = (chunkId: string) => {
+    setChunks((prev) => prev.filter((chunk) => chunk.id !== chunkId));
+    setTotal((prev) => prev - 1);
+    handleCloseDialog();
+  };
+
+  // 청크 네비게이션 (이전/다음 청크로 이동)
+  const handleNavigate = (chunkId: string) => {
+    setSelectedChunkId(chunkId);
+  };
+
   const totalPages = Math.ceil(total / limit);
 
   return (
@@ -262,9 +300,21 @@ export function ReviewContent({ initialFilters }: ReviewContentProps) {
         onSelectToggle={handleSelectToggle}
         onSelectAll={handleSelectAll}
         onStatusChange={handleStatusChange}
+        onViewClick={handleViewClick}
         isLoading={isLoading}
         isPending={isPending}
         showMetrics={filters.includeMetrics}
+      />
+
+      {/* 청크 상세 다이얼로그 */}
+      <ChunkDetailDialog
+        chunkId={selectedChunkId}
+        isOpen={isDetailDialogOpen}
+        onClose={handleCloseDialog}
+        onChunkUpdated={handleChunkUpdated}
+        onChunkDeleted={handleChunkDeleted}
+        chunkIds={chunks.map((c) => c.id)}
+        onNavigate={handleNavigate}
       />
 
       {/* 페이지네이션 */}

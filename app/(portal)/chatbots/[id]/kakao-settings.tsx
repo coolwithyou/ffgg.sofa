@@ -48,7 +48,8 @@ export function KakaoSettings({
   const [kakao, setKakao] = useState<KakaoData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isToggling, setIsToggling] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingBotId, setIsSavingBotId] = useState(false);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const { success, error: showError, warning } = useToast();
@@ -117,8 +118,38 @@ export function KakaoSettings({
     }
   };
 
+  // 봇 ID 저장 (비활성화 상태에서도 가능)
+  const handleSaveBotId = async () => {
+    if (!botId.trim()) {
+      warning('입력 필요', '카카오 봇 ID를 입력해주세요.');
+      return;
+    }
+
+    setIsSavingBotId(true);
+    try {
+      const response = await fetch(`/api/chatbots/${chatbotId}/kakao`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botId }),
+      });
+
+      if (response.ok) {
+        await fetchKakao();
+        success('저장 완료', '카카오 봇 ID가 저장되었습니다.');
+      } else {
+        const data = await response.json();
+        showError('저장 오류', data.error || '오류가 발생했습니다.');
+      }
+    } catch (err) {
+      console.error('Save botId error:', err);
+    } finally {
+      setIsSavingBotId(false);
+    }
+  };
+
+  // 고급 설정 저장
   const handleSaveConfig = async () => {
-    setIsSaving(true);
+    setIsSavingConfig(true);
     try {
       const response = await fetch(`/api/chatbots/${chatbotId}/kakao`, {
         method: 'PATCH',
@@ -131,12 +162,12 @@ export function KakaoSettings({
 
       if (response.ok) {
         await fetchKakao();
-        success('저장 완료', '카카오 설정이 저장되었습니다.');
+        success('저장 완료', '고급 설정이 저장되었습니다.');
       }
     } catch (err) {
-      console.error('Save error:', err);
+      console.error('Save config error:', err);
     } finally {
-      setIsSaving(false);
+      setIsSavingConfig(false);
     }
   };
 
@@ -234,21 +265,43 @@ export function KakaoSettings({
       {/* 봇 ID 입력 */}
       <div className="rounded-lg border border-border bg-card p-4">
         <h3 className="mb-3 font-medium text-foreground">카카오 봇 설정</h3>
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-foreground">
-            카카오 봇 ID <span className="text-destructive">*</span>
-          </label>
-          <input
-            type="text"
-            value={botId}
-            onChange={(e) => setBotId(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            placeholder="카카오 i 오픈빌더에서 발급받은 봇 ID"
-            disabled={kakao.enabled}
-          />
-          <p className="mt-1 text-xs text-muted-foreground">
-            카카오 i 오픈빌더 &gt; 설정 &gt; 기본 정보에서 확인할 수 있습니다.
-          </p>
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground">
+              카카오 봇 ID <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="text"
+              value={botId}
+              onChange={(e) => setBotId(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="카카오 i 오픈빌더에서 발급받은 봇 ID"
+              disabled={kakao.enabled}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              카카오 i 오픈빌더 &gt; 설정 &gt; 기본 정보에서 확인할 수 있습니다.
+            </p>
+          </div>
+          {/* 비활성화 상태에서만 봇 ID 저장 버튼 표시 */}
+          {!kakao.enabled && (
+            <button
+              onClick={handleSaveBotId}
+              disabled={isSavingBotId || !botId.trim() || botId === kakao.botId}
+              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSavingBotId ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                  저장 중...
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4" />
+                  봇 ID 저장
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -336,10 +389,10 @@ export function KakaoSettings({
 
           <button
             onClick={handleSaveConfig}
-            disabled={isSaving}
+            disabled={isSavingConfig}
             className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
-            {isSaving ? (
+            {isSavingConfig ? (
               <>
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
                 저장 중...
@@ -347,7 +400,7 @@ export function KakaoSettings({
             ) : (
               <>
                 <Check className="h-4 w-4" />
-                설정 저장
+                고급 설정 저장
               </>
             )}
           </button>

@@ -3,9 +3,9 @@
 /**
  * 청크 검토 테이블
  * [v2] 검색 상태, 크기, 버전, 수정일 컬럼 추가
+ * [v3] 다이얼로그 방식으로 상세 보기 전환 (onViewClick)
  */
 
-import Link from 'next/link';
 import type {
   ChunkReviewItem,
   ChunkReviewItemWithMetrics,
@@ -33,6 +33,7 @@ interface ReviewTableProps {
   onSelectToggle: (chunkId: string) => void;
   onSelectAll: () => void;
   onStatusChange: (chunkId: string, status: ChunkStatus) => void;
+  onViewClick: (chunkId: string) => void; // 상세 보기 클릭 핸들러
   isLoading: boolean;
   isPending: boolean;
   showMetrics?: boolean; // 메트릭 컬럼 표시 여부
@@ -44,6 +45,7 @@ export function ReviewTable({
   onSelectToggle,
   onSelectAll,
   onStatusChange,
+  onViewClick,
   isLoading,
   isPending,
   showMetrics = false,
@@ -193,13 +195,13 @@ export function ReviewTable({
               </td>
               <td className="px-4 py-3">
                 <div className="flex items-center gap-1">
-                  <Link
-                    href={`/review/${chunk.id}`}
+                  <button
+                    onClick={() => onViewClick(chunk.id)}
                     className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                     title="상세 보기"
                   >
                     <ViewIcon className="h-4 w-4" />
-                  </Link>
+                  </button>
                   {chunk.status === 'pending' && (
                     <>
                       <button

@@ -53,7 +53,7 @@ const STATUS_CONFIG: Record<
     className: 'bg-purple-500/10 text-purple-500',
   },
   reviewing: {
-    label: '검토중',
+    label: '승인 대기',
     className: 'bg-yellow-500/10 text-yellow-500',
   },
   approved: {
@@ -113,11 +113,19 @@ export function DocumentStatusBadge({
         title={
           isStalled
             ? '처리가 중단되었습니다. 재시작하려면 클릭하세요.'
-            : isClickable
-              ? '클릭하여 처리 상태 보기'
-              : (errorMessage || undefined)
+            : effectiveStatus === 'reviewing'
+              ? '처리 완료. 일부 청크가 수동 승인 필요'
+              : isClickable
+                ? '클릭하여 처리 상태 보기'
+                : (errorMessage || undefined)
         }
       >
+        {/* reviewing 상태에 체크마크 아이콘 추가 (처리 완료 표시) */}
+        {effectiveStatus === 'reviewing' && (
+          <svg className="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+          </svg>
+        )}
         {config.label}
         {status === 'processing' && !isStalled && progressPercent != null && (
           <span className="ml-1">({progressPercent}%)</span>
