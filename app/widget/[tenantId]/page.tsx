@@ -38,7 +38,7 @@ export default async function WidgetPage({ params, searchParams }: WidgetPagePro
         </div>
       }
     >
-      <WidgetChat tenantId={tenantId} config={validation.config} />
+      <WidgetChat tenantId={tenantId} chatbotId={validation.chatbotId} config={validation.config} />
     </Suspense>
   );
 }

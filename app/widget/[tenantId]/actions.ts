@@ -94,7 +94,8 @@ const MAX_MESSAGE_LENGTH = 4000;
 export async function sendWidgetMessage(
   tenantId: string,
   message: string,
-  sessionId?: string
+  sessionId?: string,
+  chatbotId?: string
 ): Promise<WidgetChatResponse> {
   // 메시지 길이 검증
   if (!message || message.length > MAX_MESSAGE_LENGTH) {
@@ -105,6 +106,7 @@ export async function sendWidgetMessage(
     const response = await processChat(tenantId, {
       message: message.trim(),
       sessionId,
+      chatbotId,
       channel: 'web',
     });
 

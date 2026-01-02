@@ -12,6 +12,7 @@ import type { WidgetConfig, WidgetMessage, WidgetState } from '@/lib/widget/type
 
 interface WidgetChatProps {
   tenantId: string;
+  chatbotId?: string;
   config?: Partial<WidgetConfig>;
 }
 
@@ -27,7 +28,7 @@ const DEFAULT_THEME_VALUES = {
 // 메시지 최대 길이 제한
 const MAX_MESSAGE_LENGTH = 4000;
 
-export function WidgetChat({ tenantId, config }: WidgetChatProps) {
+export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
   const [state, setState] = useState<WidgetState>({
     isOpen: true, // iframe에서는 항상 열림
     isLoading: false,
@@ -89,7 +90,7 @@ export function WidgetChat({ tenantId, config }: WidgetChatProps) {
     }));
 
     try {
-      const response = await sendWidgetMessage(tenantId, message, state.sessionId || undefined);
+      const response = await sendWidgetMessage(tenantId, message, state.sessionId || undefined, chatbotId);
 
       const assistantMessage: WidgetMessage = {
         id: `assistant-${Date.now()}`,
