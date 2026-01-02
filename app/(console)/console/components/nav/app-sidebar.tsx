@@ -2,13 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  ChevronRight,
-  ChevronsUpDown,
-  LogOut,
-  Settings,
-  User,
-} from 'lucide-react';
+import { ChevronsUpDown, LogOut, Settings, User } from 'lucide-react';
 
 import {
   Sidebar,
@@ -24,11 +18,6 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -168,44 +157,29 @@ function NavMain() {
           const Icon = item.icon;
           const hasSubItems = item.subItems && item.subItems.length > 0;
 
-          // 서브메뉴가 있는 경우 Collapsible 사용
+          // 서브메뉴가 있는 경우 (항상 펼쳐진 상태)
           if (hasSubItems) {
             return (
-              <Collapsible
-                key={item.id}
-                asChild
-                defaultOpen={isActive(item)}
-                className="group/collapsible"
-              >
-                <SidebarMenuItem>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton
-                      tooltip={item.label}
-                      isActive={isActive(item)}
-                    >
-                      <Icon />
-                      <span>{item.label}</span>
-                      <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                    </SidebarMenuButton>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      {item.subItems?.map((subItem) => (
-                        <SidebarMenuSubItem key={subItem.id}>
-                          <SidebarMenuSubButton
-                            asChild
-                            isActive={isSubItemActive(subItem.href)}
-                          >
-                            <Link href={subItem.href}>
-                              <span>{subItem.label}</span>
-                            </Link>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
-              </Collapsible>
+              <SidebarMenuItem key={item.id}>
+                <SidebarMenuButton tooltip={item.label} isActive={isActive(item)}>
+                  <Icon />
+                  <span>{item.label}</span>
+                </SidebarMenuButton>
+                <SidebarMenuSub>
+                  {item.subItems?.map((subItem) => (
+                    <SidebarMenuSubItem key={subItem.id}>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={isSubItemActive(subItem.href)}
+                      >
+                        <Link href={subItem.href}>
+                          <span>{subItem.label}</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  ))}
+                </SidebarMenuSub>
+              </SidebarMenuItem>
             );
           }
 

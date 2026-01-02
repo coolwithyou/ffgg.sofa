@@ -3,6 +3,7 @@ import {
   BookOpen,
   Palette,
   Settings,
+  Bot,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -46,6 +47,7 @@ export const navItems: NavItem[] = [
       { id: 'documents', label: '문서', href: '/console/knowledge' },
       { id: 'datasets', label: '데이터셋', href: '/console/knowledge/datasets' },
       { id: 'faq', label: 'FAQ', href: '/console/knowledge/faq' },
+      { id: 'review', label: '검수', href: '/console/knowledge/review' },
     ],
   },
   {
@@ -65,6 +67,17 @@ export const navItems: NavItem[] = [
       { id: 'general', label: '일반', href: '/console/settings' },
       { id: 'ai', label: 'AI', href: '/console/settings/ai' },
       { id: 'integrations', label: '연동', href: '/console/settings/integrations' },
+    ],
+  },
+  {
+    id: 'chatbot',
+    label: '챗봇',
+    icon: Bot,
+    subItems: [
+      { id: 'chatbot-datasets', label: '데이터셋 연결', href: '/console/chatbot/datasets' },
+      { id: 'chatbot-widget', label: '위젯', href: '/console/chatbot/widget' },
+      { id: 'chatbot-kakao', label: '카카오', href: '/console/chatbot/kakao' },
+      { id: 'chatbot-public-page', label: '공개 페이지', href: '/console/chatbot/public-page' },
     ],
   },
 ];
