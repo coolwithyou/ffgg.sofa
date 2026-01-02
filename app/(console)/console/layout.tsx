@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ConsoleProvider } from './hooks/use-console-state';
 import { ToastProvider } from '@/components/ui/toast';
+import { AlertDialogProvider } from '@/components/ui/alert-dialog';
 import { Toaster } from '@/components/ui/sonner';
 import { ConsoleShell } from './components/console-shell';
 
@@ -23,10 +24,12 @@ interface ConsoleLayoutProps {
 export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
   return (
     <ToastProvider>
-      <ConsoleProvider>
-        <ConsoleShell>{children}</ConsoleShell>
-        <Toaster position="top-center" />
-      </ConsoleProvider>
+      <AlertDialogProvider>
+        <ConsoleProvider>
+          <ConsoleShell>{children}</ConsoleShell>
+          <Toaster position="top-center" />
+        </ConsoleProvider>
+      </AlertDialogProvider>
     </ToastProvider>
   );
 }
