@@ -29,7 +29,7 @@ export function DocumentList({ initialData }: DocumentListProps) {
   const [pagination, setPagination] = useState(initialData.pagination);
   const [isPageLoading, setIsPageLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // deletingId 제거 - AlertDialog 내부에서 로딩 상태 관리
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [progressModalDocId, setProgressModalDocId] = useState<string | null>(null);
   const { confirm } = useAlertDialog();
@@ -70,31 +70,25 @@ export function DocumentList({ initialData }: DocumentListProps) {
   }, [documents]);
 
   const handleDelete = async (documentId: string) => {
-    const confirmed = await confirm({
+    await confirm({
       title: '문서 삭제',
       message: '이 문서를 삭제하시겠습니까? 관련된 모든 청크도 함께 삭제됩니다.',
       confirmText: '삭제',
       cancelText: '취소',
       variant: 'destructive',
-    });
+      onConfirm: async () => {
+        const result = await deleteDocument(documentId);
 
-    if (!confirmed) {
-      return;
-    }
+        if (!result.success) {
+          // 에러 throw → 다이얼로그 내에서 에러 표시
+          throw new Error(result.error || '삭제 중 오류가 발생했습니다.');
+        }
 
-    setDeletingId(documentId);
-
-    startTransition(async () => {
-      const result = await deleteDocument(documentId);
-
-      if (result.success) {
-        // 페이지네이션 사용 시 새로고침
+        // 성공: 로컬 상태에서 즉시 제거
+        setDocuments((prev) => prev.filter((d) => d.id !== documentId));
+        // 페이지네이션 데이터 새로고침
         await refreshCurrentPage();
-      } else {
-        showError('삭제 실패', result.error || '삭제에 실패했습니다.');
-      }
-
-      setDeletingId(null);
+      },
     });
   };
 
@@ -105,19 +99,35 @@ export function DocumentList({ initialData }: DocumentListProps) {
       return;
     }
 
-    // 파괴적 재처리인 경우 경고 다이얼로그 표시
+    // 파괴적 재처리인 경우 onConfirm 콜백 사용
     if (reprocessType === 'destructive') {
-      const confirmed = await confirm({
+      await confirm({
         title: '⚠️ 기존 청크 삭제 경고',
         message: `이 문서에는 ${doc.chunkCount}개의 청크가 있습니다.\n\n재처리하면 기존 청크가 모두 삭제되고 새로 생성됩니다. 이 작업은 되돌릴 수 없습니다.\n\n계속하시겠습니까?`,
         confirmText: '삭제 후 재처리',
         cancelText: '취소',
         variant: 'destructive',
-      });
+        onConfirm: async () => {
+          const result = await reprocessDocument(doc.id);
 
-      if (!confirmed) return;
+          if (!result.success) {
+            throw new Error(result.error || '재처리 요청에 실패했습니다.');
+          }
+
+          // 상태를 processing으로 업데이트
+          setDocuments((prev) =>
+            prev.map((d) =>
+              d.id === doc.id
+                ? { ...d, status: 'processing', progressPercent: 0, errorMessage: null }
+                : d
+            )
+          );
+        },
+      });
+      return;
     }
 
+    // 안전한 재처리 (기존 로직 유지 - 별도 loading state 필요)
     setReprocessingId(doc.id);
 
     startTransition(async () => {
@@ -268,15 +278,11 @@ export function DocumentList({ initialData }: DocumentListProps) {
 
               <button
                 onClick={() => handleDelete(doc.id)}
-                disabled={isPending || deletingId === doc.id}
+                disabled={isPending}
                 className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
                 title="삭제"
               >
-                {deletingId === doc.id ? (
-                  <LoadingSpinner className="h-5 w-5" />
-                ) : (
-                  <TrashIcon className="h-5 w-5" />
-                )}
+                <TrashIcon className="h-5 w-5" />
               </button>
             </div>
           </div>

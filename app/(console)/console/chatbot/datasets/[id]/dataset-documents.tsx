@@ -39,9 +39,8 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // deletingId, unassigningId 제거 - AlertDialog 내부에서 로딩 상태 관리
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
-  const [unassigningId, setUnassigningId] = useState<string | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [progressModalDocId, setProgressModalDocId] = useState<string | null>(null);
   const [documentSearch, setDocumentSearch] = useState('');
@@ -98,41 +97,27 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
   }, [documents, documentSearch]);
 
   const handleDelete = async (documentId: string) => {
-    const confirmed = await confirm({
+    await confirm({
       title: '문서 삭제',
       message: '이 문서를 삭제하시겠습니까? 관련된 모든 청크도 함께 삭제됩니다.',
       confirmText: '삭제',
       cancelText: '취소',
       variant: 'destructive',
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    setDeletingId(documentId);
-
-    startTransition(async () => {
-      try {
+      onConfirm: async () => {
         const response = await fetch(`/api/documents/${documentId}`, {
           method: 'DELETE',
         });
 
-        if (response.ok) {
-          setDocuments((prev) => prev.filter((d) => d.id !== documentId));
-          if (selectedDocumentId === documentId) {
-            setSelectedDocumentId(null);
-          }
-          onUpdate();
-        } else {
-          showError('삭제 실패', '문서 삭제에 실패했습니다.');
+        if (!response.ok) {
+          throw new Error('문서 삭제에 실패했습니다.');
         }
-      } catch (err) {
-        console.error('Delete error:', err);
-        showError('삭제 실패', '삭제 중 오류가 발생했습니다.');
-      } finally {
-        setDeletingId(null);
-      }
+
+        setDocuments((prev) => prev.filter((d) => d.id !== documentId));
+        if (selectedDocumentId === documentId) {
+          setSelectedDocumentId(null);
+        }
+        onUpdate();
+      },
     });
   };
 
@@ -166,38 +151,24 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
   };
 
   const handleUnassign = async (documentId: string) => {
-    const confirmed = await confirm({
+    await confirm({
       title: '배치 해제',
       message: '이 문서를 데이터셋에서 배치 해제하시겠습니까? 문서는 삭제되지 않고 라이브러리로 이동됩니다.',
       confirmText: '배치 해제',
       cancelText: '취소',
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    setUnassigningId(documentId);
-
-    startTransition(async () => {
-      try {
+      onConfirm: async () => {
         const result = await unassignDocumentFromDataset(documentId);
 
-        if (result.success) {
-          setDocuments((prev) => prev.filter((d) => d.id !== documentId));
-          if (selectedDocumentId === documentId) {
-            setSelectedDocumentId(null);
-          }
-          onUpdate();
-        } else {
-          showError('배치 해제 실패', result.error || '배치 해제에 실패했습니다.');
+        if (!result.success) {
+          throw new Error(result.error || '배치 해제에 실패했습니다.');
         }
-      } catch (err) {
-        console.error('Unassign error:', err);
-        showError('배치 해제 실패', '배치 해제 중 오류가 발생했습니다.');
-      } finally {
-        setUnassigningId(null);
-      }
+
+        setDocuments((prev) => prev.filter((d) => d.id !== documentId));
+        if (selectedDocumentId === documentId) {
+          setSelectedDocumentId(null);
+        }
+        onUpdate();
+      },
     });
   };
 
@@ -353,30 +324,22 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
                         e.stopPropagation();
                         handleUnassign(doc.id);
                       }}
-                      disabled={isPending || unassigningId === doc.id}
+                      disabled={isPending}
                       className="rounded p-1.5 text-muted-foreground hover:bg-yellow-500/10 hover:text-yellow-500 disabled:opacity-50"
                       title="배치 해제"
                     >
-                      {unassigningId === doc.id ? (
-                        <LoadingSpinner className="h-4 w-4" />
-                      ) : (
-                        <Unlink className="h-4 w-4" />
-                      )}
+                      <Unlink className="h-4 w-4" />
                     </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDelete(doc.id);
                       }}
-                      disabled={isPending || deletingId === doc.id}
+                      disabled={isPending}
                       className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
                       title="삭제"
                     >
-                      {deletingId === doc.id ? (
-                        <LoadingSpinner className="h-4 w-4" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 </div>

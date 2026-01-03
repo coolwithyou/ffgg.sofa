@@ -147,30 +147,23 @@ export function ChunkDetailDialog({
   const handleDelete = async () => {
     if (!chunkId) return;
 
-    const confirmed = await confirm({
+    await confirm({
       title: '청크 삭제',
       message: '이 청크를 삭제하시겠습니까?',
       confirmText: '삭제',
       cancelText: '취소',
       variant: 'destructive',
-    });
-
-    if (!confirmed) return;
-
-    startTransition(async () => {
-      try {
+      onConfirm: async () => {
         const response = await fetch(`/api/review/chunks/${chunkId}`, {
           method: 'DELETE',
         });
 
         if (!response.ok) {
-          throw new Error('Failed to delete');
+          throw new Error('삭제에 실패했습니다.');
         }
 
         onChunkDeleted(chunkId);
-      } catch (err) {
-        showError('삭제 실패', '삭제에 실패했습니다.');
-      }
+      },
     });
   };
 

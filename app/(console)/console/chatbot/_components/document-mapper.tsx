@@ -5,7 +5,7 @@
  * 문서를 선택하여 데이터셋에 이동 또는 복제
  */
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import type { LibraryDocument, DatasetOption } from '../actions';
 import { moveDocumentToDataset, duplicateDocumentToDataset } from '../actions';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
@@ -21,7 +21,6 @@ export function DocumentMapper({ document, datasets, onSuccess }: DocumentMapper
   const [targetDatasetId, setTargetDatasetId] = useState<string>(
     datasets.find((d) => d.isDefault)?.id || datasets[0]?.id || ''
   );
-  const [isPending, startTransition] = useTransition();
   const { confirm } = useAlertDialog();
   const { success, error: showError, warning } = useToast();
 
@@ -60,37 +59,30 @@ export function DocumentMapper({ document, datasets, onSuccess }: DocumentMapper
       ? `"${document.filename}"을(를) 선택한 데이터셋으로 이동하시겠습니까?`
       : `"${document.filename}"을(를) 선택한 데이터셋으로 복제하시겠습니까?\n(원본 문서는 그대로 유지됩니다)`;
 
-    const confirmed = await confirm({
+    await confirm({
       title: `문서 ${actionLabel}`,
       message: confirmMessage,
       confirmText: actionLabel,
       cancelText: '취소',
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    startTransition(async () => {
-      if (isLibraryDocument) {
-        // 라이브러리 문서 → 이동
-        const result = await moveDocumentToDataset(document.id, targetDatasetId);
-        if (result.success) {
+      onConfirm: async () => {
+        if (isLibraryDocument) {
+          // 라이브러리 문서 → 이동
+          const result = await moveDocumentToDataset(document.id, targetDatasetId);
+          if (!result.success) {
+            throw new Error(result.error || '이동에 실패했습니다.');
+          }
           success('이동 완료', '문서가 성공적으로 이동되었습니다.');
           onSuccess?.();
         } else {
-          showError('이동 실패', result.error || '이동에 실패했습니다.');
-        }
-      } else {
-        // 이미 배치된 문서 → 복제
-        const result = await duplicateDocumentToDataset(document.id, targetDatasetId);
-        if (result.success) {
+          // 이미 배치된 문서 → 복제
+          const result = await duplicateDocumentToDataset(document.id, targetDatasetId);
+          if (!result.success) {
+            throw new Error(result.error || '복제에 실패했습니다.');
+          }
           success('복제 완료', `문서가 성공적으로 복제되었습니다. (${result.copiedChunkCount}개 청크 복제됨)`);
           onSuccess?.();
-        } else {
-          showError('복제 실패', result.error || '복제에 실패했습니다.');
         }
-      }
+      },
     });
   };
 
@@ -178,7 +170,6 @@ export function DocumentMapper({ document, datasets, onSuccess }: DocumentMapper
           <select
             value={targetDatasetId}
             onChange={(e) => setTargetDatasetId(e.target.value)}
-            disabled={isPending}
             className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50"
           >
             {datasets.length === 0 ? (
@@ -195,23 +186,14 @@ export function DocumentMapper({ document, datasets, onSuccess }: DocumentMapper
           </select>
           <button
             onClick={handleAction}
-            disabled={isPending || !targetDatasetId}
+            disabled={!targetDatasetId}
             className={`rounded-md px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed ${
               isLibraryDocument
                 ? 'bg-primary hover:bg-primary/90'
                 : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
-            {isPending ? (
-              <span className="flex items-center gap-2">
-                <LoadingSpinner className="h-4 w-4" />
-                처리 중...
-              </span>
-            ) : isLibraryDocument ? (
-              '이동'
-            ) : (
-              '복제'
-            )}
+            {isLibraryDocument ? '이동' : '복제'}
           </button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
@@ -246,22 +228,3 @@ function DocumentIcon({ className }: { className?: string }) {
   );
 }
 
-function LoadingSpinner({ className }: { className?: string }) {
-  return (
-    <svg className={`animate-spin ${className}`} fill="none" viewBox="0 0 24 24">
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
-    </svg>
-  );
-}

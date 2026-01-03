@@ -100,20 +100,13 @@ export function DocumentChunks({ documentId, onChunkUpdate, showSearch = false }
   };
 
   const handleDelete = async (chunkId: string) => {
-    const confirmed = await confirm({
+    await confirm({
       title: '청크 삭제',
       message: '이 청크를 삭제하시겠습니까? 삭제된 청크는 복구할 수 없습니다.',
       confirmText: '삭제',
       cancelText: '취소',
       variant: 'destructive',
-    });
-
-    if (!confirmed) return;
-
-    setProcessingChunkId(chunkId);
-
-    startTransition(async () => {
-      try {
+      onConfirm: async () => {
         const response = await fetch(`/api/chunks/${chunkId}`, {
           method: 'DELETE',
         });
@@ -125,11 +118,7 @@ export function DocumentChunks({ documentId, onChunkUpdate, showSearch = false }
         // 로컬 상태 업데이트
         setChunks((prev) => prev.filter((chunk) => chunk.id !== chunkId));
         onChunkUpdate?.();
-      } catch (err) {
-        showError('삭제 실패', err instanceof Error ? err.message : '오류가 발생했습니다.');
-      } finally {
-        setProcessingChunkId(null);
-      }
+      },
     });
   };
 
