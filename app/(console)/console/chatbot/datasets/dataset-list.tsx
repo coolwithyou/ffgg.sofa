@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { FolderOpen, FileText, MoreVertical, Pencil, Trash2, Star } from 'lucide-react';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
@@ -17,15 +17,21 @@ interface DatasetListProps {
   datasets: DatasetSummary[];
 }
 
-export function DatasetList({ datasets }: DatasetListProps) {
+export function DatasetList({ datasets: initialDatasets }: DatasetListProps) {
+  // props를 로컬 상태로 관리하여 삭제 시 즉시 UI 업데이트
+  const [datasets, setDatasets] = useState<DatasetSummary[]>(initialDatasets);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [isSettingDefault, setIsSettingDefault] = useState(false);
   const { confirm } = useAlertDialog();
   const { error } = useToast();
+
+  // 서버에서 재검증된 데이터로 동기화
+  useEffect(() => {
+    setDatasets(initialDatasets);
+  }, [initialDatasets]);
 
   const handleEdit = (dataset: DatasetSummary) => {
     setEditingId(dataset.id);
@@ -50,24 +56,26 @@ export function DatasetList({ datasets }: DatasetListProps) {
   };
 
   const handleDelete = async (id: string) => {
-    const confirmed = await confirm({
+    await confirm({
       title: '데이터셋 삭제',
-      message: '이 데이터셋을 삭제하시겠습니까? 연결된 모든 문서와 청크도 함께 삭제됩니다.',
+      message:
+        '이 데이터셋을 삭제하시겠습니까? 연결된 모든 문서와 청크도 함께 삭제됩니다.',
       confirmText: '삭제',
       cancelText: '취소',
       variant: 'destructive',
+      onConfirm: async () => {
+        const result = await deleteDataset(id);
+
+        if (!result.success) {
+          // 에러를 throw하면 다이얼로그가 열린 상태로 에러 표시
+          throw new Error(result.error || '삭제 중 오류가 발생했습니다.');
+        }
+
+        // 성공: 로컬 상태에서 해당 데이터셋 제거
+        setDatasets((prev) => prev.filter((d) => d.id !== id));
+        setMenuOpenId(null);
+      },
     });
-
-    if (!confirmed) return;
-
-    setIsDeleting(true);
-    const result = await deleteDataset(id);
-    setIsDeleting(false);
-    setMenuOpenId(null);
-
-    if (!result.success) {
-      error('삭제 실패', result.error);
-    }
   };
 
   const handleSetDefault = async (id: string) => {
@@ -203,7 +211,6 @@ export function DatasetList({ datasets }: DatasetListProps) {
                           </button>
                           <button
                             onClick={() => handleDelete(dataset.id)}
-                            disabled={isDeleting}
                             className="flex w-full items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
                           >
                             <Trash2 className="h-4 w-4" />
