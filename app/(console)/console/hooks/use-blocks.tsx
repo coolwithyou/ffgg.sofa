@@ -5,9 +5,12 @@
  *
  * 블록 추가, 삭제, 수정, 재정렬 기능을 제공합니다.
  * pageConfig.blocks를 통해 자동 저장됩니다.
+ *
+ * selectedBlockId와 selectBlock은 ConsoleContext에서 관리되어
+ * 여러 컴포넌트 간 상태 공유가 가능합니다.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { nanoid } from 'nanoid';
 import { useConsole } from './use-console-state';
 import {
@@ -43,8 +46,7 @@ interface UseBlocksReturn {
  * 블록 조작 훅
  */
 export function useBlocks(): UseBlocksReturn {
-  const { pageConfig, updatePageConfig } = useConsole();
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const { pageConfig, updatePageConfig, selectedBlockId, selectBlock } = useConsole();
 
   // 현재 블록 목록
   const blocks = pageConfig.blocks ?? [];
@@ -70,9 +72,9 @@ export function useBlocks(): UseBlocksReturn {
       const newBlock = createBlock(type, id, order);
 
       setBlocks([...blocks, newBlock]);
-      setSelectedBlockId(id);
+      selectBlock(id);
     },
-    [blocks, setBlocks]
+    [blocks, setBlocks, selectBlock]
   );
 
   /**
@@ -85,10 +87,10 @@ export function useBlocks(): UseBlocksReturn {
 
       // 선택된 블록이 삭제되면 선택 해제
       if (selectedBlockId === id) {
-        setSelectedBlockId(null);
+        selectBlock(null);
       }
     },
-    [blocks, selectedBlockId, setBlocks]
+    [blocks, selectedBlockId, setBlocks, selectBlock]
   );
 
   /**
@@ -145,13 +147,6 @@ export function useBlocks(): UseBlocksReturn {
     },
     [blocks, setBlocks]
   );
-
-  /**
-   * 블록 선택
-   */
-  const selectBlock = useCallback((id: string | null) => {
-    setSelectedBlockId(id);
-  }, []);
 
   return {
     blocks,

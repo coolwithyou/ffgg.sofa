@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useMemo } from 'react';
 import { useConsole, useConsoleMode, useCurrentChatbot } from '../hooks/use-console-state';
 import { useAutoSave } from '../hooks/use-auto-save';
 import { useBlocks } from '../hooks/use-blocks';
@@ -9,6 +10,7 @@ import { ThemeSettings } from './settings/theme-settings';
 import { SeoSettings } from './settings/seo-settings';
 import { ChatbotSettings } from './settings/chatbot-settings';
 import { BlockPalette } from '../appearance/components/block-editor/block-palette';
+import { BlockSettingsPanel } from '../appearance/components/block-editor/block-settings-panel';
 import {
   Accordion,
   AccordionContent,
@@ -18,6 +20,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { Separator } from '@/components/ui/separator';
 import {
   FileText,
   Palette,
@@ -111,7 +114,13 @@ export function RightSettings() {
   }
 
   // 블록 관리 훅
-  const { blocks, addBlock } = useBlocks();
+  const { blocks, addBlock, selectedBlockId, selectBlock, updateBlock } = useBlocks();
+
+  // 선택된 블록 찾기
+  const selectedBlock = useMemo(() => {
+    if (!selectedBlockId) return null;
+    return blocks.find((b) => b.id === selectedBlockId) ?? null;
+  }, [blocks, selectedBlockId]);
 
   return (
     <aside className="flex w-80 flex-col overflow-hidden border-l border-border bg-card">
@@ -159,6 +168,19 @@ export function RightSettings() {
 
         {/* 블록 탭 */}
         <TabsContent value="blocks" className="flex-1 overflow-y-auto p-4 mt-0">
+          {/* 선택된 블록 설정 패널 */}
+          {selectedBlock && (
+            <>
+              <BlockSettingsPanel
+                selectedBlock={selectedBlock}
+                onUpdate={(updates) => updateBlock(selectedBlock.id, updates)}
+                onClose={() => selectBlock(null)}
+              />
+              <Separator className="my-4" />
+            </>
+          )}
+
+          {/* 블록 팔레트 */}
           <BlockPalette blocks={blocks} onAddBlock={addBlock} />
         </TabsContent>
 

@@ -51,6 +51,9 @@ export interface ConsoleState {
 
   // Widget 저장 상태 (분리 관리)
   widgetSaveStatus: SaveStatus;
+
+  // 블록 에디터 상태
+  selectedBlockId: string | null;
 }
 
 // Context 액션 타입
@@ -71,6 +74,8 @@ export interface ConsoleActions {
   updateWidgetTheme: (partial: Partial<WidgetConfig['theme']>) => void;
   setWidgetSaveStatus: (status: SaveStatus) => void;
   setOriginalWidgetConfig: (config: WidgetConfig) => void;
+  // 블록 에디터 액션
+  selectBlock: (id: string | null) => void;
   // 공통 액션
   reloadChatbots: () => Promise<void>;
 }

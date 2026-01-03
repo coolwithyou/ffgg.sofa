@@ -50,6 +50,9 @@ export function ConsoleProvider({
   // Widget 저장 상태 (분리 관리)
   const [widgetSaveStatus, setWidgetSaveStatus] = useState<SaveStatus>('saved');
 
+  // 블록 에디터 상태
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+
   // 현재 챗봇 (파생 상태)
   const currentChatbot = useMemo(
     () => chatbots[currentChatbotIndex] ?? null,
@@ -86,6 +89,9 @@ export function ConsoleProvider({
       setWidgetConfig(currentChatbot.widgetConfig);
       setOriginalWidgetConfig(currentChatbot.widgetConfig);
       setWidgetSaveStatus('saved');
+
+      // 블록 선택 초기화
+      setSelectedBlockId(null);
     }
   }, [currentChatbot]);
 
@@ -228,6 +234,11 @@ export function ConsoleProvider({
     []
   );
 
+  // 블록 선택
+  const selectBlock = useCallback((id: string | null) => {
+    setSelectedBlockId(id);
+  }, []);
+
   // Context 값
   const value: ConsoleContextValue = useMemo(
     () => ({
@@ -244,6 +255,8 @@ export function ConsoleProvider({
       widgetConfig,
       originalWidgetConfig,
       widgetSaveStatus,
+      // 블록 에디터 상태
+      selectedBlockId,
       // 액션
       setMode,
       selectChatbot,
@@ -260,6 +273,8 @@ export function ConsoleProvider({
       updateWidgetTheme,
       setWidgetSaveStatus,
       setOriginalWidgetConfig,
+      // 블록 에디터 액션
+      selectBlock,
       // 공통 액션
       reloadChatbots,
     }),
@@ -275,6 +290,7 @@ export function ConsoleProvider({
       widgetConfig,
       originalWidgetConfig,
       widgetSaveStatus,
+      selectedBlockId,
       selectChatbot,
       navigateChatbot,
       updatePageConfig,
@@ -284,6 +300,7 @@ export function ConsoleProvider({
       updateChatbotConfig,
       updateWidgetConfig,
       updateWidgetTheme,
+      selectBlock,
       reloadChatbots,
     ]
   );

@@ -135,19 +135,42 @@ function SidebarChatbotSwitcher() {
 function NavMain() {
   const pathname = usePathname();
 
-  // 현재 경로가 해당 아이템의 경로와 일치하는지 확인
-  const isActive = (item: NavItem) => {
-    if (item.href && pathname === item.href) return true;
-    if (item.subItems?.some((sub) => pathname === sub.href)) return true;
-    // 부분 매칭
-    if (item.href && pathname.startsWith(item.href)) return true;
-    if (item.subItems?.some((sub) => pathname.startsWith(sub.href))) return true;
+  /**
+   * 서브아이템이 활성화되어 있는지 확인
+   *
+   * 문제: /console/chatbot/ai 접속 시 /console/chatbot (문서)도 활성화됨
+   * 해결: 더 구체적인 sibling 경로가 매칭되면 현재 항목은 비활성화
+   */
+  const isSubItemActive = (href: string, subItems?: NavItem['subItems']) => {
+    // 정확히 일치하면 활성화
+    if (pathname === href) return true;
+
+    // prefix 매칭 시, sibling 중 더 구체적인 경로가 있는지 확인
+    if (pathname.startsWith(href)) {
+      // 다른 sibling 중 더 긴(구체적인) 경로가 매칭되는지 확인
+      const siblingHasMoreSpecificMatch = subItems?.some(
+        (sibling) =>
+          sibling.href !== href &&
+          pathname.startsWith(sibling.href) &&
+          sibling.href.length > href.length
+      );
+
+      // 더 구체적인 sibling이 있으면 현재 항목은 비활성화
+      if (siblingHasMoreSpecificMatch) return false;
+
+      // prefix 다음이 비어있거나 /로 시작하면 활성화 (실제 하위 경로)
+      const afterPrefix = pathname.slice(href.length);
+      return afterPrefix === '' || afterPrefix.startsWith('/');
+    }
+
     return false;
   };
 
-  // 서브아이템이 활성화되어 있는지 확인
-  const isSubItemActive = (href: string) => {
-    return pathname === href || pathname.startsWith(href);
+  // 현재 경로가 해당 아이템의 경로와 일치하는지 확인
+  const isActive = (item: NavItem) => {
+    if (item.href && pathname === item.href) return true;
+    if (item.subItems?.some((sub) => isSubItemActive(sub.href, item.subItems))) return true;
+    return false;
   };
 
   return (
@@ -171,7 +194,7 @@ function NavMain() {
                     <SidebarMenuSubItem key={subItem.id}>
                       <SidebarMenuSubButton
                         asChild
-                        isActive={isSubItemActive(subItem.href)}
+                        isActive={isSubItemActive(subItem.href, item.subItems)}
                       >
                         <Link href={subItem.href}>
                           <span>{subItem.label}</span>
