@@ -189,6 +189,8 @@ prompt('이름을 입력하세요')    // -> Dialog + Input 사용
 ```
 
 ### useAlertDialog 훅 사용 예시
+
+#### 기본 사용법 (동기)
 ```tsx
 import { useAlertDialog } from '@/components/ui/alert-dialog';
 
@@ -210,6 +212,55 @@ function MyComponent() {
   };
 }
 ```
+
+#### 비동기 콜백 패턴 (권장)
+
+삭제/수정 등 비동기 작업에는 `onConfirm` 콜백을 사용하세요. 훅이 로딩/에러 상태를 자동 관리합니다:
+
+| 장점 | 설명 |
+|------|------|
+| 로딩 스피너 | 확인 버튼에 자동 표시 |
+| 버튼 비활성화 | 작업 중 중복 클릭 방지 |
+| 에러 인라인 표시 | 다이얼로그 내에서 에러 표시 + 재시도 가능 |
+| 페이지 새로고침 없음 | 로컬 상태로 목록 즉시 갱신 |
+
+```tsx
+import { useState, useEffect } from 'react';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
+
+function ItemList({ items: initialItems }: { items: Item[] }) {
+  // 로컬 상태로 관리 (서버 새로고침 없이 즉시 갱신)
+  const [items, setItems] = useState(initialItems);
+  const { confirm } = useAlertDialog();
+
+  // props 변경 시 동기화
+  useEffect(() => {
+    setItems(initialItems);
+  }, [initialItems]);
+
+  const handleDelete = async (id: string) => {
+    await confirm({
+      title: '항목 삭제',
+      message: '이 항목을 삭제하시겠습니까?',
+      confirmText: '삭제',
+      cancelText: '취소',
+      variant: 'destructive',
+      // 비동기 콜백: 훅이 로딩/에러 상태 자동 관리
+      onConfirm: async () => {
+        const result = await deleteItem(id);
+        if (!result.success) {
+          // 에러 throw 시 다이얼로그 유지 + 에러 메시지 표시
+          throw new Error(result.error || '삭제 중 오류가 발생했습니다.');
+        }
+        // 성공: 로컬 상태에서 제거 (다이얼로그 자동 닫힘)
+        setItems((prev) => prev.filter((item) => item.id !== id));
+      },
+    });
+  };
+}
+```
+
+**적용 대상**: 데이터셋/문서/청크/FAQ 삭제, 상태 변경 등 모든 비동기 확인 작업
 
 ---
 
