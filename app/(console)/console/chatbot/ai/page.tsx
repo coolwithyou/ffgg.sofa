@@ -305,170 +305,7 @@ export default function AISettingsPage() {
           </Card>
         ) : null}
 
-        {/* LLM 설정 카드 */}
-        <Card size="md">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Brain className="h-5 w-5 text-muted-foreground" />
-              <CardTitle>LLM 설정</CardTitle>
-            </div>
-            <CardDescription>
-              AI 모델의 응답 생성 방식을 조정합니다
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Temperature */}
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground">
-                  Temperature
-                </label>
-                <span className="text-sm text-muted-foreground">
-                  {llmConfig.temperature}
-                </span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="2"
-                step="0.1"
-                value={llmConfig.temperature}
-                onChange={(e) =>
-                  setLlmConfig((prev) => ({
-                    ...prev,
-                    temperature: parseFloat(e.target.value),
-                  }))
-                }
-                className="w-full accent-primary"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                낮을수록 일관된 응답, 높을수록 창의적인 응답을 생성합니다
-              </p>
-            </div>
-
-            {/* Max Tokens */}
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground">
-                  최대 토큰 수
-                </label>
-                <span className="text-sm text-muted-foreground">
-                  {llmConfig.maxTokens}
-                </span>
-              </div>
-              <input
-                type="range"
-                min="100"
-                max="4096"
-                step="100"
-                value={llmConfig.maxTokens}
-                onChange={(e) =>
-                  setLlmConfig((prev) => ({
-                    ...prev,
-                    maxTokens: parseInt(e.target.value),
-                  }))
-                }
-                className="w-full accent-primary"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                응답의 최대 길이를 제한합니다 (100-4096)
-              </p>
-            </div>
-
-            {/* System Prompt */}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                시스템 프롬프트
-              </label>
-              <textarea
-                rows={4}
-                value={llmConfig.systemPrompt ?? ''}
-                onChange={(e) =>
-                  setLlmConfig((prev) => ({
-                    ...prev,
-                    systemPrompt: e.target.value,
-                  }))
-                }
-                placeholder="AI의 기본 동작을 정의하는 시스템 프롬프트를 입력하세요"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 검색 설정 카드 */}
-        <Card size="md">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Search className="h-5 w-5 text-muted-foreground" />
-              <CardTitle>검색 설정</CardTitle>
-            </div>
-            <CardDescription>
-              RAG 검색의 동작 방식을 조정합니다
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Max Chunks */}
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground">
-                  최대 청크 수
-                </label>
-                <span className="text-sm text-muted-foreground">
-                  {searchConfig.maxChunks}
-                </span>
-              </div>
-              <input
-                type="range"
-                min="1"
-                max="20"
-                step="1"
-                value={searchConfig.maxChunks}
-                onChange={(e) =>
-                  setSearchConfig((prev) => ({
-                    ...prev,
-                    maxChunks: parseInt(e.target.value),
-                  }))
-                }
-                className="w-full accent-primary"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                응답 생성에 사용할 최대 문서 청크 수 (1-20)
-              </p>
-            </div>
-
-            {/* Min Score */}
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground">
-                  최소 유사도 점수
-                </label>
-                <span className="text-sm text-muted-foreground">
-                  {searchConfig.minScore}
-                </span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={searchConfig.minScore}
-                onChange={(e) =>
-                  setSearchConfig((prev) => ({
-                    ...prev,
-                    minScore: parseFloat(e.target.value),
-                  }))
-                }
-                className="w-full accent-primary"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                이 점수 이상의 문서만 참조합니다 (0-1)
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 페르소나 설정 카드 */}
+        {/* 페르소나 설정 카드 - RAG 파이프라인 게이트 역할로 최상단 배치 */}
         <Card size="md">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -643,6 +480,169 @@ export default function AISettingsPage() {
               />
               <p className="mt-1 text-xs text-muted-foreground">
                 챗봇이 응답하지 않을 주제들
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* LLM 설정 카드 */}
+        <Card size="md">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Brain className="h-5 w-5 text-muted-foreground" />
+              <CardTitle>LLM 설정</CardTitle>
+            </div>
+            <CardDescription>
+              AI 모델의 응답 생성 방식을 조정합니다
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Temperature */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="text-sm font-medium text-foreground">
+                  Temperature
+                </label>
+                <span className="text-sm text-muted-foreground">
+                  {llmConfig.temperature}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="2"
+                step="0.1"
+                value={llmConfig.temperature}
+                onChange={(e) =>
+                  setLlmConfig((prev) => ({
+                    ...prev,
+                    temperature: parseFloat(e.target.value),
+                  }))
+                }
+                className="w-full accent-primary"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                낮을수록 일관된 응답, 높을수록 창의적인 응답을 생성합니다
+              </p>
+            </div>
+
+            {/* Max Tokens */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="text-sm font-medium text-foreground">
+                  최대 토큰 수
+                </label>
+                <span className="text-sm text-muted-foreground">
+                  {llmConfig.maxTokens}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="100"
+                max="4096"
+                step="100"
+                value={llmConfig.maxTokens}
+                onChange={(e) =>
+                  setLlmConfig((prev) => ({
+                    ...prev,
+                    maxTokens: parseInt(e.target.value),
+                  }))
+                }
+                className="w-full accent-primary"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                응답의 최대 길이를 제한합니다 (100-4096)
+              </p>
+            </div>
+
+            {/* System Prompt */}
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                시스템 프롬프트
+              </label>
+              <textarea
+                rows={4}
+                value={llmConfig.systemPrompt ?? ''}
+                onChange={(e) =>
+                  setLlmConfig((prev) => ({
+                    ...prev,
+                    systemPrompt: e.target.value,
+                  }))
+                }
+                placeholder="AI의 기본 동작을 정의하는 시스템 프롬프트를 입력하세요"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 검색 설정 카드 */}
+        <Card size="md">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Search className="h-5 w-5 text-muted-foreground" />
+              <CardTitle>검색 설정</CardTitle>
+            </div>
+            <CardDescription>
+              RAG 검색의 동작 방식을 조정합니다
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Max Chunks */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="text-sm font-medium text-foreground">
+                  최대 청크 수
+                </label>
+                <span className="text-sm text-muted-foreground">
+                  {searchConfig.maxChunks}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="20"
+                step="1"
+                value={searchConfig.maxChunks}
+                onChange={(e) =>
+                  setSearchConfig((prev) => ({
+                    ...prev,
+                    maxChunks: parseInt(e.target.value),
+                  }))
+                }
+                className="w-full accent-primary"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                응답 생성에 사용할 최대 문서 청크 수 (1-20)
+              </p>
+            </div>
+
+            {/* Min Score */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="text-sm font-medium text-foreground">
+                  최소 유사도 점수
+                </label>
+                <span className="text-sm text-muted-foreground">
+                  {searchConfig.minScore}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={searchConfig.minScore}
+                onChange={(e) =>
+                  setSearchConfig((prev) => ({
+                    ...prev,
+                    minScore: parseFloat(e.target.value),
+                  }))
+                }
+                className="w-full accent-primary"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                이 점수 이상의 문서만 참조합니다 (0-1)
               </p>
             </div>
           </CardContent>
