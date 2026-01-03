@@ -47,6 +47,11 @@ type AnyBlockSettingsComponent = ComponentType<BlockSettingsProps<any>>;
 import { HeaderBlockSettings } from './header-settings';
 import { ChatbotBlockSettings } from './chatbot-settings';
 import { PlaceholderBlockSettings } from './placeholder-settings';
+// Phase 1 블록 설정
+import { LinkBlockSettings } from './link-settings';
+import { TextBlockSettings } from './text-settings';
+import { DividerBlockSettings } from './divider-settings';
+import { SocialIconsBlockSettings } from './social-icons-settings';
 
 /**
  * 블록 타입별 설정 컴포넌트 레지스트리
@@ -66,9 +71,19 @@ export const BLOCK_SETTINGS_COMPONENTS: Partial<
   [BlockType.HEADER]: HeaderBlockSettings,
   [BlockType.CHATBOT]: ChatbotBlockSettings,
   [BlockType.PLACEHOLDER]: PlaceholderBlockSettings,
+  // Phase 1 블록
+  [BlockType.LINK]: LinkBlockSettings,
+  [BlockType.TEXT]: TextBlockSettings,
+  [BlockType.DIVIDER]: DividerBlockSettings,
+  [BlockType.SOCIAL_ICONS]: SocialIconsBlockSettings,
 };
 
 // 개별 설정 컴포넌트 re-export
 export { HeaderBlockSettings } from './header-settings';
 export { ChatbotBlockSettings } from './chatbot-settings';
 export { PlaceholderBlockSettings } from './placeholder-settings';
+// Phase 1 블록
+export { LinkBlockSettings } from './link-settings';
+export { TextBlockSettings } from './text-settings';
+export { DividerBlockSettings } from './divider-settings';
+export { SocialIconsBlockSettings } from './social-icons-settings';

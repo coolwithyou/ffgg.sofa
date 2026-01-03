@@ -286,6 +286,39 @@ export const BLOCK_METAS: Record<BlockTypeValue, BlockMeta> = {
     icon: 'Square',
     maxInstances: 0, // 무제한
   },
+  // Phase 1 블록 메타데이터
+  [BlockType.LINK]: {
+    type: BlockType.LINK,
+    name: '링크',
+    description: '외부 링크 버튼을 추가합니다',
+    category: BlockCategory.CONTENT,
+    icon: 'Link',
+    maxInstances: 0, // 무제한
+  },
+  [BlockType.TEXT]: {
+    type: BlockType.TEXT,
+    name: '텍스트',
+    description: '텍스트 콘텐츠를 추가합니다',
+    category: BlockCategory.CONTENT,
+    icon: 'Type',
+    maxInstances: 0, // 무제한
+  },
+  [BlockType.DIVIDER]: {
+    type: BlockType.DIVIDER,
+    name: '구분선',
+    description: '콘텐츠를 구분하는 선을 추가합니다',
+    category: BlockCategory.CONTENT,
+    icon: 'Minus',
+    maxInstances: 0, // 무제한
+  },
+  [BlockType.SOCIAL_ICONS]: {
+    type: BlockType.SOCIAL_ICONS,
+    name: '소셜 아이콘',
+    description: 'SNS 링크 아이콘을 추가합니다',
+    category: BlockCategory.CONTENT,
+    icon: 'Share2',
+    maxInstances: 1, // 페이지당 1개
+  },
 };
 
 /**
@@ -349,6 +382,83 @@ export function createPlaceholderBlock(
   };
 }
 
+// ============================================
+// Phase 1 블록 팩토리 함수
+// ============================================
+
+/**
+ * 링크 블록 생성
+ */
+export function createLinkBlock(id: string, order: number): LinkBlock {
+  return {
+    id,
+    type: BlockType.LINK,
+    order,
+    visible: true,
+    config: {
+      url: '',
+      title: '새 링크',
+      description: '',
+      thumbnail: '',
+      style: 'default',
+      openInNewTab: true,
+    },
+  };
+}
+
+/**
+ * 텍스트 블록 생성
+ */
+export function createTextBlock(id: string, order: number): TextBlock {
+  return {
+    id,
+    type: BlockType.TEXT,
+    order,
+    visible: true,
+    config: {
+      content: '텍스트를 입력하세요',
+      align: 'center',
+      size: 'md',
+    },
+  };
+}
+
+/**
+ * 디바이더 블록 생성
+ */
+export function createDividerBlock(id: string, order: number): DividerBlock {
+  return {
+    id,
+    type: BlockType.DIVIDER,
+    order,
+    visible: true,
+    config: {
+      style: 'line',
+      spacing: 'md',
+    },
+  };
+}
+
+/**
+ * 소셜 아이콘 블록 생성
+ */
+export function createSocialIconsBlock(
+  id: string,
+  order: number
+): SocialIconsBlock {
+  return {
+    id,
+    type: BlockType.SOCIAL_ICONS,
+    order,
+    visible: true,
+    config: {
+      icons: [],
+      size: 'md',
+      style: 'default',
+    },
+  };
+}
+
 /**
  * 블록 타입에 따른 팩토리 함수 매핑
  */
@@ -356,6 +466,10 @@ export const BLOCK_FACTORIES: Record<BlockTypeValue, BlockFactory> = {
   [BlockType.HEADER]: createHeaderBlock,
   [BlockType.CHATBOT]: createChatbotBlock,
   [BlockType.PLACEHOLDER]: createPlaceholderBlock,
+  [BlockType.LINK]: createLinkBlock,
+  [BlockType.TEXT]: createTextBlock,
+  [BlockType.DIVIDER]: createDividerBlock,
+  [BlockType.SOCIAL_ICONS]: createSocialIconsBlock,
 };
 
 /**
