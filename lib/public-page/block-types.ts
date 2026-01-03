@@ -14,6 +14,11 @@ export const BlockType = {
   HEADER: 'header',
   CHATBOT: 'chatbot',
   PLACEHOLDER: 'placeholder',
+  // Phase 1 블록
+  LINK: 'link',
+  TEXT: 'text',
+  DIVIDER: 'divider',
+  SOCIAL_ICONS: 'social_icons',
 } as const;
 
 export type BlockTypeValue = (typeof BlockType)[keyof typeof BlockType];
@@ -90,10 +95,150 @@ export interface PlaceholderBlock extends BaseBlock {
   };
 }
 
+// ============================================
+// Phase 1 블록 타입 정의
+// ============================================
+
+/**
+ * 링크 블록 스타일
+ */
+export type LinkBlockStyle = 'default' | 'featured' | 'outline';
+
+/**
+ * 링크 블록
+ * - 외부/내부 링크 버튼
+ * - 썸네일, 제목, 설명 지원
+ */
+export interface LinkBlock extends BaseBlock {
+  type: typeof BlockType.LINK;
+  config: {
+    /** 링크 URL */
+    url: string;
+    /** 링크 제목 */
+    title: string;
+    /** 링크 설명 (선택) */
+    description?: string;
+    /** 썸네일 이미지 URL (선택) */
+    thumbnail?: string;
+    /** 버튼 스타일 */
+    style: LinkBlockStyle;
+    /** 새 탭에서 열기 */
+    openInNewTab: boolean;
+  };
+}
+
+/**
+ * 텍스트 블록 정렬
+ */
+export type TextBlockAlign = 'left' | 'center' | 'right';
+
+/**
+ * 텍스트 블록 크기
+ */
+export type TextBlockSize = 'sm' | 'md' | 'lg';
+
+/**
+ * 텍스트 블록
+ * - 마크다운 지원 텍스트
+ * - 정렬 및 크기 조절 가능
+ */
+export interface TextBlock extends BaseBlock {
+  type: typeof BlockType.TEXT;
+  config: {
+    /** 텍스트 내용 */
+    content: string;
+    /** 텍스트 정렬 */
+    align: TextBlockAlign;
+    /** 텍스트 크기 */
+    size: TextBlockSize;
+  };
+}
+
+/**
+ * 디바이더 블록 스타일
+ */
+export type DividerBlockStyle = 'line' | 'dashed' | 'dotted' | 'space';
+
+/**
+ * 디바이더 블록 간격
+ */
+export type DividerBlockSpacing = 'sm' | 'md' | 'lg';
+
+/**
+ * 디바이더 블록
+ * - 콘텐츠 구분선
+ * - 다양한 스타일과 간격 지원
+ */
+export interface DividerBlock extends BaseBlock {
+  type: typeof BlockType.DIVIDER;
+  config: {
+    /** 구분선 스타일 */
+    style: DividerBlockStyle;
+    /** 상하 간격 */
+    spacing: DividerBlockSpacing;
+  };
+}
+
+/**
+ * 소셜 아이콘 종류
+ */
+export type SocialIconType =
+  | 'instagram'
+  | 'twitter'
+  | 'facebook'
+  | 'youtube'
+  | 'tiktok'
+  | 'linkedin'
+  | 'github'
+  | 'website';
+
+/**
+ * 소셜 아이콘 아이템
+ */
+export interface SocialIconItem {
+  /** 아이콘 종류 */
+  type: SocialIconType;
+  /** 링크 URL */
+  url: string;
+}
+
+/**
+ * 소셜 아이콘 블록 크기
+ */
+export type SocialIconsBlockSize = 'sm' | 'md' | 'lg';
+
+/**
+ * 소셜 아이콘 블록 스타일
+ */
+export type SocialIconsBlockStyle = 'default' | 'filled' | 'outline';
+
+/**
+ * 소셜 아이콘 블록
+ * - 여러 소셜 미디어 링크를 아이콘으로 표시
+ */
+export interface SocialIconsBlock extends BaseBlock {
+  type: typeof BlockType.SOCIAL_ICONS;
+  config: {
+    /** 소셜 아이콘 목록 */
+    icons: SocialIconItem[];
+    /** 아이콘 크기 */
+    size: SocialIconsBlockSize;
+    /** 아이콘 스타일 */
+    style: SocialIconsBlockStyle;
+  };
+}
+
 /**
  * 블록 유니온 타입
  */
-export type Block = HeaderBlock | ChatbotBlock | PlaceholderBlock;
+export type Block =
+  | HeaderBlock
+  | ChatbotBlock
+  | PlaceholderBlock
+  | LinkBlock
+  | TextBlock
+  | DividerBlock
+  | SocialIconsBlock;
 
 /**
  * 블록 메타데이터 (UI 표시용)

@@ -112,15 +112,15 @@
   /* Scrollbar */
   --scrollbar-thumb: oklch(0.869 0 0 / 0.2);
   --scrollbar-thumb-hover: oklch(0.869 0 0 / 0.4);
-  /* Dark mode - Monochrome (white primary), #171717 base */
-  --background: oklch(0.185 0 0);         /* #171717 */
+  /* Dark mode - Monochrome (white primary), #090909 base with #171717 cards */
+  --background: oklch(0.11 0 0);          /* #090909 - Deepest */
   --foreground: oklch(0.93 0 0);          /* #ECECEC */
   --card: oklch(0.185 0 0);               /* #171717 */
   --card-foreground: oklch(0.93 0 0);
   --popover: oklch(0.16 0 0);             /* #181818 - Depth 2 */
   --popover-foreground: oklch(0.93 0 0);
   --primary: oklch(1 0 0);                /* White for dark mode */
-  --primary-foreground: oklch(0.185 0 0); /* #171717 */
+  --primary-foreground: oklch(0.11 0 0);  /* #090909 */
   --secondary: oklch(0.18 0 0);           /* #1E1E1E - Depth 3 */
   --secondary-foreground: oklch(0.93 0 0);
   --muted: oklch(0.18 0 0);               /* #1E1E1E */
@@ -137,11 +137,11 @@
   --chart-3: oklch(0.65 0 0);
   --chart-4: oklch(0.5 0 0);
   --chart-5: oklch(0.35 0 0);             /* Darkest */
-  /* Sidebar - matches background */
+  /* Sidebar - elevated from background */
   --sidebar: oklch(0.185 0 0);            /* #171717 */
   --sidebar-foreground: oklch(0.85 0 0);
   --sidebar-primary: oklch(1 0 0);        /* White primary */
-  --sidebar-primary-foreground: oklch(0.185 0 0);
+  --sidebar-primary-foreground: oklch(0.11 0 0);
   --sidebar-accent: oklch(0.18 0 0);
   --sidebar-accent-foreground: oklch(0.93 0 0);
   --sidebar-border: oklch(0.22 0 0);
