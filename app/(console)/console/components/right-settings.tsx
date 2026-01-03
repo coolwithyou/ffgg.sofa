@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { useConsole, useConsoleMode, useCurrentChatbot } from '../hooks/use-console-state';
-import { useAutoSave } from '../hooks/use-auto-save';
+import { useAutoSaveContext } from '../hooks/use-auto-save';
 import { useBlocks } from '../hooks/use-blocks';
 import { HeaderSettings } from './settings/header-settings';
 import { ThemeSettings } from './settings/theme-settings';
@@ -48,7 +48,7 @@ import {
 export function RightSettings() {
   const { mode } = useConsoleMode();
   const { currentChatbot } = useCurrentChatbot();
-  const { saveStatus, saveNow } = useAutoSave();
+  const { saveStatus, saveNow } = useAutoSaveContext();
   const { success, error: showError } = useToast();
   const { reloadChatbots } = useConsole();
 

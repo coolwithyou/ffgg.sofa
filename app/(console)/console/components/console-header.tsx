@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCurrentChatbot } from '../hooks/use-console-state';
-import { useAutoSave } from '../hooks/use-auto-save';
+import { useAutoSaveContext } from '../hooks/use-auto-save';
 import { SaveStatusIndicator } from './save-status-indicator';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -17,7 +17,7 @@ import { ExternalLink, Rocket } from 'lucide-react';
  */
 export function ConsoleHeader() {
   const { currentChatbot } = useCurrentChatbot();
-  const { saveStatus, saveNow } = useAutoSave();
+  const { saveStatus, saveNow } = useAutoSaveContext();
   const toast = useToast();
 
   const handlePublish = async () => {

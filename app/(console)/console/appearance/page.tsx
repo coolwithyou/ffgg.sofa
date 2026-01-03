@@ -5,7 +5,6 @@ import { type DragEndEvent } from '@dnd-kit/core';
 import { CenterPreview } from '../components/center-preview';
 import { RightSettings } from '../components/right-settings';
 import { useConsole } from '../hooks/use-console-state';
-import { useAutoSave } from '../hooks/use-auto-save';
 import { useBlocks } from '../hooks/use-blocks';
 import {
   BlockEditorProvider,
@@ -34,9 +33,6 @@ export default function AppearancePage() {
   const { isLoading } = useConsole();
   const { blocks, addBlock, reorderBlocks } = useBlocks();
 
-  // 자동 저장 훅 활성화
-  useAutoSave();
-
   /**
    * 드래그 종료 핸들러
    */
@@ -57,7 +53,12 @@ export default function AppearancePage() {
           over.data.current?.sortable !== undefined;
 
         if (isDroppedOnCanvas && canAddBlock(blocks, blockType)) {
-          addBlock(blockType);
+          // 특정 블록 위에 드롭된 경우 해당 위치에 삽입
+          const insertBeforeId =
+            over.data.current?.sortable !== undefined
+              ? (over.id as string)
+              : undefined;
+          addBlock(blockType, insertBeforeId);
         }
         return;
       }

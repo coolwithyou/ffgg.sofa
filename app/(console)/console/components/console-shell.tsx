@@ -2,6 +2,7 @@
 
 import { AppSidebar } from './nav/app-sidebar';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
+import { AutoSaveProvider } from '../hooks/use-auto-save';
 
 interface ConsoleShellProps {
   children: React.ReactNode;
@@ -31,11 +32,13 @@ interface ConsoleShellProps {
  */
 export function ConsoleShell({ children }: ConsoleShellProps) {
   return (
-    <SidebarProvider defaultOpen={true} className="!min-h-0 h-screen">
-      <AppSidebar />
-      <SidebarInset className="overflow-hidden">
-        <main className="h-full overflow-auto">{children}</main>
-      </SidebarInset>
-    </SidebarProvider>
+    <AutoSaveProvider>
+      <SidebarProvider defaultOpen={true} className="!min-h-0 h-screen">
+        <AppSidebar />
+        <SidebarInset className="overflow-hidden">
+          <main className="h-full overflow-auto">{children}</main>
+        </SidebarInset>
+      </SidebarProvider>
+    </AutoSaveProvider>
   );
 }

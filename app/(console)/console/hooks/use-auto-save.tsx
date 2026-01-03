@@ -1,6 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import {
+  useEffect,
+  useRef,
+  useCallback,
+  useState,
+  createContext,
+  useContext,
+  type ReactNode,
+} from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { toast } from 'sonner';
 import { useConsole } from './use-console-state';
@@ -210,4 +218,56 @@ export function useAutoSave(options?: UseAutoSaveOptions) {
     retry,
     clearError,
   };
+}
+
+// ============================================
+// Context 기반 싱글톤 패턴
+// ============================================
+
+/**
+ * AutoSave Context 값 타입
+ */
+interface AutoSaveContextValue {
+  saveStatus: ReturnType<typeof useConsole>['saveStatus'];
+  hasChanges: boolean | null;
+  saveNow: () => void;
+  error: SaveError | null;
+  retry: () => void;
+  clearError: () => void;
+}
+
+const AutoSaveContext = createContext<AutoSaveContextValue | null>(null);
+
+/**
+ * AutoSave Provider
+ *
+ * 자동 저장 로직을 단일 인스턴스로 관리합니다.
+ * ConsoleShell에서 한 번만 래핑하면 됩니다.
+ */
+export function AutoSaveProvider({ children }: { children: ReactNode }) {
+  const value = useAutoSave();
+
+  return (
+    <AutoSaveContext.Provider value={value}>
+      {children}
+    </AutoSaveContext.Provider>
+  );
+}
+
+/**
+ * AutoSave Context 소비 훅
+ *
+ * 저장 로직 없이 상태와 함수만 조회합니다.
+ * 여러 컴포넌트에서 호출해도 중복 저장이 발생하지 않습니다.
+ *
+ * @throws AutoSaveProvider 외부에서 호출 시 에러
+ */
+export function useAutoSaveContext(): AutoSaveContextValue {
+  const context = useContext(AutoSaveContext);
+  if (!context) {
+    throw new Error(
+      'useAutoSaveContext must be used within AutoSaveProvider'
+    );
+  }
+  return context;
 }

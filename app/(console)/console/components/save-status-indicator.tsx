@@ -1,6 +1,6 @@
 'use client';
 
-import { useAutoSave } from '../hooks/use-auto-save';
+import { useAutoSaveContext } from '../hooks/use-auto-save';
 import { Check, Loader2, AlertCircle, Circle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
  * - unsaved: 회색 점 + "저장되지 않음"
  */
 export function SaveStatusIndicator() {
-  const { saveStatus, error, retry } = useAutoSave();
+  const { saveStatus, error, retry } = useAutoSaveContext();
 
   const config = {
     saved: {
