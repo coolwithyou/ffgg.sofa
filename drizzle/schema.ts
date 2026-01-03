@@ -48,6 +48,9 @@ export const users = pgTable(
     }),
     role: text('role').default('user'), // user, admin, internal_operator
     avatarUrl: text('avatar_url'), // 프로필 이미지 URL (Data URL 또는 외부 URL)
+    // OAuth 연동
+    googleId: text('google_id').unique(), // Google OAuth 사용자 ID
+    kakaoId: text('kakao_id').unique(), // Kakao OAuth 사용자 ID
     emailVerified: boolean('email_verified').default(false),
     emailVerificationToken: text('email_verification_token'),
     passwordResetToken: text('password_reset_token'),
