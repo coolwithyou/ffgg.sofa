@@ -33,6 +33,7 @@ import { navItems, type NavItem } from './nav-config';
 import { useCurrentChatbot } from '../../hooks/use-console-state';
 import { Bot, Check, Plus, Sofa } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 /**
  * SidebarHeader의 ChatbotSwitcher
@@ -296,8 +297,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar {...props}>
       <SidebarHeader className="gap-0 p-0">
-        {/* 로고 */}
-        <div className="flex h-14 items-center gap-2 px-4">
+        {/* 로고 + 테마 토글 */}
+        <div className="flex h-14 items-center justify-between px-4">
           <Link
             href="/"
             className="flex items-center gap-2 text-lg font-bold tracking-tight text-primary"
@@ -305,6 +306,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <Sofa className="h-5 w-5" />
             <span>SOFA</span>
           </Link>
+          <ThemeToggle />
         </div>
 
         <Separator />

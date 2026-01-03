@@ -36,6 +36,19 @@ const updateChatbotSchema = z.object({
       minScore: z.number().min(0).max(1).optional(),
     })
     .optional(),
+  personaConfig: z
+    .object({
+      name: z.string().max(100).optional(),
+      expertiseArea: z.string().max(200).optional(),
+      expertiseDescription: z.string().max(500).optional(),
+      includedTopics: z.array(z.string().max(50)).max(20).optional(),
+      excludedTopics: z.array(z.string().max(50)).max(20).optional(),
+      tone: z.enum(['professional', 'friendly', 'casual']).optional(),
+      keywords: z.array(z.string().max(50)).max(20).optional(),
+      confidence: z.number().min(0).max(1).optional(),
+      lastGeneratedAt: z.string().datetime().optional().nullable(),
+    })
+    .optional(),
 });
 
 interface RouteParams {
