@@ -34,7 +34,7 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* 페이지 타이틀 */}
       <div className="flex items-center justify-between">
         <div>
