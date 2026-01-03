@@ -4,7 +4,7 @@
  */
 
 import { inngestClient } from '../client';
-import { db, documents, chunks, datasets } from '@/lib/db';
+import { db, documents, chunks, datasets, chatbotDatasets } from '@/lib/db';
 import { eq, sql } from 'drizzle-orm';
 import { parseDocument, type SupportedFileType } from '@/lib/parsers';
 import { smartChunk } from '@/lib/rag/chunking';
@@ -21,6 +21,7 @@ import {
   logDocumentProcessing,
   clearDocumentLogs,
 } from '@/lib/document-log';
+import { triggerRagIndexGeneration } from '@/lib/chat/rag-index-generator';
 
 export const processDocument = inngestClient.createFunction(
   {
@@ -409,6 +410,47 @@ onFailure: async ({ event, error }) => {
     if (datasetId) {
       await step.run('update-dataset-stats', async () => {
         await updateDatasetStats(datasetId);
+      });
+    }
+
+    // Step 7.5: 연결된 챗봇들의 RAG 인덱스 재생성 트리거
+    if (datasetId) {
+      await step.run('trigger-rag-regeneration', async () => {
+        // 데이터셋에 연결된 모든 챗봇 조회
+        const connections = await db
+          .select({ chatbotId: chatbotDatasets.chatbotId })
+          .from(chatbotDatasets)
+          .where(eq(chatbotDatasets.datasetId, datasetId));
+
+        if (connections.length === 0) {
+          logger.info('No chatbots connected to dataset, skipping RAG regeneration', {
+            documentId,
+            datasetId,
+          });
+          return { skipped: true, reason: 'no_connected_chatbots' };
+        }
+
+        logger.info('Triggering RAG regeneration for connected chatbots', {
+          documentId,
+          datasetId,
+          chatbotCount: connections.length,
+        });
+
+        // 각 챗봇에 대해 RAG 인덱스 재생성 트리거 (fire-and-forget)
+        for (const { chatbotId } of connections) {
+          triggerRagIndexGeneration(chatbotId, tenantId).catch((error) => {
+            logger.error('Failed to trigger RAG regeneration after document upload', error, {
+              chatbotId,
+              documentId,
+              datasetId,
+            });
+          });
+        }
+
+        return {
+          triggered: true,
+          chatbotIds: connections.map((c) => c.chatbotId),
+        };
       });
     }
 
