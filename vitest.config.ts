@@ -10,6 +10,9 @@ export default defineConfig({
     setupFiles: ['./vitest.setup.ts'],
     include: ['**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/.next/**'],
+    // 개별 테스트 표시 옵션: pnpm test -- --reporter=verbose
+    // 기본 리포터 (변경하려면 아래 주석 해제)
+    // reporters: ['verbose'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
