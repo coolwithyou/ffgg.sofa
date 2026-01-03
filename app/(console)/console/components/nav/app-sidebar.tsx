@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronsUpDown, LogOut, Settings, User } from 'lucide-react';
@@ -33,6 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { navItems, type NavItem } from './nav-config';
 import { useCurrentChatbot, useTenantSettings } from '../../hooks/use-console-state';
 import { Bot, Check, Plus, Sofa } from 'lucide-react';
+import { CreateChatbotDialog } from '../create-chatbot-dialog';
 import { Separator } from '@/components/ui/separator';
 import { ThemeToggle } from '@/components/theme-toggle';
 
@@ -44,12 +45,14 @@ import { ThemeToggle } from '@/components/theme-toggle';
 function SidebarChatbotSwitcher() {
   const { chatbots, currentChatbot, currentChatbotIndex, selectChatbot } =
     useCurrentChatbot();
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const handleSelect = (index: number) => {
     selectChatbot(index);
   };
 
   return (
+    <>
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
@@ -117,7 +120,10 @@ function SidebarChatbotSwitcher() {
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem className="gap-2 p-2">
+            <DropdownMenuItem
+              className="gap-2 p-2"
+              onClick={() => setIsCreateDialogOpen(true)}
+            >
               <div className="flex size-6 items-center justify-center rounded-md border bg-background">
                 <Plus className="size-4" />
               </div>
@@ -127,6 +133,11 @@ function SidebarChatbotSwitcher() {
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
+    <CreateChatbotDialog
+      isOpen={isCreateDialogOpen}
+      onClose={() => setIsCreateDialogOpen(false)}
+    />
+    </>
   );
 }
 
