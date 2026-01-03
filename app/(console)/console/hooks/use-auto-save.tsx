@@ -68,8 +68,7 @@ export function useAutoSave(options?: UseAutoSaveOptions) {
   const retryCountRef = useRef(0);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 최초 로드 여부 체크 (첫 렌더링 시 저장 방지)
-  const isInitialMount = useRef(true);
+  // 마지막 저장된 설정 (중복 저장 방지용)
   const lastSavedConfig = useRef<PublicPageConfig | null>(null);
 
   // 재시도 타이머 정리
@@ -162,14 +161,18 @@ export function useAutoSave(options?: UseAutoSaveOptions) {
 
   // pageConfig 변경 감지 및 저장
   useEffect(() => {
-    // 최초 마운트 시 스킵
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      lastSavedConfig.current = pageConfig;
+    // originalPageConfig가 없으면 아직 서버 데이터 로드 중 → 저장 스킵
+    // (서버에서 로드된 원본이 없으면 비교 기준이 없음)
+    if (!originalPageConfig) {
       return;
     }
 
-    // 변경사항 없으면 스킵
+    // 원본과 동일하면 스킵 (실제 사용자 변경 없음)
+    if (JSON.stringify(pageConfig) === JSON.stringify(originalPageConfig)) {
+      return;
+    }
+
+    // 마지막 저장값과 동일하면 스킵 (중복 저장 방지)
     if (
       lastSavedConfig.current &&
       JSON.stringify(pageConfig) === JSON.stringify(lastSavedConfig.current)
@@ -180,7 +183,7 @@ export function useAutoSave(options?: UseAutoSaveOptions) {
     // 상태를 unsaved로 변경 후 디바운스 저장
     setSaveStatus('unsaved');
     debouncedSave(pageConfig);
-  }, [pageConfig, debouncedSave, setSaveStatus]);
+  }, [pageConfig, originalPageConfig, debouncedSave, setSaveStatus]);
 
   // 컴포넌트 언마운트 시 대기 중인 저장 실행 및 정리
   useEffect(() => {
@@ -239,13 +242,25 @@ interface AutoSaveContextValue {
 const AutoSaveContext = createContext<AutoSaveContextValue | null>(null);
 
 /**
+ * AutoSave Provider Props
+ */
+interface AutoSaveProviderProps {
+  children: ReactNode;
+  /** 저장 성공 시 호출될 콜백 (버전 새로고침 등) */
+  onSaveSuccess?: () => void;
+}
+
+/**
  * AutoSave Provider
  *
  * 자동 저장 로직을 단일 인스턴스로 관리합니다.
  * ConsoleShell에서 한 번만 래핑하면 됩니다.
  */
-export function AutoSaveProvider({ children }: { children: ReactNode }) {
-  const value = useAutoSave();
+export function AutoSaveProvider({
+  children,
+  onSaveSuccess,
+}: AutoSaveProviderProps) {
+  const value = useAutoSave({ onSaveSuccess });
 
   return (
     <AutoSaveContext.Provider value={value}>
