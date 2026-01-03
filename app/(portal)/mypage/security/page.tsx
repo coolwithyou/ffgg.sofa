@@ -6,9 +6,11 @@
  */
 
 import { useState, useEffect } from 'react';
-import { TotpSetup } from '../components/totp-setup';
-import { LoginHistory } from '../components/login-history';
-import { ActiveSessions } from '../components/active-sessions';
+import {
+  TotpSetup,
+  LoginHistory,
+  ActiveSessions,
+} from '@/components/account';
 
 export default function SecurityPage() {
   const [currentPassword, setCurrentPassword] = useState('');

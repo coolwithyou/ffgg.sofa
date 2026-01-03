@@ -2,10 +2,16 @@
 
 /**
  * 이메일 변경 폼 컴포넌트
- * Phase 3.1: 새 이메일로 인증 메일 발송 요청
+ * 새 이메일로 인증 메일 발송 요청
+ * shadcn/ui Input, Button, Label, Alert 컴포넌트 적용
  */
 
 import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface EmailChangeFormProps {
   currentEmail: string;
@@ -91,33 +97,30 @@ export default function EmailChangeForm({
     <div className="space-y-4">
       {/* 현재 이메일 표시 */}
       <div className="flex items-center justify-between">
-        <div>
-          <label className="text-sm font-medium text-muted-foreground">
-            이메일
-          </label>
-          <p className="mt-1 text-foreground">{currentEmail}</p>
+        <div className="space-y-1">
+          <Label className="text-muted-foreground">이메일</Label>
+          <p className="text-foreground">{currentEmail}</p>
         </div>
         {!isExpanded && (
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setIsExpanded(true)}
-            className="text-sm text-primary hover:text-primary/80"
           >
             변경
-          </button>
+          </Button>
         )}
       </div>
 
       {/* 알림 메시지 */}
       {message && (
-        <div
-          className={`rounded-lg border p-3 text-sm ${
-            message.type === 'success'
-              ? 'border-green-500/50 bg-green-500/10 text-green-500'
-              : 'border-destructive/50 bg-destructive/10 text-destructive'
-          }`}
-        >
-          {message.text}
-        </div>
+        <Alert variant={message.type === 'success' ? 'default' : 'destructive'}>
+          <AlertDescription
+            className={message.type === 'success' ? 'text-green-500' : ''}
+          >
+            {message.text}
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* 이메일 변경 폼 */}
@@ -131,19 +134,13 @@ export default function EmailChangeForm({
 
             <div className="space-y-3">
               {/* 새 이메일 */}
-              <div>
-                <label
-                  htmlFor="newEmail"
-                  className="block text-sm font-medium text-foreground"
-                >
-                  새 이메일 주소
-                </label>
-                <input
+              <div className="space-y-2">
+                <Label htmlFor="newEmail">새 이메일 주소</Label>
+                <Input
                   type="email"
                   id="newEmail"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  className="mt-1 block w-full rounded-md border border-border bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   placeholder="new@example.com"
                   autoComplete="email"
                   disabled={isLoading}
@@ -151,19 +148,13 @@ export default function EmailChangeForm({
               </div>
 
               {/* 현재 비밀번호 */}
-              <div>
-                <label
-                  htmlFor="emailChangePassword"
-                  className="block text-sm font-medium text-foreground"
-                >
-                  현재 비밀번호
-                </label>
-                <input
+              <div className="space-y-2">
+                <Label htmlFor="emailChangePassword">현재 비밀번호</Label>
+                <Input
                   type="password"
                   id="emailChangePassword"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="mt-1 block w-full rounded-md border border-border bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   placeholder="비밀번호 확인"
                   autoComplete="current-password"
                   disabled={isLoading}
@@ -173,21 +164,24 @@ export default function EmailChangeForm({
 
             {/* 버튼 */}
             <div className="mt-4 flex gap-2">
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              >
-                {isLoading ? '처리 중...' : '인증 메일 발송'}
-              </button>
-              <button
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    처리 중...
+                  </>
+                ) : (
+                  '인증 메일 발송'
+                )}
+              </Button>
+              <Button
                 type="button"
+                variant="outline"
                 onClick={handleCancel}
                 disabled={isLoading}
-                className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
               >
                 취소
-              </button>
+              </Button>
             </div>
           </div>
         </form>

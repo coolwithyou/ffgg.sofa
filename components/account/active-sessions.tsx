@@ -3,10 +3,21 @@
 /**
  * 활성 세션 관리 컴포넌트
  * 현재 로그인된 세션 목록 및 로그아웃 기능
+ * shadcn/ui Card, Button, Badge, Alert 컴포넌트 적용
  */
 
 import { useEffect, useState } from 'react';
+import { Monitor, Loader2 } from 'lucide-react';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface Session {
   id: string;
@@ -146,81 +157,98 @@ export function ActiveSessions() {
   };
 
   return (
-    <div className="rounded-lg border border-border bg-card p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-foreground">
-          활성 세션
-        </h2>
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+        <div className="flex items-center gap-2">
+          <Monitor className="h-5 w-5 text-muted-foreground" />
+          <CardTitle>활성 세션</CardTitle>
+        </div>
         {sessions.length > 0 && (
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={logoutAllSessions}
             disabled={actionLoading === 'all'}
-            className="rounded-md border border-destructive/50 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
+            className="border-destructive/50 text-destructive hover:bg-destructive/10"
           >
-            {actionLoading === 'all' ? '처리 중...' : '모든 기기 로그아웃'}
-          </button>
+            {actionLoading === 'all' ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                처리 중...
+              </>
+            ) : (
+              '모든 기기 로그아웃'
+            )}
+          </Button>
         )}
-      </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          </div>
+        ) : error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : sessions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            활성 세션이 없습니다.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {sessions.map((session, index) => {
+              const { browser, os } = parseUserAgent(session.userAgent);
+              const isFirst = index === 0;
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-8">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        </div>
-      ) : error ? (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-          {error}
-        </div>
-      ) : sessions.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          활성 세션이 없습니다.
-        </p>
-      ) : (
-        <div className="space-y-3">
-          {sessions.map((session, index) => {
-            const { browser, os } = parseUserAgent(session.userAgent);
-            const isFirst = index === 0;
-
-            return (
-              <div
-                key={session.id}
-                className={`flex items-center justify-between rounded-lg p-3 ${
-                  isFirst ? 'border border-primary/50 bg-primary/10' : 'bg-muted/50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-background">
-                    <svg className="h-5 w-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
+              return (
+                <div
+                  key={session.id}
+                  className={`flex items-center justify-between rounded-lg p-3 ${
+                    isFirst ? 'border border-primary/50 bg-primary/10' : 'bg-muted/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-background">
+                      <Monitor className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {browser} on {os}
+                        {isFirst && (
+                          <Badge variant="default" className="ml-2">
+                            현재 세션
+                          </Badge>
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        IP: {session.ipAddress || '알 수 없음'} · 로그인: {formatDate(session.createdAt)}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      {browser} on {os}
-                      {isFirst && (
-                        <span className="ml-2 rounded bg-primary/20 px-2 py-0.5 text-xs text-primary">
-                          현재 세션
-                        </span>
+                  {!isFirst && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => logoutSession(session.id)}
+                      disabled={actionLoading === session.id}
+                    >
+                      {actionLoading === session.id ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          처리 중...
+                        </>
+                      ) : (
+                        '로그아웃'
                       )}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      IP: {session.ipAddress || '알 수 없음'} · 로그인: {formatDate(session.createdAt)}
-                    </p>
-                  </div>
+                    </Button>
+                  )}
                 </div>
-                {!isFirst && (
-                  <button
-                    onClick={() => logoutSession(session.id)}
-                    disabled={actionLoading === session.id}
-                    className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
-                  >
-                    {actionLoading === session.id ? '처리 중...' : '로그아웃'}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

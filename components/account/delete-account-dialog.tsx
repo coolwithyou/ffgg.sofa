@@ -2,7 +2,7 @@
 
 /**
  * 계정 삭제 다이얼로그
- * Phase 1.5: 30일 유예 기간 안내 및 삭제 확인
+ * 30일 유예 기간 안내 및 삭제 확인
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -11,11 +11,14 @@ import { useRouter } from 'next/navigation';
 interface DeleteAccountDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  /** 삭제 후 리다이렉트 경로 (기본: /login?deleted=pending) */
+  redirectPath?: string;
 }
 
 export default function DeleteAccountDialog({
   isOpen,
   onClose,
+  redirectPath = '/login?deleted=pending',
 }: DeleteAccountDialogProps) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -93,8 +96,8 @@ export default function DeleteAccountDialog({
         throw new Error(data.error || '계정 삭제 요청에 실패했습니다.');
       }
 
-      // 성공 시 로그인 페이지로 이동
-      router.push('/login?deleted=pending');
+      // 성공 시 리다이렉트
+      router.push(redirectPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {

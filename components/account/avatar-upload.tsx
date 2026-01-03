@@ -2,10 +2,14 @@
 
 /**
  * 프로필 이미지 업로드 컴포넌트
- * Phase 3.3: 이미지 업로드, 미리보기, 삭제
+ * 이미지 업로드, 미리보기, 삭제
+ * shadcn/ui Avatar, Button 컴포넌트 적용
  */
 
 import { useState, useRef } from 'react';
+import { Loader2 } from 'lucide-react';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
 
 interface AvatarUploadProps {
   currentAvatar: string | null;
@@ -184,22 +188,17 @@ export default function AvatarUpload({
       <div className="flex items-center gap-4">
         {/* 아바타 미리보기 */}
         <div className="relative">
-          {avatar ? (
-            <img
-              src={avatar}
-              alt="프로필 이미지"
-              className="h-20 w-20 rounded-full object-cover ring-2 ring-border"
-            />
-          ) : (
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-2xl font-bold text-primary ring-2 ring-border">
+          <Avatar className="h-20 w-20 ring-2 ring-border">
+            <AvatarImage src={avatar || undefined} alt="프로필 이미지" />
+            <AvatarFallback className="bg-primary/10 text-2xl font-bold text-primary">
               {getInitials(userName)}
-            </div>
-          )}
+            </AvatarFallback>
+          </Avatar>
 
           {/* 로딩 오버레이 */}
           {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/80">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
           )}
         </div>
@@ -215,24 +214,24 @@ export default function AvatarUpload({
             disabled={isLoading}
           />
 
-          <button
+          <Button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isLoading}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {avatar ? '이미지 변경' : '이미지 업로드'}
-          </button>
+          </Button>
 
           {avatar && (
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={handleDelete}
               disabled={isLoading}
-              className="rounded-md border border-destructive px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
+              className="border-destructive text-destructive hover:bg-destructive/10"
             >
               삭제
-            </button>
+            </Button>
           )}
         </div>
       </div>

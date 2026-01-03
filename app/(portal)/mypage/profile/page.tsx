@@ -6,9 +6,11 @@
  */
 
 import { useState, useEffect } from 'react';
-import EmailChangeForm from '../components/email-change-form';
-import AvatarUpload from '../components/avatar-upload';
-import DeleteAccountDialog from '../components/delete-account-dialog';
+import {
+  AvatarUpload,
+  EmailChangeForm,
+  DeleteAccountDialog,
+} from '@/components/account';
 
 interface UserProfile {
   id: string;
