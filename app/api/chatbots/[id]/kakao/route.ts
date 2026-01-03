@@ -29,6 +29,10 @@ const updateKakaoConfigSchema = z.object({
   // 응답 설정
   useQuickReplies: z.boolean().optional(),
   maxButtons: z.number().min(1).max(5).optional(),
+  // 최대 응답 길이 (100~1000자, 기본 300)
+  maxResponseLength: z.number().min(100).max(1000).optional(),
+  // 환영 메시지
+  welcomeMessage: z.string().max(200).optional(),
   // 폴백 메시지
   fallbackMessage: z.string().max(500).optional(),
 });

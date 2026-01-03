@@ -1,16 +1,16 @@
 /**
  * 챗봇 위젯 API
  *
- * GET /api/chatbots/:id/widget - 위젯 설정 조회
+ * GET /api/chatbots/:id/widget - draft 위젯 설정 조회
  * POST /api/chatbots/:id/widget - 위젯 활성화/비활성화
- * PATCH /api/chatbots/:id/widget - 위젯 설정 수정
+ * PATCH /api/chatbots/:id/widget - draft 위젯 설정 수정
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { chatbots, chatbotDatasets } from '@/drizzle/schema';
+import { chatbots, chatbotDatasets, chatbotConfigVersions } from '@/drizzle/schema';
 import { validateSession } from '@/lib/auth/session';
 import { nanoid } from 'nanoid';
 
@@ -24,6 +24,9 @@ const updateWidgetConfigSchema = z.object({
   // 외관 설정
   primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   position: z.enum(['bottom-right', 'bottom-left']).optional(),
+  // 헤더 텍스트 설정
+  title: z.string().max(50).optional(),
+  subtitle: z.string().max(100).optional(),
   // 텍스트 설정
   welcomeMessage: z.string().max(500).optional(),
   inputPlaceholder: z.string().max(100).optional(),
@@ -44,7 +47,43 @@ function generateWidgetApiKey(): string {
 }
 
 /**
- * GET /api/chatbots/:id/widget - 위젯 설정 조회
+ * draft 버전 조회 또는 생성
+ */
+async function getOrCreateDraftVersion(chatbotId: string, chatbot: {
+  publicPageConfig: unknown;
+  widgetConfig: unknown;
+}) {
+  // draft 버전 조회
+  const [draftVersion] = await db
+    .select()
+    .from(chatbotConfigVersions)
+    .where(
+      and(
+        eq(chatbotConfigVersions.chatbotId, chatbotId),
+        eq(chatbotConfigVersions.versionType, 'draft')
+      )
+    );
+
+  if (draftVersion) {
+    return draftVersion;
+  }
+
+  // draft가 없으면 chatbot의 현재 설정으로 생성
+  const [newDraft] = await db
+    .insert(chatbotConfigVersions)
+    .values({
+      chatbotId,
+      versionType: 'draft',
+      publicPageConfig: chatbot.publicPageConfig ?? {},
+      widgetConfig: chatbot.widgetConfig ?? {},
+    })
+    .returning();
+
+  return newDraft;
+}
+
+/**
+ * GET /api/chatbots/:id/widget - draft 위젯 설정 조회
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
@@ -64,6 +103,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         widgetEnabled: chatbots.widgetEnabled,
         widgetApiKey: chatbots.widgetApiKey,
         widgetConfig: chatbots.widgetConfig,
+        publicPageConfig: chatbots.publicPageConfig,
       })
       .from(chatbots)
       .where(and(eq(chatbots.id, id), eq(chatbots.tenantId, tenantId)));
@@ -75,6 +115,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // draft 버전 조회 또는 생성
+    const draftVersion = await getOrCreateDraftVersion(id, chatbot);
+
     // 연결된 데이터셋 수 확인
     const datasetLinks = await db
       .select()
@@ -85,7 +128,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       widget: {
         enabled: chatbot.widgetEnabled,
         apiKey: chatbot.widgetApiKey,
-        config: chatbot.widgetConfig,
+        config: draftVersion.widgetConfig, // draft 버전에서 조회
         hasDatasets: datasetLinks.length > 0,
         embedCode: chatbot.widgetEnabled && chatbot.widgetApiKey
           ? generateEmbedCode(chatbot.widgetApiKey)
@@ -191,7 +234,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 }
 
 /**
- * PATCH /api/chatbots/:id/widget - 위젯 설정 수정
+ * PATCH /api/chatbots/:id/widget - draft 위젯 설정 수정
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
@@ -229,25 +272,27 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const configUpdate = parseResult.data;
 
+    // draft 버전 조회 또는 생성
+    const draftVersion = await getOrCreateDraftVersion(id, chatbot);
+
     // 기존 설정과 병합
     const updatedConfig = {
-      ...(chatbot.widgetConfig as object || {}),
+      ...(draftVersion.widgetConfig as object || {}),
       ...configUpdate,
     };
 
-    // 위젯 설정 업데이트
-    const [updated] = await db
-      .update(chatbots)
+    // draft 위젯 설정 업데이트
+    await db
+      .update(chatbotConfigVersions)
       .set({
         widgetConfig: updatedConfig,
         updatedAt: new Date(),
       })
-      .where(eq(chatbots.id, id))
-      .returning();
+      .where(eq(chatbotConfigVersions.id, draftVersion.id));
 
     return NextResponse.json({
       message: '위젯 설정이 수정되었습니다',
-      config: updated.widgetConfig,
+      config: updatedConfig,
     });
   } catch (error) {
     console.error('Widget config update error:', error);
