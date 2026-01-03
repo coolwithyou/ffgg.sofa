@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import { hybridSearch, hybridSearchMultiDataset, type SearchResult } from '@/lib/rag/retrieval';
 import { generateResponse, type GenerateOptions } from '@/lib/rag/generator';
 import { rewriteQuery } from '@/lib/rag/query-rewriter';
+import { rerankWithLLM, shouldRerank } from '@/lib/rag/reranker';
 import {
   getOrCreateConversation,
   addMessageToConversation,
@@ -163,6 +164,10 @@ export async function processChat(
     // Intent 분류와 RAG 파이프라인을 동시에 실행하여 지연 최소화
     stepStart = Date.now();
 
+    // Re-ranking을 위한 검색 배수 (Top-K * 3 검색 → Re-ranking → Top-K)
+    const searchMultiplier = 3;
+    const initialSearchLimit = maxChunks * searchMultiplier;
+
     // RAG 파이프라인 실행 함수
     const executeRAGPipeline = async (): Promise<{
       searchQuery: string;
@@ -204,20 +209,20 @@ export async function processChat(
         searchQuery = request.message;
       }
 
-      // Hybrid Search로 관련 청크 검색
+      // Hybrid Search로 관련 청크 검색 (Re-ranking을 위해 더 많이 검색)
       const embeddingTrackingContext = { tenantId, chatbotId: chatbotId ?? undefined };
       let searchResults: SearchResult[];
 
       if (chatbotId) {
         const datasetIds = await getChatbotDatasetIds(chatbotId);
         if (datasetIds.length > 0) {
-          searchResults = await hybridSearchMultiDataset(tenantId, datasetIds, searchQuery, maxChunks, embeddingTrackingContext);
+          searchResults = await hybridSearchMultiDataset(tenantId, datasetIds, searchQuery, initialSearchLimit, embeddingTrackingContext);
         } else {
           logger.warn('Chatbot has no linked datasets, falling back to tenant search', { chatbotId });
-          searchResults = await hybridSearch(tenantId, searchQuery, maxChunks, embeddingTrackingContext);
+          searchResults = await hybridSearch(tenantId, searchQuery, initialSearchLimit, embeddingTrackingContext);
         }
       } else {
-        searchResults = await hybridSearch(tenantId, searchQuery, maxChunks, embeddingTrackingContext);
+        searchResults = await hybridSearch(tenantId, searchQuery, initialSearchLimit, embeddingTrackingContext);
       }
 
       return { searchQuery, searchResults };
@@ -228,7 +233,8 @@ export async function processChat(
       classifyIntent(request.message, contextMessages, persona),
       executeRAGPipeline(),
     ]);
-    const { searchResults } = ragPipelineResult;
+    let { searchResults } = ragPipelineResult;
+    const { searchQuery } = ragPipelineResult;
     timings['5_parallel_intent_rag'] = Date.now() - stepStart;
 
     logger.debug('Intent classification result', {
@@ -239,6 +245,48 @@ export async function processChat(
       confidence: intentResult.confidence,
       rulesMatch: intentResult.rulesMatch,
     });
+
+    // 5.5 LLM 기반 Re-ranking (검색 결과가 충분할 때만)
+    stepStart = Date.now();
+    let rerankApplied = false;
+    if (searchResults.length > maxChunks && shouldRerank(searchResults)) {
+      try {
+        const rerankResult = await rerankWithLLM(searchQuery, searchResults, {
+          topK: maxChunks,
+          maxCharsPerDoc: 300,
+          trackingContext: {
+            tenantId,
+            chatbotId: chatbotId ?? undefined,
+            conversationId: conversation.id,
+          },
+        });
+        searchResults = rerankResult.results;
+        rerankApplied = true;
+
+        logger.info('[Rerank] Applied LLM re-ranking', {
+          tenantId,
+          sessionId: conversation.sessionId,
+          originalCount: ragPipelineResult.searchResults.length,
+          rerankedCount: searchResults.length,
+          tokensUsed: rerankResult.tokensUsed,
+        });
+      } catch (error) {
+        // Re-ranking 실패 시 원본 결과의 상위 maxChunks개 사용
+        logger.warn('[Rerank] Re-ranking failed, using original top results', {
+          error: error instanceof Error ? error.message : String(error),
+          tenantId,
+        });
+        searchResults = ragPipelineResult.searchResults.slice(0, maxChunks);
+      }
+    } else if (searchResults.length > maxChunks) {
+      // Re-ranking 불필요: 상위 결과만 사용
+      searchResults = searchResults.slice(0, maxChunks);
+      logger.debug('[Rerank] Skipped - scores are well-distributed', {
+        tenantId,
+        sessionId: conversation.sessionId,
+      });
+    }
+    timings['5.5_reranking'] = Date.now() - stepStart;
 
     // 6. Query Router - Intent와 RAG 결과를 기반으로 응답 전략 결정
     stepStart = Date.now();
@@ -331,6 +379,7 @@ export async function processChat(
       channel,
       intent: routerResult.intent,
       usedRAG: routerResult.shouldUseRAG,
+      rerankApplied,
       chunksUsed: searchResults.length,
       estimatedTokens,
       duration,

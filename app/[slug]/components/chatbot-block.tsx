@@ -12,6 +12,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { sendPublicPageMessage, type PublicPageChatResponse } from '../actions';
+import { ProgressIndicator } from '@/components/chat/progress-indicator';
+import { SourcesCollapsible, type Source } from '@/components/chat/sources-collapsible';
 
 interface ChatbotBlockProps {
   chatbotId: string;
@@ -24,6 +26,8 @@ interface ChatbotBlockProps {
   minHeight?: number;
   /** 채팅 영역 최대 높이 (px) */
   maxHeight?: number;
+  /** 편집 모드 여부 (편집 모드에서는 자동 스크롤 비활성화) */
+  isEditing?: boolean;
 }
 
 interface Message {
@@ -31,7 +35,7 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
-  sources?: Array<{ title: string; content?: string }>;
+  sources?: Source[];
 }
 
 // 메시지 최대 길이
@@ -45,6 +49,7 @@ export function ChatbotBlock({
   primaryColor,
   minHeight = 400,
   maxHeight = 600,
+  isEditing = false,
 }: ChatbotBlockProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -69,10 +74,12 @@ export function ChatbotBlock({
     }
   }, [welcomeMessage, messages.length]);
 
-  // 메시지 스크롤
+  // 메시지 스크롤 (편집 모드에서는 비활성화)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (!isEditing) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isEditing]);
 
   // 메시지 전송
   const handleSend = useCallback(async () => {
@@ -138,7 +145,13 @@ export function ChatbotBlock({
           {messages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} primaryColor={primaryColor} />
           ))}
-          {isLoading && <TypingIndicator primaryColor={primaryColor} />}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="max-w-[85%] rounded-2xl bg-muted px-4 py-3">
+                <ProgressIndicator isLoading={isLoading} primaryColor={primaryColor} compact />
+              </div>
+            </div>
+          )}
           {error && (
             <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
               {error}
@@ -208,34 +221,12 @@ function MessageBubble({
           </div>
         )}
         {message.sources && message.sources.length > 0 && (
-          <div className="mt-2 border-t border-border/50 pt-2">
-            <p className="text-xs opacity-70">
-              {message.sources.length}개의 출처에서 참조됨
-            </p>
-          </div>
+          <SourcesCollapsible
+            sources={message.sources}
+            primaryColor={primaryColor}
+            compact
+          />
         )}
-      </div>
-    </div>
-  );
-}
-
-// 타이핑 인디케이터
-function TypingIndicator({ primaryColor }: { primaryColor: string }) {
-  return (
-    <div className="flex justify-start">
-      <div className="flex items-center gap-1 rounded-2xl bg-muted px-4 py-3">
-        <div
-          className="h-2 w-2 animate-bounce rounded-full"
-          style={{ backgroundColor: primaryColor, animationDelay: '0ms' }}
-        />
-        <div
-          className="h-2 w-2 animate-bounce rounded-full"
-          style={{ backgroundColor: primaryColor, animationDelay: '150ms' }}
-        />
-        <div
-          className="h-2 w-2 animate-bounce rounded-full"
-          style={{ backgroundColor: primaryColor, animationDelay: '300ms' }}
-        />
       </div>
     </div>
   );

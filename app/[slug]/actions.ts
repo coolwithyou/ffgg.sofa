@@ -22,6 +22,9 @@ export interface PublicPageChatResponse {
   sources?: Array<{
     title: string;
     content?: string;
+    relevance?: number;
+    documentId?: string;
+    chunkId?: string;
   }>;
 }
 
@@ -78,6 +81,9 @@ export async function sendPublicPageMessage(
     const mappedSources = response.sources?.map((source, index) => ({
       title: `출처 ${index + 1}`,
       content: source.content,
+      relevance: source.score,
+      documentId: source.documentId,
+      chunkId: source.chunkId,
     }));
 
     return {
