@@ -27,9 +27,12 @@ export interface NavItem {
  *
  * 구조:
  * - Dashboard: 챗봇 개요, 최근 활동
- * - Chatbot: 문서, 데이터셋, FAQ, 검수 (챗봇 지식 관리)
+ * - Chatbot: AI 설정, 문서, 데이터셋, FAQ, 검수 (챗봇 핵심 기능)
  * - Appearance: Page(공개 페이지), Widget(위젯 설정)
- * - Settings: 일반, AI, 연동(카카오 등)
+ * - Settings: 일반, 연동(카카오 등)
+ *
+ * Note: AI 설정은 RAG 파이프라인의 핵심 게이트 역할을 하므로
+ * 챗봇 섹션 최상단에 배치하여 중요도를 높임
  */
 export const navItems: NavItem[] = [
   {
@@ -43,6 +46,7 @@ export const navItems: NavItem[] = [
     label: '챗봇',
     icon: Bot,
     subItems: [
+      { id: 'ai', label: 'AI 설정', href: '/console/chatbot/ai' },
       { id: 'documents', label: '문서', href: '/console/chatbot' },
       { id: 'datasets', label: '데이터셋', href: '/console/chatbot/datasets' },
       { id: 'faq', label: 'FAQ', href: '/console/chatbot/faq' },
@@ -64,7 +68,6 @@ export const navItems: NavItem[] = [
     icon: Settings,
     subItems: [
       { id: 'general', label: '일반', href: '/console/settings' },
-      { id: 'ai', label: 'AI', href: '/console/settings/ai' },
       { id: 'integrations', label: '연동', href: '/console/settings/integrations' },
     ],
   },

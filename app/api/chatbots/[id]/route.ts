@@ -178,7 +178,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // LLM/검색 설정 병합
+    // LLM/검색/페르소나 설정 병합
     const updatedLlmConfig = updateData.llmConfig
       ? { ...(existingChatbot.llmConfig as object), ...updateData.llmConfig }
       : existingChatbot.llmConfig;
@@ -186,6 +186,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const updatedSearchConfig = updateData.searchConfig
       ? { ...(existingChatbot.searchConfig as object), ...updateData.searchConfig }
       : existingChatbot.searchConfig;
+
+    const updatedPersonaConfig = updateData.personaConfig
+      ? { ...(existingChatbot.personaConfig as object), ...updateData.personaConfig }
+      : existingChatbot.personaConfig;
 
     // 챗봇 수정
     const [updatedChatbot] = await db
@@ -196,6 +200,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         status: updateData.status ?? existingChatbot.status,
         llmConfig: updatedLlmConfig,
         searchConfig: updatedSearchConfig,
+        personaConfig: updatedPersonaConfig,
         updatedAt: new Date(),
       })
       .where(eq(chatbots.id, id))

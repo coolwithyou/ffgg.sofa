@@ -10,7 +10,15 @@ import {
   CardContent,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Brain, Sparkles, Search, MessageSquare, Loader2 } from 'lucide-react';
+import {
+  Brain,
+  Sparkles,
+  Search,
+  MessageSquare,
+  Loader2,
+  AlertTriangle,
+  RefreshCw,
+} from 'lucide-react';
 
 interface LlmConfig {
   temperature: number;
@@ -30,24 +38,42 @@ interface PersonaConfig {
   includedTopics?: string[];
   excludedTopics?: string[];
   tone: 'professional' | 'friendly' | 'casual';
+  keywords?: string[];
+  confidence?: number;
+  lastGeneratedAt?: string | null;
+}
+
+interface DatasetInfo {
+  id: string;
+  name: string;
+  chunkCount: number;
 }
 
 interface ChatbotData {
-  llmConfig: LlmConfig;
-  searchConfig: SearchConfig;
-  personaConfig: PersonaConfig;
+  chatbot: {
+    llmConfig: LlmConfig;
+    searchConfig: SearchConfig;
+    personaConfig: PersonaConfig;
+    datasets: DatasetInfo[];
+    updatedAt: string;
+  };
 }
 
 /**
- * Settings - AI 설정 페이지
+ * 챗봇 > AI 설정 페이지
  *
  * LLM 설정과 페르소나 설정을 관리하는 페이지
+ * RAG 파이프라인의 "게이트" 역할을 하는 핵심 설정
  */
 export default function AISettingsPage() {
   const { currentChatbot } = useCurrentChatbot();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // 데이터셋 정보 상태
+  const [datasets, setDatasets] = useState<DatasetInfo[]>([]);
+  const [chatbotUpdatedAt, setChatbotUpdatedAt] = useState<string | null>(null);
 
   // LLM 설정 상태
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({
@@ -70,7 +96,23 @@ export default function AISettingsPage() {
     includedTopics: [],
     excludedTopics: [],
     tone: 'friendly',
+    lastGeneratedAt: null,
   });
+
+  // 페르소나 업데이트 필요 여부 체크
+  const needsPersonaUpdate = (): boolean => {
+    if (!personaConfig.lastGeneratedAt) return true;
+    if (!chatbotUpdatedAt) return false;
+
+    const personaDate = new Date(personaConfig.lastGeneratedAt);
+    const chatbotDate = new Date(chatbotUpdatedAt);
+
+    // 챗봇이 페르소나 생성 이후에 업데이트되었으면 갱신 필요
+    return chatbotDate > personaDate;
+  };
+
+  const hasDatasets = datasets.length > 0;
+  const totalChunks = datasets.reduce((sum, d) => sum + d.chunkCount, 0);
 
   // 챗봇 데이터 로드
   useEffect(() => {
@@ -83,30 +125,37 @@ export default function AISettingsPage() {
         if (!response.ok) throw new Error('챗봇 데이터를 불러올 수 없습니다');
 
         const data: ChatbotData = await response.json();
+        const { chatbot } = data;
 
-        if (data.llmConfig) {
+        setDatasets(chatbot.datasets || []);
+        setChatbotUpdatedAt(chatbot.updatedAt);
+
+        if (chatbot.llmConfig) {
           setLlmConfig({
-            temperature: data.llmConfig.temperature ?? 0.7,
-            maxTokens: data.llmConfig.maxTokens ?? 1024,
-            systemPrompt: data.llmConfig.systemPrompt ?? '',
+            temperature: chatbot.llmConfig.temperature ?? 0.7,
+            maxTokens: chatbot.llmConfig.maxTokens ?? 1024,
+            systemPrompt: chatbot.llmConfig.systemPrompt ?? '',
           });
         }
 
-        if (data.searchConfig) {
+        if (chatbot.searchConfig) {
           setSearchConfig({
-            maxChunks: data.searchConfig.maxChunks ?? 5,
-            minScore: data.searchConfig.minScore ?? 0.5,
+            maxChunks: chatbot.searchConfig.maxChunks ?? 5,
+            minScore: chatbot.searchConfig.minScore ?? 0.5,
           });
         }
 
-        if (data.personaConfig) {
+        if (chatbot.personaConfig) {
           setPersonaConfig({
-            name: data.personaConfig.name ?? 'AI 어시스턴트',
-            expertiseArea: data.personaConfig.expertiseArea ?? '',
-            expertiseDescription: data.personaConfig.expertiseDescription ?? '',
-            includedTopics: data.personaConfig.includedTopics ?? [],
-            excludedTopics: data.personaConfig.excludedTopics ?? [],
-            tone: data.personaConfig.tone ?? 'friendly',
+            name: chatbot.personaConfig.name ?? 'AI 어시스턴트',
+            expertiseArea: chatbot.personaConfig.expertiseArea ?? '',
+            expertiseDescription: chatbot.personaConfig.expertiseDescription ?? '',
+            includedTopics: chatbot.personaConfig.includedTopics ?? [],
+            excludedTopics: chatbot.personaConfig.excludedTopics ?? [],
+            tone: chatbot.personaConfig.tone ?? 'friendly',
+            keywords: chatbot.personaConfig.keywords ?? [],
+            confidence: chatbot.personaConfig.confidence,
+            lastGeneratedAt: chatbot.personaConfig.lastGeneratedAt ?? null,
           });
         }
       } catch (error) {
@@ -157,14 +206,15 @@ export default function AISettingsPage() {
       );
 
       if (!response.ok) {
-        throw new Error('페르소나 생성에 실패했습니다');
+        const errorData = await response.json();
+        throw new Error(errorData.error || '페르소나 생성에 실패했습니다');
       }
 
       const data = await response.json();
-      if (data.personaConfig) {
+      if (data.persona) {
         setPersonaConfig((prev) => ({
           ...prev,
-          ...data.personaConfig,
+          ...data.persona,
         }));
       }
     } catch (error) {
@@ -195,6 +245,66 @@ export default function AISettingsPage() {
       </div>
 
       <div className="space-y-6">
+        {/* 데이터셋-페르소나 연동 알림 */}
+        {!hasDatasets ? (
+          <Card size="md" className="border-yellow-500/30 bg-yellow-500/5">
+            <CardContent className="flex items-start gap-4 pt-6">
+              <AlertTriangle className="h-5 w-5 shrink-0 text-yellow-500" />
+              <div>
+                <p className="font-medium text-foreground">
+                  연결된 데이터셋이 없습니다
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  AI 페르소나를 자동 생성하려면 먼저 데이터셋을 연결해주세요.
+                  데이터셋의 문서를 분석하여 챗봇의 전문 분야와 응답 주제를 자동으로 설정합니다.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => window.location.href = '/console/chatbot/datasets'}
+                >
+                  데이터셋 관리로 이동
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : needsPersonaUpdate() ? (
+          <Card size="md" className="border-primary/30 bg-primary/5">
+            <CardContent className="flex items-start gap-4 pt-6">
+              <RefreshCw className="h-5 w-5 shrink-0 text-primary" />
+              <div className="flex-1">
+                <p className="font-medium text-foreground">
+                  데이터셋이 업데이트되었습니다
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {datasets.length}개의 데이터셋에 총 {totalChunks.toLocaleString()}개의 청크가 있습니다.
+                  페르소나를 다시 생성하면 최신 데이터를 반영할 수 있습니다.
+                </p>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="mt-3"
+                  onClick={handleGeneratePersona}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+                  페르소나 다시 생성
+                </Button>
+              </div>
+              {personaConfig.lastGeneratedAt && (
+                <p className="text-xs text-muted-foreground">
+                  마지막 생성: {new Date(personaConfig.lastGeneratedAt).toLocaleDateString('ko-KR')}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
+
         {/* LLM 설정 카드 */}
         <Card size="md">
           <CardHeader>
@@ -366,25 +476,51 @@ export default function AISettingsPage() {
                 <MessageSquare className="h-5 w-5 text-muted-foreground" />
                 <CardTitle>페르소나 설정</CardTitle>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleGeneratePersona}
-                disabled={isGenerating}
-              >
-                {isGenerating ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="mr-2 h-4 w-4" />
+              <div className="flex items-center gap-2">
+                {personaConfig.confidence && (
+                  <span className="text-xs text-muted-foreground">
+                    신뢰도: {Math.round(personaConfig.confidence * 100)}%
+                  </span>
                 )}
-                AI 자동 생성
-              </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGeneratePersona}
+                  disabled={isGenerating || !hasDatasets}
+                >
+                  {isGenerating ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+                  AI 자동 생성
+                </Button>
+              </div>
             </div>
             <CardDescription>
-              챗봇의 성격과 전문 분야를 설정합니다
+              챗봇의 성격과 전문 분야를 설정합니다. 데이터셋 문서를 분석하여 자동 생성할 수 있습니다.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* 키워드 (자동 생성됨) */}
+            {personaConfig.keywords && personaConfig.keywords.length > 0 && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">
+                  키워드 (자동 생성)
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {personaConfig.keywords.map((keyword, idx) => (
+                    <span
+                      key={idx}
+                      className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary"
+                    >
+                      {keyword}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 이름 */}
             <div>
               <label className="mb-1.5 block text-sm font-medium text-foreground">

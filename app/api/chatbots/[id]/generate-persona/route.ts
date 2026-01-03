@@ -2,7 +2,7 @@
  * AI 페르소나 자동 생성 API
  *
  * POST /api/chatbots/:id/generate-persona
- * 연결된 데이터셋의 문서를 분석하여 페르소나를 자동 생성합니다.
+ * 연결된 데이터셋의 문서를 분석하여 페르소나를 자동 생성하고 DB에 저장합니다.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -11,6 +11,7 @@ import { db } from '@/lib/db';
 import { chatbots } from '@/drizzle/schema';
 import { validateSession } from '@/lib/auth/session';
 import { generatePersonaFromDocuments } from '@/lib/chat/persona-generator';
+import type { GeneratedPersona } from '@/lib/chat/persona-generator';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // 챗봇 존재 확인
     const [chatbot] = await db
-      .select({ id: chatbots.id })
+      .select({ id: chatbots.id, personaConfig: chatbots.personaConfig })
       .from(chatbots)
       .where(and(eq(chatbots.id, id), eq(chatbots.tenantId, tenantId)));
 
@@ -44,14 +45,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // 페르소나 자동 생성
-    const persona = await generatePersonaFromDocuments(id, {
+    const generatedPersona = await generatePersonaFromDocuments(id, {
       tenantId,
       sampleSize: 50,
     });
 
+    // 생성된 페르소나를 DB에 저장 (기존 설정과 병합)
+    const existingPersonaConfig = (chatbot.personaConfig as object) || {};
+    const updatedPersonaConfig = {
+      ...existingPersonaConfig,
+      ...generatedPersona,
+      lastGeneratedAt: new Date().toISOString(),
+    };
+
+    await db
+      .update(chatbots)
+      .set({
+        personaConfig: updatedPersonaConfig,
+        updatedAt: new Date(),
+      })
+      .where(eq(chatbots.id, id));
+
     return NextResponse.json({
       success: true,
-      persona,
+      persona: updatedPersonaConfig,
     });
   } catch (error) {
     // 사용자 친화적 에러 메시지 반환
