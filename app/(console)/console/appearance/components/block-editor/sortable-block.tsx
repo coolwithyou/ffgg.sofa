@@ -20,6 +20,10 @@ import {
   LayoutTemplate,
   MessageSquare,
   Square,
+  Link,
+  Type,
+  Minus,
+  Share2,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -27,15 +31,25 @@ import {
   BLOCK_METAS,
   BlockType,
   type Block,
+  type LinkBlock,
+  type TextBlock,
+  type DividerBlock,
+  type SocialIconsBlock,
 } from '@/lib/public-page/block-types';
 
 /**
  * 아이콘 매핑
+ * BLOCK_METAS의 icon 문자열과 일치해야 합니다.
  */
 const ICON_MAP: Record<string, LucideIcon> = {
   LayoutTemplate,
   MessageSquare,
   Square,
+  // Phase 1 블록 아이콘
+  Link,
+  Type,
+  Minus,
+  Share2,
 };
 
 interface SortableBlockProps {
@@ -110,6 +124,64 @@ export function SortableBlock({
             <p className="text-xs text-muted-foreground">테스트용 블록</p>
           </div>
         );
+
+      // Phase 1 블록
+      case BlockType.LINK: {
+        const linkBlock = block as LinkBlock;
+        return (
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">
+              {linkBlock.config.title || '새 링크'}
+            </p>
+            <p className="text-xs text-muted-foreground line-clamp-1">
+              {linkBlock.config.url || 'URL을 입력하세요'}
+            </p>
+          </div>
+        );
+      }
+
+      case BlockType.TEXT: {
+        const textBlock = block as TextBlock;
+        return (
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">텍스트</p>
+            <p className="text-xs text-muted-foreground line-clamp-1">
+              {textBlock.config.content || '텍스트를 입력하세요'}
+            </p>
+          </div>
+        );
+      }
+
+      case BlockType.DIVIDER: {
+        const dividerBlock = block as DividerBlock;
+        const styleLabel = {
+          line: '실선',
+          dashed: '점선',
+          dotted: '도트',
+          space: '여백',
+        }[dividerBlock.config.style];
+        return (
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">구분선</p>
+            <p className="text-xs text-muted-foreground">
+              스타일: {styleLabel}
+            </p>
+          </div>
+        );
+      }
+
+      case BlockType.SOCIAL_ICONS: {
+        const socialBlock = block as SocialIconsBlock;
+        const iconCount = socialBlock.config.icons.length;
+        return (
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">소셜 아이콘</p>
+            <p className="text-xs text-muted-foreground">
+              {iconCount > 0 ? `${iconCount}개의 아이콘` : '아이콘을 추가하세요'}
+            </p>
+          </div>
+        );
+      }
 
       default:
         return (

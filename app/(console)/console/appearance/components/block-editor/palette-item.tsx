@@ -15,6 +15,10 @@ import {
   MessageSquare,
   Square,
   Plus,
+  Link,
+  Type,
+  Minus,
+  Share2,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,11 +26,17 @@ import type { BlockMeta, BlockTypeValue } from '@/lib/public-page/block-types';
 
 /**
  * 아이콘 이름 -> 컴포넌트 매핑
+ * BLOCK_METAS의 icon 문자열과 일치해야 합니다.
  */
 const ICON_MAP: Record<string, LucideIcon> = {
   LayoutTemplate,
   MessageSquare,
   Square,
+  // Phase 1 블록 아이콘
+  Link,
+  Type,
+  Minus,
+  Share2,
 };
 
 interface PaletteItemProps {
