@@ -7,8 +7,8 @@
  */
 
 import { db } from '@/lib/db';
-import { faqDrafts, documents, datasets } from '@/drizzle/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { faqDrafts, documents, datasets, chatbotDatasets } from '@/drizzle/schema';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 import { revalidatePath } from 'next/cache';
 import { generateMarkdown, generateSingleQAMarkdown, type Category, type QAPair } from './utils';
@@ -19,6 +19,7 @@ import { logger } from '@/lib/logger';
 // 타입 정의 (서버 액션에서 사용)
 export interface FAQDraftData {
   id?: string;
+  chatbotId: string; // 필수: 챗봇별 관리
   name: string;
   categories: Category[];
   qaPairs: QAPair[];
@@ -27,6 +28,7 @@ export interface FAQDraftData {
 export interface FAQDraft {
   id: string;
   tenantId: string;
+  chatbotId: string | null; // nullable for migration
   name: string;
   categories: Category[];
   qaPairs: QAPair[];
@@ -34,8 +36,8 @@ export interface FAQDraft {
   updatedAt: Date;
 }
 
-// FAQ 초안 목록 조회
-export async function getFAQDrafts(): Promise<FAQDraft[]> {
+// FAQ 초안 목록 조회 (챗봇별)
+export async function getFAQDrafts(chatbotId: string): Promise<FAQDraft[]> {
   const session = await getSession();
   if (!session?.tenantId) {
     throw new Error('인증이 필요합니다.');
@@ -44,12 +46,18 @@ export async function getFAQDrafts(): Promise<FAQDraft[]> {
   const drafts = await db
     .select()
     .from(faqDrafts)
-    .where(eq(faqDrafts.tenantId, session.tenantId))
+    .where(
+      and(
+        eq(faqDrafts.tenantId, session.tenantId),
+        eq(faqDrafts.chatbotId, chatbotId)
+      )
+    )
     .orderBy(desc(faqDrafts.updatedAt));
 
   return drafts.map((draft) => ({
     id: draft.id,
     tenantId: draft.tenantId,
+    chatbotId: draft.chatbotId,
     name: draft.name,
     categories: (draft.categories as Category[]) || [],
     qaPairs: (draft.qaPairs as QAPair[]) || [],
@@ -76,6 +84,7 @@ export async function getFAQDraft(id: string): Promise<FAQDraft | null> {
   return {
     id: draft.id,
     tenantId: draft.tenantId,
+    chatbotId: draft.chatbotId,
     name: draft.name,
     categories: (draft.categories as Category[]) || [],
     qaPairs: (draft.qaPairs as QAPair[]) || [],
@@ -93,6 +102,10 @@ export async function saveFAQDraft(
     throw new Error('인증이 필요합니다.');
   }
 
+  if (!data.chatbotId) {
+    throw new Error('챗봇 ID가 필요합니다.');
+  }
+
   // 업데이트
   if (data.id) {
     await db
@@ -104,7 +117,11 @@ export async function saveFAQDraft(
         updatedAt: new Date(),
       })
       .where(
-        and(eq(faqDrafts.id, data.id), eq(faqDrafts.tenantId, session.tenantId))
+        and(
+          eq(faqDrafts.id, data.id),
+          eq(faqDrafts.tenantId, session.tenantId),
+          eq(faqDrafts.chatbotId, data.chatbotId) // 챗봇 소유권 확인
+        )
       );
 
     revalidatePath('/console/chatbot/faq');
@@ -116,6 +133,7 @@ export async function saveFAQDraft(
     .insert(faqDrafts)
     .values({
       tenantId: session.tenantId,
+      chatbotId: data.chatbotId,
       name: data.name,
       categories: data.categories,
       qaPairs: data.qaPairs,
@@ -190,7 +208,8 @@ export async function exportAsDocument(
 export async function uploadQAAsDocument(
   draftId: string,
   qaId: string,
-  targetDatasetId?: string // 대상 데이터셋 ID (없으면 기본 데이터셋 사용)
+  targetDatasetId?: string, // 대상 데이터셋 ID
+  chatbotId?: string // 챗봇 ID (targetDatasetId 없을 때 챗봇 연결 데이터셋 사용)
 ): Promise<{ documentId: string; success: boolean; updatedQAPair: QAPair }> {
   const session = await getSession();
   if (!session?.tenantId) {
@@ -252,8 +271,34 @@ export async function uploadQAAsDocument(
     }
     datasetId = targetDataset.id;
     datasetName = targetDataset.name;
+  } else if (chatbotId) {
+    // 챗봇의 연결된 데이터셋 사용 (첫 번째 것)
+    const linkedDatasets = await db
+      .select({ datasetId: chatbotDatasets.datasetId })
+      .from(chatbotDatasets)
+      .where(eq(chatbotDatasets.chatbotId, chatbotId));
+
+    if (linkedDatasets.length === 0) {
+      throw new Error('챗봇에 연결된 데이터셋이 없습니다.');
+    }
+
+    const [linkedDataset] = await db
+      .select({ id: datasets.id, name: datasets.name })
+      .from(datasets)
+      .where(
+        and(
+          eq(datasets.id, linkedDatasets[0].datasetId),
+          eq(datasets.tenantId, session.tenantId)
+        )
+      );
+
+    if (!linkedDataset) {
+      throw new Error('챗봇 연결 데이터셋을 찾을 수 없습니다.');
+    }
+    datasetId = linkedDataset.id;
+    datasetName = linkedDataset.name;
   } else {
-    // 기본 데이터셋 사용
+    // 레거시 호환: 기본 데이터셋 사용 (chatbotId 없는 경우)
     const [defaultDataset] = await db
       .select({ id: datasets.id, name: datasets.name })
       .from(datasets)

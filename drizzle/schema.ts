@@ -199,17 +199,36 @@ export const chatbots = pgTable(
       minScore: 0.5,
     }),
 
-    // 페르소나 설정 (Intent-Aware RAG)
+    // 페르소나 설정 (사용자 편집 가능한 챗봇 성격/태도)
     personaConfig: jsonb('persona_config').default({
       name: 'AI 어시스턴트',
       expertiseArea: '기업 문서 및 FAQ',
       tone: 'friendly',
+      expertiseDescription: null, // AI 생성 또는 사용자 편집
     }),
+
+    // RAG 인덱스 설정 (AI 자동 생성, 사용자 편집 불가)
+    // 데이터셋 콘텐츠 분석 결과로 생성되며, RAG 검색 트리거에 사용
+    ragIndexConfig: jsonb('rag_index_config').default({
+      keywords: [],           // RAG 검색 트리거 키워드
+      includedTopics: [],     // 포함할 주제
+      excludedTopics: [],     // 제외할 주제
+      confidence: null,       // AI 분석 신뢰도 (0-1)
+      lastGeneratedAt: null,  // 마지막 생성 시점
+      documentSampleCount: 0, // 분석에 사용된 문서 샘플 수
+    }),
+
+    // RAG 인덱스 생성 상태 (UI 프로그레스 표시용)
+    // idle: 대기, generating: 생성 중, completed: 완료, failed: 실패
+    ragIndexStatus: text('rag_index_status').default('idle'),
 
     status: text('status').default('active'), // active, inactive
     isDefault: boolean('is_default').default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+    // 콘텐츠 변경 시점 (데이터셋 연결/해제, 문서 추가/삭제 등 RAG에 영향을 주는 변경)
+    // 페르소나 재생성 필요 여부 판단에 사용
+    contentUpdatedAt: timestamp('content_updated_at', { withTimezone: true }),
   },
   (table) => [
     index('idx_chatbots_tenant').on(table.tenantId),
@@ -220,6 +239,55 @@ export const chatbots = pgTable(
     index('idx_chatbots_public_page').on(table.slug, table.publicPageEnabled),
   ]
 );
+
+// ============================================
+// 챗봇 설정 버전 관리
+// Draft/Published 분리로 편집 중인 내용이 즉시 공개되지 않도록 함
+// ============================================
+export const chatbotConfigVersions = pgTable(
+  'chatbot_config_versions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    chatbotId: uuid('chatbot_id')
+      .notNull()
+      .references(() => chatbots.id, { onDelete: 'cascade' }),
+
+    // 버전 타입: draft (편집 중), published (공개), history (이전 발행 이력)
+    versionType: text('version_type').notNull(), // 'draft' | 'published' | 'history'
+
+    // 설정 데이터 (jsonb)
+    publicPageConfig: jsonb('public_page_config').notNull().default({}),
+    widgetConfig: jsonb('widget_config').notNull().default({}),
+
+    // 발행 정보 (published/history 타입에만 해당)
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    publishedBy: uuid('published_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    publishNote: text('publish_note'), // 발행 메모 (선택)
+
+    // 버전 번호 (history 정렬용, 1부터 시작, 발행할 때마다 증가)
+    versionNumber: integer('version_number'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    // 챗봇별 버전 조회 최적화
+    index('idx_config_versions_chatbot').on(table.chatbotId),
+    // 챗봇별 버전 타입으로 조회 (draft/published 빠른 조회)
+    index('idx_config_versions_type').on(table.chatbotId, table.versionType),
+    // 이력 정렬용 (최신 발행 순)
+    index('idx_config_versions_published_at').on(
+      table.chatbotId,
+      table.publishedAt
+    ),
+  ]
+);
+
+// 타입 추론용
+export type ChatbotConfigVersion = typeof chatbotConfigVersions.$inferSelect;
+export type NewChatbotConfigVersion = typeof chatbotConfigVersions.$inferInsert;
 
 // ============================================
 // 챗봇-데이터셋 연결 (N:M)
@@ -481,13 +549,19 @@ export const faqDrafts = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
+    chatbotId: uuid('chatbot_id').references(() => chatbots.id, {
+      onDelete: 'cascade',
+    }), // nullable for migration, will be required in code
     name: text('name').notNull().default('새 FAQ'),
     categories: jsonb('categories').default([]), // { id, name, order }[]
     qaPairs: jsonb('qa_pairs').default([]), // { id, categoryId, question, answer, order }[]
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
-  (table) => [index('idx_faq_drafts_tenant').on(table.tenantId)]
+  (table) => [
+    index('idx_faq_drafts_tenant').on(table.tenantId),
+    index('idx_faq_drafts_chatbot').on(table.chatbotId),
+  ]
 );
 
 // ============================================

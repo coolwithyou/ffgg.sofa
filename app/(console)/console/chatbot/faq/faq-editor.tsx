@@ -8,7 +8,7 @@
 
 import { useState, useCallback, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { saveFAQDraft, deleteFAQDraft, uploadQAAsDocument, unlockQA, type FAQDraft } from './actions';
+import { getFAQDrafts, saveFAQDraft, deleteFAQDraft, uploadQAAsDocument, unlockQA, type FAQDraft } from './actions';
 import { type Category, type QAPair } from './utils';
 import { CategoryList } from './category-list';
 import { QAList } from './qa-list';
@@ -23,27 +23,21 @@ interface Dataset {
   isDefault: boolean;
 }
 
-interface FAQEditorProps {
-  initialDrafts: FAQDraft[];
-}
-
-export function FAQEditor({ initialDrafts }: FAQEditorProps) {
+export function FAQEditor() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { warning, error: showError } = useToast();
   const { currentChatbot } = useCurrentChatbot();
 
+  // 초안 목록 상태 (클라이언트 로드)
+  const [drafts, setDrafts] = useState<FAQDraft[]>([]);
+  const [isLoadingDrafts, setIsLoadingDrafts] = useState(true);
+
   // 현재 편집 중인 초안
-  const [currentDraftId, setCurrentDraftId] = useState<string | null>(
-    initialDrafts[0]?.id || null
-  );
-  const [draftName, setDraftName] = useState(initialDrafts[0]?.name || '새 FAQ');
-  const [categories, setCategories] = useState<Category[]>(
-    initialDrafts[0]?.categories || []
-  );
-  const [qaPairs, setQAPairs] = useState<QAPair[]>(
-    initialDrafts[0]?.qaPairs || []
-  );
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState('새 FAQ');
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [qaPairs, setQAPairs] = useState<QAPair[]>([]);
 
   // 선택된 카테고리
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
@@ -74,36 +68,64 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
     onConfirm: () => {},
   });
 
-  // 데이터셋 목록 로드 (현재 챗봇의 연결된 데이터셋 우선 선택)
+  // 초안 목록 로드 (챗봇별)
+  useEffect(() => {
+    const loadDrafts = async () => {
+      if (!currentChatbot?.id) {
+        setIsLoadingDrafts(false);
+        return;
+      }
+
+      setIsLoadingDrafts(true);
+      try {
+        const loadedDrafts = await getFAQDrafts(currentChatbot.id);
+        setDrafts(loadedDrafts);
+
+        // 첫 번째 초안이 있으면 로드
+        if (loadedDrafts.length > 0) {
+          const firstDraft = loadedDrafts[0];
+          setCurrentDraftId(firstDraft.id);
+          setDraftName(firstDraft.name);
+          setCategories(firstDraft.categories);
+          setQAPairs(firstDraft.qaPairs);
+          if (firstDraft.categories.length > 0) {
+            setSelectedCategoryId(firstDraft.categories[0].id);
+          }
+        } else {
+          // 초안이 없으면 초기화
+          setCurrentDraftId(null);
+          setDraftName('새 FAQ');
+          setCategories([]);
+          setQAPairs([]);
+          setSelectedCategoryId(null);
+        }
+      } catch (error) {
+        console.error('초안 목록 로드 실패:', error);
+        showError('로드 실패', 'FAQ 초안을 불러오는데 실패했습니다.');
+      } finally {
+        setIsLoadingDrafts(false);
+      }
+    };
+
+    loadDrafts();
+  }, [currentChatbot?.id, showError]);
+
+  // 데이터셋 목록 로드 (현재 챗봇의 연결된 데이터셋만 표시)
   useEffect(() => {
     const loadDatasets = async () => {
+      if (!currentChatbot?.id) return;
+
       try {
-        // 전체 데이터셋 목록 조회
-        const datasetsRes = await fetch('/api/datasets');
-        const datasetsData = await datasetsRes.json();
+        // 현재 챗봇에 연결된 데이터셋만 조회
+        const linkedRes = await fetch(`/api/chatbots/${currentChatbot.id}/datasets`);
+        const linkedData = await linkedRes.json();
 
-        if (!datasetsData.datasets) return;
-
-        setDatasets(datasetsData.datasets);
-
-        // 현재 챗봇이 있으면 연결된 데이터셋 조회
-        if (currentChatbot?.id) {
-          const linkedRes = await fetch(`/api/chatbots/${currentChatbot.id}/datasets`);
-          const linkedData = await linkedRes.json();
-
-          // 연결된 데이터셋이 있으면 첫 번째 것을 선택
-          if (linkedData.datasets && linkedData.datasets.length > 0) {
-            setSelectedDatasetId(linkedData.datasets[0].id);
-            return;
-          }
-        }
-
-        // 연결된 데이터셋이 없으면 기본 데이터셋 또는 첫 번째 데이터셋 선택
-        const defaultDs = datasetsData.datasets.find((d: Dataset) => d.isDefault);
-        if (defaultDs) {
-          setSelectedDatasetId(defaultDs.id);
-        } else if (datasetsData.datasets.length > 0) {
-          setSelectedDatasetId(datasetsData.datasets[0].id);
+        if (linkedData.datasets && linkedData.datasets.length > 0) {
+          setDatasets(linkedData.datasets);
+          setSelectedDatasetId(linkedData.datasets[0].id);
+        } else {
+          setDatasets([]);
+          setSelectedDatasetId('');
         }
       } catch (error) {
         console.error('데이터셋 로드 실패:', error);
@@ -126,10 +148,16 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
 
   // 저장
   const handleSave = useCallback(async () => {
+    if (!currentChatbot?.id) {
+      showError('챗봇 선택 필요', '챗봇을 먼저 선택해주세요.');
+      return;
+    }
+
     setIsSaving(true);
     try {
       const result = await saveFAQDraft({
         id: currentDraftId || undefined,
+        chatbotId: currentChatbot.id,
         name: draftName,
         categories,
         qaPairs,
@@ -140,10 +168,11 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
       setLastSaved(new Date());
     } catch (error) {
       console.error('저장 실패:', error);
+      showError('저장 실패', 'FAQ 저장에 실패했습니다.');
     } finally {
       setIsSaving(false);
     }
-  }, [currentDraftId, draftName, categories, qaPairs]);
+  }, [currentDraftId, draftName, categories, qaPairs, currentChatbot?.id, showError]);
 
   // 새 초안 생성
   const handleNewDraft = useCallback(() => {
@@ -309,7 +338,8 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
 
       setUploadingQAId(qaId);
       try {
-        const result = await uploadQAAsDocument(draftId, qaId, datasetId);
+        // chatbotId 전달하여 챗봇 연결 데이터셋 사용
+        const result = await uploadQAAsDocument(draftId, qaId, datasetId, currentChatbot?.id);
         // 로컬 상태 업데이트
         setQAPairs(
           qaPairs.map((qa) =>
@@ -324,7 +354,7 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
         setUploadingQAId(null);
       }
     },
-    [currentDraftId, qaPairs, handleSave, selectedDatasetId]
+    [currentDraftId, qaPairs, handleSave, selectedDatasetId, currentChatbot?.id]
   );
 
   // Q&A 잠금 해제
@@ -408,12 +438,16 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
             <p className="text-sm font-medium text-foreground">저장된 FAQ</p>
           </div>
           <div className="max-h-60 overflow-y-auto p-2">
-            {initialDrafts.length === 0 ? (
+            {isLoadingDrafts ? (
+              <div className="flex items-center justify-center px-2 py-4">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            ) : drafts.length === 0 ? (
               <p className="px-2 py-4 text-center text-sm text-muted-foreground">
                 저장된 FAQ가 없습니다
               </p>
             ) : (
-              initialDrafts.map((draft) => (
+              drafts.map((draft) => (
                 <div
                   key={draft.id}
                   className={`flex items-center justify-between rounded-md px-3 py-2 ${

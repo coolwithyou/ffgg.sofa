@@ -113,6 +113,34 @@
       "when": 1767328777401,
       "tag": "0015_ancient_kronos",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1767402609355,
+      "tag": "0016_young_toro",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1767404534509,
+      "tag": "0017_chief_big_bertha",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1767420777805,
+      "tag": "0018_add_chatbot_id_to_faq_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1767421068875,
+      "tag": "0019_perfect_paibok",
+      "breakpoints": true
     }
   ]
 }

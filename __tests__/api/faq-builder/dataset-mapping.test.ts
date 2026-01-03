@@ -454,9 +454,9 @@ describe('FAQ Builder Dataset Mapping', () => {
       // 방어적 로직 시뮬레이션
       const eventDatasetId: string | null = null;
 
-      let resolvedDatasetId = eventDatasetId;
+      let resolvedDatasetId: string | null = eventDatasetId;
       if (!resolvedDatasetId) {
-        resolvedDatasetId = documentDatasetId;
+        resolvedDatasetId = documentDatasetId as string | null;
         warnings.push(`datasetId fallback from documents table: ${documentId}`);
       }
 
