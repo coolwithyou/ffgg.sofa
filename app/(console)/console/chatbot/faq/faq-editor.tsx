@@ -15,6 +15,7 @@ import { QAList } from './qa-list';
 import { FAQPreview } from './faq-preview';
 import { ExportModal } from './export-modal';
 import { useToast } from '@/components/ui/toast';
+import { useCurrentChatbot } from '../../hooks/use-console-state';
 // 데이터셋 타입
 interface Dataset {
   id: string;
@@ -30,6 +31,7 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { warning, error: showError } = useToast();
+  const { currentChatbot } = useCurrentChatbot();
 
   // 현재 편집 중인 초안
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(
@@ -72,26 +74,44 @@ export function FAQEditor({ initialDrafts }: FAQEditorProps) {
     onConfirm: () => {},
   });
 
-  // 데이터셋 목록 로드
+  // 데이터셋 목록 로드 (현재 챗봇의 연결된 데이터셋 우선 선택)
   useEffect(() => {
-    fetch('/api/datasets')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.datasets) {
-          setDatasets(data.datasets);
-          // 기본 데이터셋이 있으면 선택
-          const defaultDs = data.datasets.find((d: Dataset) => d.isDefault);
-          if (defaultDs) {
-            setSelectedDatasetId(defaultDs.id);
-          } else if (data.datasets.length > 0) {
-            setSelectedDatasetId(data.datasets[0].id);
+    const loadDatasets = async () => {
+      try {
+        // 전체 데이터셋 목록 조회
+        const datasetsRes = await fetch('/api/datasets');
+        const datasetsData = await datasetsRes.json();
+
+        if (!datasetsData.datasets) return;
+
+        setDatasets(datasetsData.datasets);
+
+        // 현재 챗봇이 있으면 연결된 데이터셋 조회
+        if (currentChatbot?.id) {
+          const linkedRes = await fetch(`/api/chatbots/${currentChatbot.id}/datasets`);
+          const linkedData = await linkedRes.json();
+
+          // 연결된 데이터셋이 있으면 첫 번째 것을 선택
+          if (linkedData.datasets && linkedData.datasets.length > 0) {
+            setSelectedDatasetId(linkedData.datasets[0].id);
+            return;
           }
         }
-      })
-      .catch((error) => {
+
+        // 연결된 데이터셋이 없으면 기본 데이터셋 또는 첫 번째 데이터셋 선택
+        const defaultDs = datasetsData.datasets.find((d: Dataset) => d.isDefault);
+        if (defaultDs) {
+          setSelectedDatasetId(defaultDs.id);
+        } else if (datasetsData.datasets.length > 0) {
+          setSelectedDatasetId(datasetsData.datasets[0].id);
+        }
+      } catch (error) {
         console.error('데이터셋 로드 실패:', error);
-      });
-  }, []);
+      }
+    };
+
+    loadDatasets();
+  }, [currentChatbot?.id]);
 
   // 자동 저장 (2초 디바운스)
   useEffect(() => {
