@@ -8,7 +8,7 @@
 
 import { db } from '@/lib/db';
 import { faqDrafts, documents, datasets, chatbotDatasets } from '@/drizzle/schema';
-import { eq, and, desc, inArray, or, isNull } from 'drizzle-orm';
+import { eq, and, desc, isNull } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 import { revalidatePath } from 'next/cache';
 import { generateMarkdown, generateSingleQAMarkdown, type Category, type QAPair } from './utils';
@@ -43,18 +43,26 @@ export async function getFAQDrafts(chatbotId: string): Promise<FAQDraft[]> {
     throw new Error('인증이 필요합니다.');
   }
 
-  // 마이그레이션 호환: chatbotId가 일치하거나 NULL인 경우 모두 포함
-  // (기존 데이터는 chatbot_id가 NULL일 수 있음)
+  // 점진적 마이그레이션: chatbot_id가 NULL인 기존 초안을 현재 챗봇에 자동 할당
+  // (첫 번째로 FAQ 페이지를 연 챗봇이 기존 데이터를 상속받음)
+  await db
+    .update(faqDrafts)
+    .set({ chatbotId: chatbotId, updatedAt: new Date() })
+    .where(
+      and(
+        eq(faqDrafts.tenantId, session.tenantId),
+        isNull(faqDrafts.chatbotId)
+      )
+    );
+
+  // 현재 챗봇의 초안만 조회 (엄격한 격리)
   const drafts = await db
     .select()
     .from(faqDrafts)
     .where(
       and(
         eq(faqDrafts.tenantId, session.tenantId),
-        or(
-          eq(faqDrafts.chatbotId, chatbotId),
-          isNull(faqDrafts.chatbotId)
-        )
+        eq(faqDrafts.chatbotId, chatbotId)
       )
     )
     .orderBy(desc(faqDrafts.updatedAt));
