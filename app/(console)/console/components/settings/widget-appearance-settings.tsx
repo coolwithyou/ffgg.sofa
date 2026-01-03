@@ -1,18 +1,9 @@
 'use client';
 
 import { useWidgetConfig } from '../../hooks/use-console-state';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
-
-/**
- * 프리셋 색상 팔레트
- */
-const COLOR_PRESETS = {
-  primary: ['#3B82F6', '#8B5CF6', '#EC4899', '#10B981', '#F59E0B', '#EF4444'],
-  background: ['#ffffff', '#f9fafb', '#1f2937', '#111827', '#0f172a'],
-  text: ['#1f2937', '#374151', '#f9fafb', '#ffffff', '#6b7280'],
-};
+import { ColorPicker, COLOR_PRESETS } from '@/components/ui/color-picker';
+import { StyleSlider } from '@/components/ui/style-slider';
 
 /**
  * 폰트 옵션
@@ -24,64 +15,14 @@ const FONT_OPTIONS = [
   { value: "'Spoqa Han Sans Neo', sans-serif", label: 'Spoqa Han Sans' },
 ];
 
-interface ColorPickerProps {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  presets: string[];
-}
-
-/**
- * 컬러 피커 컴포넌트
- */
-function ColorPicker({ label, value, onChange, presets }: ColorPickerProps) {
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <div className="flex items-center gap-2">
-        <div className="relative">
-          <input
-            type="color"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="h-10 w-10 cursor-pointer rounded-lg border border-border"
-          />
-        </div>
-        <Input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-24 font-mono text-sm uppercase"
-          maxLength={7}
-        />
-      </div>
-      <div className="flex gap-1">
-        {presets.map((preset) => (
-          <button
-            key={preset}
-            type="button"
-            onClick={() => onChange(preset)}
-            className={`h-6 w-6 rounded-md border transition-transform hover:scale-110 ${
-              value.toLowerCase() === preset.toLowerCase()
-                ? 'border-primary ring-2 ring-primary ring-offset-1'
-                : 'border-border'
-            }`}
-            style={{ backgroundColor: preset }}
-            title={preset}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /**
  * 위젯 외관 설정
  *
  * - 주요 색상 (ColorPicker + 프리셋)
  * - 배경 색상
  * - 텍스트 색상
- * - 모서리 둥글기 (Slider: 0-32px)
- * - 버튼 크기 (Slider: 40-80px)
+ * - 모서리 둥글기 (StyleSlider: 0-32px)
+ * - 버튼 크기 (StyleSlider: 40-80px)
  * - 폰트 선택
  */
 export function WidgetAppearanceSettings() {
@@ -115,40 +56,26 @@ export function WidgetAppearanceSettings() {
       />
 
       {/* 모서리 둥글기 */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label>모서리 둥글기</Label>
-          <span className="text-sm text-muted-foreground">
-            {theme.borderRadius ?? 16}px
-          </span>
-        </div>
-        <Slider
-          value={[theme.borderRadius ?? 16]}
-          onValueChange={([value]: number[]) => updateWidgetTheme({ borderRadius: value })}
-          min={0}
-          max={32}
-          step={2}
-          className="py-2"
-        />
-      </div>
+      <StyleSlider
+        label="모서리 둥글기"
+        value={theme.borderRadius ?? 16}
+        onChange={(value) => updateWidgetTheme({ borderRadius: value })}
+        min={0}
+        max={32}
+        step={2}
+        defaultValue={16}
+      />
 
       {/* 버튼 크기 */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label>버튼 크기</Label>
-          <span className="text-sm text-muted-foreground">
-            {theme.buttonSize ?? 56}px
-          </span>
-        </div>
-        <Slider
-          value={[theme.buttonSize ?? 56]}
-          onValueChange={([value]: number[]) => updateWidgetTheme({ buttonSize: value })}
-          min={40}
-          max={80}
-          step={4}
-          className="py-2"
-        />
-      </div>
+      <StyleSlider
+        label="버튼 크기"
+        value={theme.buttonSize ?? 56}
+        onChange={(value) => updateWidgetTheme({ buttonSize: value })}
+        min={40}
+        max={80}
+        step={4}
+        defaultValue={56}
+      />
 
       {/* 폰트 선택 */}
       <div className="space-y-2">

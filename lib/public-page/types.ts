@@ -47,7 +47,8 @@ export interface HeaderConfig {
  * 테마 설정
  */
 export interface ThemeConfig {
-  /** 배경색 (hex) */
+  // === 기본 색상 ===
+  /** 외부 배경색 (hex) - 페이지 전체 배경 */
   backgroundColor: string;
   /** 주요 강조색 (hex) */
   primaryColor: string;
@@ -55,6 +56,28 @@ export interface ThemeConfig {
   textColor: string;
   /** 폰트 패밀리 (선택) */
   fontFamily?: string;
+
+  // === 배경 이미지 ===
+  /** 배경 이미지 URL */
+  backgroundImage?: string;
+  /** 배경 이미지 크기 */
+  backgroundSize?: 'cover' | 'contain' | 'auto';
+  /** 배경 이미지 반복 */
+  backgroundRepeat?: 'no-repeat' | 'repeat' | 'repeat-x' | 'repeat-y';
+  /** 배경 이미지 위치 */
+  backgroundPosition?: string;
+
+  // === 카드 스타일 ===
+  /** 카드/콘텐츠 영역 배경색 (hex) */
+  cardBackgroundColor?: string;
+  /** 카드 그림자 강도 (0-100, 0은 없음) */
+  cardShadow?: number;
+  /** 카드 상하 마진 (px) */
+  cardMarginY?: number;
+  /** 카드 좌우 패딩 (px) */
+  cardPaddingX?: number;
+  /** 카드 모서리 둥글기 (px) */
+  cardBorderRadius?: number;
 }
 
 /**
@@ -80,9 +103,20 @@ export const DEFAULT_PUBLIC_PAGE_CONFIG: PublicPageConfig = {
     showBrandName: true,
   },
   theme: {
-    backgroundColor: '#ffffff',
+    // 기본 색상
+    backgroundColor: '#f9fafb',
     primaryColor: '#3B82F6',
     textColor: '#1f2937',
+    // 배경 이미지 (기본 없음)
+    backgroundSize: 'cover',
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'center',
+    // 카드 스타일
+    cardBackgroundColor: '#ffffff',
+    cardShadow: 20,
+    cardMarginY: 32,
+    cardPaddingX: 16,
+    cardBorderRadius: 16,
   },
   seo: {
     title: '',

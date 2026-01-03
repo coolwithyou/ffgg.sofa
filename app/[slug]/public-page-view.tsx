@@ -28,6 +28,17 @@ import { EditableBlockWrapper } from './components/editable-block-wrapper';
 import { DropIndicator } from './components/drop-indicator';
 import { useBlockEditorContextSafe } from '@/app/(console)/console/page/components/block-editor/dnd-context';
 
+/**
+ * 그림자 강도(0-100)를 CSS box-shadow 값으로 변환
+ */
+function getCardShadow(intensity: number = 20): string {
+  if (intensity === 0) return 'none';
+  const opacity = (intensity / 100) * 0.25;
+  const blur = 4 + (intensity / 100) * 20;
+  const spread = blur / 4;
+  return `0 ${spread}px ${blur}px rgba(0, 0, 0, ${opacity})`;
+}
+
 interface PublicPageViewProps {
   chatbotId: string;
   chatbotName: string;
@@ -192,29 +203,54 @@ export function PublicPageView({
     );
   };
 
+  // 배경 이미지 스타일
+  const backgroundStyles: React.CSSProperties = {
+    ...themeStyles,
+    backgroundColor: 'var(--pp-bg-color)',
+    color: 'var(--pp-text-color)',
+    fontFamily: 'var(--pp-font-family)',
+    ...(theme.backgroundImage && {
+      backgroundImage: `url(${theme.backgroundImage})`,
+      backgroundSize: theme.backgroundSize ?? 'cover',
+      backgroundRepeat: theme.backgroundRepeat ?? 'no-repeat',
+      backgroundPosition: theme.backgroundPosition ?? 'center',
+    }),
+  };
+
+  // 카드 컨테이너 스타일
+  const cardContainerStyles: React.CSSProperties = {
+    backgroundColor: theme.cardBackgroundColor ?? '#ffffff',
+    boxShadow: getCardShadow(theme.cardShadow ?? 20),
+    marginTop: `${theme.cardMarginY ?? 32}px`,
+    marginBottom: `${theme.cardMarginY ?? 32}px`,
+    paddingLeft: `${theme.cardPaddingX ?? 16}px`,
+    paddingRight: `${theme.cardPaddingX ?? 16}px`,
+    paddingTop: '32px',
+    paddingBottom: '32px',
+    borderRadius: `${theme.cardBorderRadius ?? 16}px`,
+  };
+
   return (
     <main
       className="min-h-screen"
-      style={{
-        ...themeStyles,
-        backgroundColor: 'var(--pp-bg-color)',
-        color: 'var(--pp-text-color)',
-        fontFamily: 'var(--pp-font-family)',
-      }}
+      style={backgroundStyles}
       onClick={handleBackgroundClick}
     >
-      <div className="mx-auto max-w-2xl px-4 py-8">
-        {/* 편집 모드에서는 상단 여백 확보 (툴바 표시용) */}
-        <div className={isEditing ? 'pt-12' : ''}>
-          {renderBlocks()}
-        </div>
+      <div className="mx-auto max-w-2xl px-4">
+        {/* 카드 컨테이너 */}
+        <div style={cardContainerStyles}>
+          {/* 편집 모드에서는 상단 여백 확보 (툴바 표시용) */}
+          <div className={isEditing ? 'pt-12' : ''}>
+            {renderBlocks()}
+          </div>
 
-        {/* 푸터 (브랜드 표시) */}
-        {header.showBrandName && (
-          <footer className="pt-8 text-center">
-            <p className="text-sm opacity-50">Powered by SOFA</p>
-          </footer>
-        )}
+          {/* 푸터 (브랜드 표시) */}
+          {header.showBrandName && (
+            <footer className="pt-8 text-center">
+              <p className="text-sm opacity-50">Powered by SOFA</p>
+            </footer>
+          )}
+        </div>
       </div>
     </main>
   );
