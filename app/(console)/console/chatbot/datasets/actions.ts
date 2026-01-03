@@ -7,8 +7,10 @@
 
 import { revalidatePath } from 'next/cache';
 import { validateSession } from '@/lib/auth/session';
-import { db, datasets } from '@/lib/db';
+import { db, datasets, chatbotDatasets } from '@/lib/db';
 import { eq, and, desc } from 'drizzle-orm';
+import { triggerRagIndexGeneration } from '@/lib/chat/rag-index-generator';
+import { logger } from '@/lib/logger';
 
 export interface DatasetSummary {
   id: string;
@@ -189,7 +191,31 @@ export async function deleteDataset(
       return { success: false, error: '기본 데이터셋은 삭제할 수 없습니다.' };
     }
 
+    // 삭제 전에 연결된 챗봇 목록 조회 (cascade 삭제 전에 저장)
+    const connections = await db
+      .select({ chatbotId: chatbotDatasets.chatbotId })
+      .from(chatbotDatasets)
+      .where(eq(chatbotDatasets.datasetId, id));
+    const connectedChatbotIds = connections.map((c) => c.chatbotId);
+
     await db.delete(datasets).where(eq(datasets.id, id));
+
+    logger.info('Dataset deleted via server action', {
+      datasetId: id,
+      datasetName: existing.name,
+      tenantId: session.tenantId,
+      connectedChatbots: connectedChatbotIds.length,
+    });
+
+    // 연결되어 있던 챗봇들의 RAG 인덱스 재생성 트리거 (fire-and-forget)
+    for (const chatbotId of connectedChatbotIds) {
+      triggerRagIndexGeneration(chatbotId, session.tenantId).catch((error) => {
+        logger.error('Failed to trigger RAG regeneration after dataset delete', error, {
+          chatbotId,
+          datasetId: id,
+        });
+      });
+    }
 
     revalidatePath('/console/chatbot/datasets');
     return { success: true };

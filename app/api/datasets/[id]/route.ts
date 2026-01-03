@@ -12,6 +12,8 @@ import { eq, and, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { datasets, documents, chunks, chatbotDatasets } from '@/drizzle/schema';
 import { validateSession } from '@/lib/auth/session';
+import { triggerRagIndexGeneration } from '@/lib/chat/rag-index-generator';
+import { logger } from '@/lib/logger';
 
 // 데이터셋 수정 스키마
 const updateDatasetSchema = z.object({
@@ -271,6 +273,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 /**
  * DELETE /api/datasets/:id - 데이터셋 삭제
+ *
+ * 삭제 후 연결되어 있던 챗봇들의 RAG 인덱스 재생성을 트리거합니다.
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
@@ -303,11 +307,36 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // 삭제 전에 연결된 챗봇 목록 조회 (cascade 삭제 전에 저장)
+    const connections = await db
+      .select({ chatbotId: chatbotDatasets.chatbotId })
+      .from(chatbotDatasets)
+      .where(eq(chatbotDatasets.datasetId, id));
+    const connectedChatbotIds = connections.map((c) => c.chatbotId);
+
     // 데이터셋 삭제 (CASCADE로 documents, chunks, chatbot_datasets도 함께 삭제)
     await db.delete(datasets).where(eq(datasets.id, id));
 
+    logger.info('Dataset deleted via API', {
+      datasetId: id,
+      datasetName: existingDataset.name,
+      tenantId,
+      connectedChatbots: connectedChatbotIds.length,
+    });
+
+    // 연결되어 있던 챗봇들의 RAG 인덱스 재생성 트리거 (fire-and-forget)
+    for (const chatbotId of connectedChatbotIds) {
+      triggerRagIndexGeneration(chatbotId, tenantId).catch((error) => {
+        logger.error('Failed to trigger RAG regeneration after dataset delete', error, {
+          chatbotId,
+          datasetId: id,
+        });
+      });
+    }
+
     return NextResponse.json({
       message: '데이터셋이 삭제되었습니다',
+      triggeredRagRegeneration: connectedChatbotIds.length > 0,
     });
   } catch (error) {
     console.error('Dataset delete error:', error);

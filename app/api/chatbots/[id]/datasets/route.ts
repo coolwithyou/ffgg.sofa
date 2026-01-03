@@ -11,6 +11,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { chatbots, chatbotDatasets, datasets } from '@/drizzle/schema';
 import { validateSession } from '@/lib/auth/session';
+import { triggerRagIndexGeneration } from '@/lib/chat/rag-index-generator';
 
 // 데이터셋 연결 스키마
 const linkDatasetSchema = z.object({
@@ -160,6 +161,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       datasetId,
       weight,
     });
+
+    // 콘텐츠 변경 시점 갱신 (페르소나 재생성 필요 여부 판단에 사용)
+    await db
+      .update(chatbots)
+      .set({ contentUpdatedAt: new Date() })
+      .where(eq(chatbots.id, id));
+
+    // 데이터셋 연결 시 RAG 인덱스 백그라운드 재생성 트리거
+    triggerRagIndexGeneration(id, tenantId);
 
     return NextResponse.json(
       {
