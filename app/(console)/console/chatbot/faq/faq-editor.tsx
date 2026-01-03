@@ -15,7 +15,7 @@ import { QAList } from './qa-list';
 import { FAQPreview } from './faq-preview';
 import { ExportModal } from './export-modal';
 import { useToast } from '@/components/ui/toast';
-import { useCurrentChatbot } from '../../hooks/use-console-state';
+import { useCurrentChatbot, useTenantSettings } from '../../hooks/use-console-state';
 // 데이터셋 타입
 interface Dataset {
   id: string;
@@ -28,6 +28,7 @@ export function FAQEditor() {
   const [isPending, startTransition] = useTransition();
   const { warning, error: showError } = useToast();
   const { currentChatbot } = useCurrentChatbot();
+  const { isAdvancedModeEnabled } = useTenantSettings();
 
   // 초안 목록 상태 (클라이언트 로드)
   const [drafts, setDrafts] = useState<FAQDraft[]>([]);
@@ -515,6 +516,7 @@ export function FAQEditor() {
             datasets={datasets}
             selectedDatasetId={selectedDatasetId}
             onDatasetChange={setSelectedDatasetId}
+            showDatasetSelector={isAdvancedModeEnabled() && datasets.length > 1}
           />
         </div>
 

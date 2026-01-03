@@ -31,6 +31,8 @@ interface QAListProps {
   datasets: Dataset[];
   selectedDatasetId: string;
   onDatasetChange: (datasetId: string) => void;
+  /** 데이터셋 선택 UI 표시 여부 (고급 모드 + 다중 데이터셋) */
+  showDatasetSelector?: boolean;
 }
 
 export function QAList({
@@ -44,6 +46,7 @@ export function QAList({
   datasets,
   selectedDatasetId,
   onDatasetChange,
+  showDatasetSelector = false,
 }: QAListProps) {
   // 최신순 정렬 (order 내림차순) - 새로 추가한 아이템이 상단에 표시
   const sortedQAPairs = useMemo(
@@ -71,27 +74,25 @@ export function QAList({
           </button>
         </div>
 
-        {/* 데이터셋 선택 */}
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-muted-foreground">업로드 대상:</label>
-          <select
-            value={selectedDatasetId}
-            onChange={(e) => onDatasetChange(e.target.value)}
-            className="flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            {datasets.length === 0 ? (
-              <option value="">데이터셋 로딩 중...</option>
-            ) : (
-              datasets.map((dataset) => (
+        {/* 데이터셋 선택 - 고급 모드 + 다중 데이터셋일 때만 표시 */}
+        {showDatasetSelector && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground">업로드 대상:</label>
+            <select
+              value={selectedDatasetId}
+              onChange={(e) => onDatasetChange(e.target.value)}
+              className="flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              {datasets.map((dataset) => (
                 <option key={dataset.id} value={dataset.id}>
                   {dataset.name}
                   {dataset.isDefault ? ' (기본)' : ''}
                 </option>
-              ))
-            )}
-          </select>
-          <FolderIcon className="h-4 w-4 text-muted-foreground" />
-        </div>
+              ))}
+            </select>
+            <FolderIcon className="h-4 w-4 text-muted-foreground" />
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
