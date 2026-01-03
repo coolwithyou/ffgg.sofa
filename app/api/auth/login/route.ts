@@ -33,7 +33,7 @@ const loginSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     // 1. Rate Limiting
-    const rateLimitResult = await withRateLimit(request, 'auth', 'basic');
+    const rateLimitResult = await withRateLimit(request, 'auth', 'login');
     if (rateLimitResult) return rateLimitResult;
 
     // 2. 요청 파싱
@@ -225,6 +225,7 @@ export async function POST(request: NextRequest) {
       accountReactivated, // 삭제 예정이었던 계정이 재활성화된 경우 true
     });
   } catch (error) {
+    console.error('[LOGIN ERROR]', error);
     return errorResponse(error);
   }
 }

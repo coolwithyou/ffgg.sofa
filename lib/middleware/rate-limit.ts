@@ -176,7 +176,7 @@ export async function checkRateLimit(
 export async function withRateLimit(
   request: NextRequest,
   type: 'api' | 'auth' | 'upload' | 'chat',
-  tier: 'basic' | 'standard' | 'premium' = 'basic',
+  tier: 'basic' | 'standard' | 'premium' | 'login' | 'register' | 'passwordReset' = 'basic',
   identifier?: string
 ): Promise<NextResponse | null> {
   // 식별자: IP 또는 사용자 ID

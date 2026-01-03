@@ -14,6 +14,7 @@
 
 import { db, accessLogs } from '@/lib/db';
 import { createHash } from 'crypto';
+import { logger } from '@/lib/logger';
 
 // 액션 타입 정의
 export const AuditAction = {
@@ -219,19 +220,24 @@ export function logLoginSuccess(
 
 /**
  * 로그인 실패 기록 (헬퍼)
+ * 존재하지 않는 사용자일 수 있으므로 DB 저장 실패 시 로그만 기록
  */
-export function logLoginFailure(
+export async function logLoginFailure(
   request: Request,
   email: string,
   reason?: string
 ): Promise<void> {
-  // 실패 시에도 기록 (userId는 이메일로 대체)
-  return createAuditLogFromRequest(request, {
-    userId: email, // 존재하지 않는 사용자일 수 있음
-    action: AuditAction.LOGIN_FAILURE,
-    targetType: TargetType.SESSION,
-    result: 'failure',
-    details: reason ? { reason } : undefined,
+  // 로그인 실패는 콘솔에 기록 (보안 모니터링용)
+  const ipAddress =
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    'unknown';
+
+  logger.warn('Login failure', {
+    email,
+    reason,
+    ipAddress,
+    userAgent: request.headers.get('user-agent') || undefined,
   });
 }
 
