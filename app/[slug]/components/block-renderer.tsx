@@ -16,6 +16,13 @@ import { LinkBlock } from './link-block';
 import { TextBlock } from './text-block';
 import { DividerBlock } from './divider-block';
 import { SocialIconsBlock } from './social-icons-block';
+// Phase 2 블록
+import { ImageBlock } from './image-block';
+import { ImageCarouselBlock } from './image-carousel-block';
+import { VideoBlock } from './video-block';
+import { FaqAccordionBlock } from './faq-accordion-block';
+import { ContactFormBlock } from './contact-form-block';
+import { MapBlock } from './map-block';
 import {
   BlockType,
   type Block,
@@ -23,6 +30,13 @@ import {
   type TextBlock as TextBlockType,
   type DividerBlock as DividerBlockType,
   type SocialIconsBlock as SocialIconsBlockType,
+  // Phase 2 블록 타입
+  type ImageBlock as ImageBlockType,
+  type ImageCarouselBlock as ImageCarouselBlockType,
+  type VideoBlock as VideoBlockType,
+  type FaqAccordionBlock as FaqAccordionBlockType,
+  type ContactFormBlock as ContactFormBlockType,
+  type MapBlock as MapBlockType,
 } from '@/lib/public-page/block-types';
 import type { PublicPageConfig } from '@/lib/public-page/types';
 
@@ -82,6 +96,7 @@ export function BlockRenderer({
           textColor={theme.textColor}
           minHeight={chatbot.minHeight}
           maxHeight={chatbot.maxHeight}
+          isEditing={isEditing}
         />
       );
 
@@ -133,6 +148,80 @@ export function BlockRenderer({
           size={socialIconsBlock.config.size}
           style={socialIconsBlock.config.style}
           primaryColor={theme.primaryColor}
+        />
+      );
+    }
+
+    // Phase 2 블록
+    case BlockType.IMAGE: {
+      const imageBlock = block as ImageBlockType;
+      return (
+        <ImageBlock
+          src={imageBlock.config.src}
+          alt={imageBlock.config.alt}
+          caption={imageBlock.config.caption}
+          aspectRatio={imageBlock.config.aspectRatio}
+          linkUrl={imageBlock.config.linkUrl}
+        />
+      );
+    }
+
+    case BlockType.IMAGE_CAROUSEL: {
+      const carouselBlock = block as ImageCarouselBlockType;
+      return (
+        <ImageCarouselBlock
+          images={carouselBlock.config.images}
+          autoPlay={carouselBlock.config.autoPlay}
+          interval={carouselBlock.config.interval}
+          showDots={carouselBlock.config.showDots}
+          showArrows={carouselBlock.config.showArrows}
+        />
+      );
+    }
+
+    case BlockType.VIDEO: {
+      const videoBlock = block as VideoBlockType;
+      return (
+        <VideoBlock
+          provider={videoBlock.config.provider}
+          videoId={videoBlock.config.videoId}
+          autoPlay={videoBlock.config.autoPlay}
+          showControls={videoBlock.config.showControls}
+        />
+      );
+    }
+
+    case BlockType.FAQ_ACCORDION: {
+      const faqBlock = block as FaqAccordionBlockType;
+      return (
+        <FaqAccordionBlock
+          items={faqBlock.config.items}
+          allowMultiple={faqBlock.config.allowMultiple}
+          defaultOpen={faqBlock.config.defaultOpen}
+        />
+      );
+    }
+
+    case BlockType.CONTACT_FORM: {
+      const formBlock = block as ContactFormBlockType;
+      return (
+        <ContactFormBlock
+          fields={formBlock.config.fields}
+          submitText={formBlock.config.submitText}
+          successMessage={formBlock.config.successMessage}
+        />
+      );
+    }
+
+    case BlockType.MAP: {
+      const mapBlock = block as MapBlockType;
+      return (
+        <MapBlock
+          provider={mapBlock.config.provider}
+          address={mapBlock.config.address}
+          lat={mapBlock.config.lat}
+          lng={mapBlock.config.lng}
+          zoom={mapBlock.config.zoom}
         />
       );
     }

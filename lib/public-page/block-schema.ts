@@ -20,6 +20,13 @@ export const blockTypeSchema = z.enum([
   BlockType.TEXT,
   BlockType.DIVIDER,
   BlockType.SOCIAL_ICONS,
+  // Phase 2 블록
+  BlockType.IMAGE,
+  BlockType.IMAGE_CAROUSEL,
+  BlockType.VIDEO,
+  BlockType.FAQ_ACCORDION,
+  BlockType.CONTACT_FORM,
+  BlockType.MAP,
 ]);
 
 /**
@@ -183,6 +190,142 @@ export const socialIconsBlockSchema = z.object({
   }),
 });
 
+// ============================================
+// Phase 2 블록 스키마
+// ============================================
+
+/**
+ * 이미지 블록 비율 스키마
+ */
+export const imageBlockAspectRatioSchema = z.enum(['1:1', '4:3', '16:9', 'auto']);
+
+/**
+ * 이미지 블록 스키마
+ */
+export const imageBlockSchema = z.object({
+  ...baseBlockFields,
+  type: z.literal(BlockType.IMAGE),
+  config: z.object({
+    src: z.string(),
+    alt: z.string(),
+    caption: z.string().optional(),
+    aspectRatio: imageBlockAspectRatioSchema,
+    linkUrl: z.string().optional(),
+  }),
+});
+
+/**
+ * 캐러셀 이미지 아이템 스키마
+ */
+export const carouselImageItemSchema = z.object({
+  src: z.string(),
+  alt: z.string(),
+  linkUrl: z.string().optional(),
+});
+
+/**
+ * 이미지 캐러셀 블록 스키마
+ */
+export const imageCarouselBlockSchema = z.object({
+  ...baseBlockFields,
+  type: z.literal(BlockType.IMAGE_CAROUSEL),
+  config: z.object({
+    images: z.array(carouselImageItemSchema),
+    autoPlay: z.boolean(),
+    interval: z.number().int().min(1000).max(10000),
+    showDots: z.boolean(),
+    showArrows: z.boolean(),
+  }),
+});
+
+/**
+ * 비디오 제공자 스키마
+ */
+export const videoProviderSchema = z.enum(['youtube', 'vimeo']);
+
+/**
+ * 비디오 블록 스키마
+ */
+export const videoBlockSchema = z.object({
+  ...baseBlockFields,
+  type: z.literal(BlockType.VIDEO),
+  config: z.object({
+    provider: videoProviderSchema,
+    videoId: z.string(),
+    autoPlay: z.boolean(),
+    showControls: z.boolean(),
+  }),
+});
+
+/**
+ * FAQ 아이템 스키마
+ */
+export const faqItemSchema = z.object({
+  question: z.string(),
+  answer: z.string(),
+});
+
+/**
+ * FAQ 아코디언 블록 스키마
+ */
+export const faqAccordionBlockSchema = z.object({
+  ...baseBlockFields,
+  type: z.literal(BlockType.FAQ_ACCORDION),
+  config: z.object({
+    items: z.array(faqItemSchema),
+    allowMultiple: z.boolean(),
+    defaultOpen: z.number().int().optional(),
+  }),
+});
+
+/**
+ * 폼 필드 타입 스키마
+ */
+export const contactFormFieldTypeSchema = z.enum(['text', 'email', 'textarea']);
+
+/**
+ * 폼 필드 스키마
+ */
+export const contactFormFieldSchema = z.object({
+  type: contactFormFieldTypeSchema,
+  label: z.string(),
+  required: z.boolean(),
+  placeholder: z.string().optional(),
+});
+
+/**
+ * 연락처 폼 블록 스키마
+ */
+export const contactFormBlockSchema = z.object({
+  ...baseBlockFields,
+  type: z.literal(BlockType.CONTACT_FORM),
+  config: z.object({
+    fields: z.array(contactFormFieldSchema),
+    submitText: z.string(),
+    successMessage: z.string(),
+  }),
+});
+
+/**
+ * 지도 제공자 스키마
+ */
+export const mapProviderSchema = z.enum(['google', 'kakao', 'naver']);
+
+/**
+ * 지도 블록 스키마
+ */
+export const mapBlockSchema = z.object({
+  ...baseBlockFields,
+  type: z.literal(BlockType.MAP),
+  config: z.object({
+    provider: mapProviderSchema,
+    address: z.string(),
+    lat: z.number().optional(),
+    lng: z.number().optional(),
+    zoom: z.number().int().min(1).max(21),
+  }),
+});
+
 /**
  * 블록 유니온 스키마 (discriminatedUnion)
  *
@@ -197,6 +340,13 @@ export const blockSchema = z.discriminatedUnion('type', [
   textBlockSchema,
   dividerBlockSchema,
   socialIconsBlockSchema,
+  // Phase 2 블록
+  imageBlockSchema,
+  imageCarouselBlockSchema,
+  videoBlockSchema,
+  faqAccordionBlockSchema,
+  contactFormBlockSchema,
+  mapBlockSchema,
 ]);
 
 /**
@@ -241,3 +391,10 @@ export type LinkBlockSchemaType = z.infer<typeof linkBlockSchema>;
 export type TextBlockSchemaType = z.infer<typeof textBlockSchema>;
 export type DividerBlockSchemaType = z.infer<typeof dividerBlockSchema>;
 export type SocialIconsBlockSchemaType = z.infer<typeof socialIconsBlockSchema>;
+// Phase 2 블록 타입
+export type ImageBlockSchemaType = z.infer<typeof imageBlockSchema>;
+export type ImageCarouselBlockSchemaType = z.infer<typeof imageCarouselBlockSchema>;
+export type VideoBlockSchemaType = z.infer<typeof videoBlockSchema>;
+export type FaqAccordionBlockSchemaType = z.infer<typeof faqAccordionBlockSchema>;
+export type ContactFormBlockSchemaType = z.infer<typeof contactFormBlockSchema>;
+export type MapBlockSchemaType = z.infer<typeof mapBlockSchema>;

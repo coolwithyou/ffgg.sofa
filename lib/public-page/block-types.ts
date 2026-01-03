@@ -19,6 +19,13 @@ export const BlockType = {
   TEXT: 'text',
   DIVIDER: 'divider',
   SOCIAL_ICONS: 'social_icons',
+  // Phase 2 블록
+  IMAGE: 'image',
+  IMAGE_CAROUSEL: 'image_carousel',
+  VIDEO: 'video',
+  FAQ_ACCORDION: 'faq_accordion',
+  CONTACT_FORM: 'contact_form',
+  MAP: 'map',
 } as const;
 
 export type BlockTypeValue = (typeof BlockType)[keyof typeof BlockType];
@@ -29,6 +36,8 @@ export type BlockTypeValue = (typeof BlockType)[keyof typeof BlockType];
 export const BlockCategory = {
   ESSENTIAL: 'essential',
   CONTENT: 'content',
+  MEDIA: 'media',
+  INTERACTIVE: 'interactive',
 } as const;
 
 export type BlockCategoryValue =
@@ -228,6 +237,179 @@ export interface SocialIconsBlock extends BaseBlock {
   };
 }
 
+// ============================================
+// Phase 2 블록 타입 정의
+// ============================================
+
+/**
+ * 이미지 블록 비율
+ */
+export type ImageBlockAspectRatio = '1:1' | '4:3' | '16:9' | 'auto';
+
+/**
+ * 이미지 블록
+ * - 이미지 표시
+ * - 비율 선택 및 링크 연결 지원
+ */
+export interface ImageBlock extends BaseBlock {
+  type: typeof BlockType.IMAGE;
+  config: {
+    /** 이미지 URL */
+    src: string;
+    /** 대체 텍스트 */
+    alt: string;
+    /** 캡션 (선택) */
+    caption?: string;
+    /** 가로세로 비율 */
+    aspectRatio: ImageBlockAspectRatio;
+    /** 클릭 시 이동 URL (선택) */
+    linkUrl?: string;
+  };
+}
+
+/**
+ * 캐러셀 이미지 아이템
+ */
+export interface CarouselImageItem {
+  /** 이미지 URL */
+  src: string;
+  /** 대체 텍스트 */
+  alt: string;
+  /** 클릭 시 이동 URL (선택) */
+  linkUrl?: string;
+}
+
+/**
+ * 이미지 캐러셀 블록
+ * - 여러 이미지를 슬라이드로 표시
+ * - 자동 재생 및 네비게이션 지원
+ */
+export interface ImageCarouselBlock extends BaseBlock {
+  type: typeof BlockType.IMAGE_CAROUSEL;
+  config: {
+    /** 이미지 목록 */
+    images: CarouselImageItem[];
+    /** 자동 재생 여부 */
+    autoPlay: boolean;
+    /** 자동 재생 간격 (ms) */
+    interval: number;
+    /** 도트 네비게이션 표시 */
+    showDots: boolean;
+    /** 화살표 네비게이션 표시 */
+    showArrows: boolean;
+  };
+}
+
+/**
+ * 비디오 제공자
+ */
+export type VideoProvider = 'youtube' | 'vimeo';
+
+/**
+ * 비디오 블록
+ * - YouTube, Vimeo 임베드 지원
+ */
+export interface VideoBlock extends BaseBlock {
+  type: typeof BlockType.VIDEO;
+  config: {
+    /** 비디오 제공자 */
+    provider: VideoProvider;
+    /** 비디오 ID */
+    videoId: string;
+    /** 자동 재생 여부 */
+    autoPlay: boolean;
+    /** 컨트롤 표시 여부 */
+    showControls: boolean;
+  };
+}
+
+/**
+ * FAQ 아이템
+ */
+export interface FaqItem {
+  /** 질문 */
+  question: string;
+  /** 답변 */
+  answer: string;
+}
+
+/**
+ * FAQ 아코디언 블록
+ * - 접기/펼치기 가능한 FAQ 목록
+ */
+export interface FaqAccordionBlock extends BaseBlock {
+  type: typeof BlockType.FAQ_ACCORDION;
+  config: {
+    /** FAQ 항목 목록 */
+    items: FaqItem[];
+    /** 여러 항목 동시 열기 허용 */
+    allowMultiple: boolean;
+    /** 기본 열림 항목 인덱스 (선택) */
+    defaultOpen?: number;
+  };
+}
+
+/**
+ * 폼 필드 타입
+ */
+export type ContactFormFieldType = 'text' | 'email' | 'textarea';
+
+/**
+ * 폼 필드
+ */
+export interface ContactFormField {
+  /** 필드 타입 */
+  type: ContactFormFieldType;
+  /** 라벨 */
+  label: string;
+  /** 필수 여부 */
+  required: boolean;
+  /** 플레이스홀더 (선택) */
+  placeholder?: string;
+}
+
+/**
+ * 연락처 폼 블록
+ * - 커스텀 폼 필드
+ * - 폼 제출 처리
+ */
+export interface ContactFormBlock extends BaseBlock {
+  type: typeof BlockType.CONTACT_FORM;
+  config: {
+    /** 폼 필드 목록 */
+    fields: ContactFormField[];
+    /** 제출 버튼 텍스트 */
+    submitText: string;
+    /** 성공 메시지 */
+    successMessage: string;
+  };
+}
+
+/**
+ * 지도 제공자
+ */
+export type MapProvider = 'google' | 'kakao' | 'naver';
+
+/**
+ * 지도 블록
+ * - Google/Kakao/Naver 지도 임베드
+ */
+export interface MapBlock extends BaseBlock {
+  type: typeof BlockType.MAP;
+  config: {
+    /** 지도 제공자 */
+    provider: MapProvider;
+    /** 주소 */
+    address: string;
+    /** 위도 (선택) */
+    lat?: number;
+    /** 경도 (선택) */
+    lng?: number;
+    /** 줌 레벨 */
+    zoom: number;
+  };
+}
+
 /**
  * 블록 유니온 타입
  */
@@ -238,7 +420,14 @@ export type Block =
   | LinkBlock
   | TextBlock
   | DividerBlock
-  | SocialIconsBlock;
+  | SocialIconsBlock
+  // Phase 2 블록
+  | ImageBlock
+  | ImageCarouselBlock
+  | VideoBlock
+  | FaqAccordionBlock
+  | ContactFormBlock
+  | MapBlock;
 
 /**
  * 블록 메타데이터 (UI 표시용)
@@ -317,6 +506,55 @@ export const BLOCK_METAS: Record<BlockTypeValue, BlockMeta> = {
     description: 'SNS 링크 아이콘을 추가합니다',
     category: BlockCategory.CONTENT,
     icon: 'Share2',
+    maxInstances: 1, // 페이지당 1개
+  },
+  // Phase 2 블록 메타데이터
+  [BlockType.IMAGE]: {
+    type: BlockType.IMAGE,
+    name: '이미지',
+    description: '이미지를 추가합니다',
+    category: BlockCategory.MEDIA,
+    icon: 'Image',
+    maxInstances: 0, // 무제한
+  },
+  [BlockType.IMAGE_CAROUSEL]: {
+    type: BlockType.IMAGE_CAROUSEL,
+    name: '이미지 캐러셀',
+    description: '여러 이미지를 슬라이드로 표시합니다',
+    category: BlockCategory.MEDIA,
+    icon: 'Images',
+    maxInstances: 0, // 무제한
+  },
+  [BlockType.VIDEO]: {
+    type: BlockType.VIDEO,
+    name: '비디오',
+    description: 'YouTube, Vimeo 영상을 임베드합니다',
+    category: BlockCategory.MEDIA,
+    icon: 'Video',
+    maxInstances: 0, // 무제한
+  },
+  [BlockType.FAQ_ACCORDION]: {
+    type: BlockType.FAQ_ACCORDION,
+    name: 'FAQ 아코디언',
+    description: '자주 묻는 질문을 접기/펼치기로 표시합니다',
+    category: BlockCategory.INTERACTIVE,
+    icon: 'HelpCircle',
+    maxInstances: 0, // 무제한
+  },
+  [BlockType.CONTACT_FORM]: {
+    type: BlockType.CONTACT_FORM,
+    name: '연락처 폼',
+    description: '문의 폼을 추가합니다',
+    category: BlockCategory.INTERACTIVE,
+    icon: 'Mail',
+    maxInstances: 1, // 페이지당 1개
+  },
+  [BlockType.MAP]: {
+    type: BlockType.MAP,
+    name: '지도',
+    description: '지도를 임베드합니다',
+    category: BlockCategory.MEDIA,
+    icon: 'MapPin',
     maxInstances: 1, // 페이지당 1개
   },
 };
@@ -459,6 +697,134 @@ export function createSocialIconsBlock(
   };
 }
 
+// ============================================
+// Phase 2 블록 팩토리 함수
+// ============================================
+
+/**
+ * 이미지 블록 생성
+ */
+export function createImageBlock(id: string, order: number): ImageBlock {
+  return {
+    id,
+    type: BlockType.IMAGE,
+    order,
+    visible: true,
+    config: {
+      src: '',
+      alt: '',
+      caption: '',
+      aspectRatio: 'auto',
+      linkUrl: '',
+    },
+  };
+}
+
+/**
+ * 이미지 캐러셀 블록 생성
+ */
+export function createImageCarouselBlock(
+  id: string,
+  order: number
+): ImageCarouselBlock {
+  return {
+    id,
+    type: BlockType.IMAGE_CAROUSEL,
+    order,
+    visible: true,
+    config: {
+      images: [],
+      autoPlay: false,
+      interval: 3000,
+      showDots: true,
+      showArrows: true,
+    },
+  };
+}
+
+/**
+ * 비디오 블록 생성
+ */
+export function createVideoBlock(id: string, order: number): VideoBlock {
+  return {
+    id,
+    type: BlockType.VIDEO,
+    order,
+    visible: true,
+    config: {
+      provider: 'youtube',
+      videoId: '',
+      autoPlay: false,
+      showControls: true,
+    },
+  };
+}
+
+/**
+ * FAQ 아코디언 블록 생성
+ */
+export function createFaqAccordionBlock(
+  id: string,
+  order: number
+): FaqAccordionBlock {
+  return {
+    id,
+    type: BlockType.FAQ_ACCORDION,
+    order,
+    visible: true,
+    config: {
+      items: [
+        { question: '질문을 입력하세요', answer: '답변을 입력하세요' },
+      ],
+      allowMultiple: false,
+      defaultOpen: 0,
+    },
+  };
+}
+
+/**
+ * 연락처 폼 블록 생성
+ */
+export function createContactFormBlock(
+  id: string,
+  order: number
+): ContactFormBlock {
+  return {
+    id,
+    type: BlockType.CONTACT_FORM,
+    order,
+    visible: true,
+    config: {
+      fields: [
+        { type: 'text', label: '이름', required: true, placeholder: '이름을 입력하세요' },
+        { type: 'email', label: '이메일', required: true, placeholder: '이메일을 입력하세요' },
+        { type: 'textarea', label: '메시지', required: true, placeholder: '메시지를 입력하세요' },
+      ],
+      submitText: '보내기',
+      successMessage: '메시지가 전송되었습니다.',
+    },
+  };
+}
+
+/**
+ * 지도 블록 생성
+ */
+export function createMapBlock(id: string, order: number): MapBlock {
+  return {
+    id,
+    type: BlockType.MAP,
+    order,
+    visible: true,
+    config: {
+      provider: 'kakao',
+      address: '',
+      lat: undefined,
+      lng: undefined,
+      zoom: 15,
+    },
+  };
+}
+
 /**
  * 블록 타입에 따른 팩토리 함수 매핑
  */
@@ -470,6 +836,13 @@ export const BLOCK_FACTORIES: Record<BlockTypeValue, BlockFactory> = {
   [BlockType.TEXT]: createTextBlock,
   [BlockType.DIVIDER]: createDividerBlock,
   [BlockType.SOCIAL_ICONS]: createSocialIconsBlock,
+  // Phase 2 블록
+  [BlockType.IMAGE]: createImageBlock,
+  [BlockType.IMAGE_CAROUSEL]: createImageCarouselBlock,
+  [BlockType.VIDEO]: createVideoBlock,
+  [BlockType.FAQ_ACCORDION]: createFaqAccordionBlock,
+  [BlockType.CONTACT_FORM]: createContactFormBlock,
+  [BlockType.MAP]: createMapBlock,
 };
 
 /**
@@ -505,13 +878,16 @@ export function canAddBlock(blocks: Block[], type: BlockTypeValue): boolean {
 
 /**
  * 블록 순서 정규화
- * - order 값을 0부터 연속된 값으로 재정렬
+ * - order 값을 0부터 연속된 값으로 재할당
+ * - 배열의 현재 순서를 유지하고 order 값만 업데이트
+ *
+ * 주의: 이 함수는 배열을 정렬하지 않습니다.
+ * 드래그앤드롭, 삭제 등의 작업 후 배열 순서가 이미 올바르게
+ * 설정된 상태에서 호출되어야 합니다.
  */
 export function normalizeBlockOrder(blocks: Block[]): Block[] {
-  return [...blocks]
-    .sort((a, b) => a.order - b.order)
-    .map((block, index) => ({
-      ...block,
-      order: index,
-    }));
+  return blocks.map((block, index) => ({
+    ...block,
+    order: index,
+  }));
 }

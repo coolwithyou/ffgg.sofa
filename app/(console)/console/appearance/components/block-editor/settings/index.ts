@@ -52,6 +52,13 @@ import { LinkBlockSettings } from './link-settings';
 import { TextBlockSettings } from './text-settings';
 import { DividerBlockSettings } from './divider-settings';
 import { SocialIconsBlockSettings } from './social-icons-settings';
+// Phase 2 블록 설정
+import { ImageBlockSettings } from './image-settings';
+import { ImageCarouselBlockSettings } from './image-carousel-settings';
+import { VideoBlockSettings } from './video-settings';
+import { FaqAccordionBlockSettings } from './faq-accordion-settings';
+import { ContactFormBlockSettings } from './contact-form-settings';
+import { MapBlockSettings } from './map-settings';
 
 /**
  * 블록 타입별 설정 컴포넌트 레지스트리
@@ -76,6 +83,13 @@ export const BLOCK_SETTINGS_COMPONENTS: Partial<
   [BlockType.TEXT]: TextBlockSettings,
   [BlockType.DIVIDER]: DividerBlockSettings,
   [BlockType.SOCIAL_ICONS]: SocialIconsBlockSettings,
+  // Phase 2 블록
+  [BlockType.IMAGE]: ImageBlockSettings,
+  [BlockType.IMAGE_CAROUSEL]: ImageCarouselBlockSettings,
+  [BlockType.VIDEO]: VideoBlockSettings,
+  [BlockType.FAQ_ACCORDION]: FaqAccordionBlockSettings,
+  [BlockType.CONTACT_FORM]: ContactFormBlockSettings,
+  [BlockType.MAP]: MapBlockSettings,
 };
 
 // 개별 설정 컴포넌트 re-export
@@ -87,3 +101,10 @@ export { LinkBlockSettings } from './link-settings';
 export { TextBlockSettings } from './text-settings';
 export { DividerBlockSettings } from './divider-settings';
 export { SocialIconsBlockSettings } from './social-icons-settings';
+// Phase 2 블록
+export { ImageBlockSettings } from './image-settings';
+export { ImageCarouselBlockSettings } from './image-carousel-settings';
+export { VideoBlockSettings } from './video-settings';
+export { FaqAccordionBlockSettings } from './faq-accordion-settings';
+export { ContactFormBlockSettings } from './contact-form-settings';
+export { MapBlockSettings } from './map-settings';
