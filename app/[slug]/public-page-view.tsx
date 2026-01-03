@@ -25,6 +25,8 @@ import {
 } from '@/lib/public-page/block-types';
 import { BlockRenderer } from './components/block-renderer';
 import { EditableBlockWrapper } from './components/editable-block-wrapper';
+import { DropIndicator } from './components/drop-indicator';
+import { useBlockEditorContextSafe } from '@/app/(console)/console/page/components/block-editor/dnd-context';
 
 interface PublicPageViewProps {
   chatbotId: string;
@@ -44,6 +46,10 @@ interface PublicPageViewProps {
   onDeleteBlock?: (id: string) => void;
   /** 블록 순서 변경 콜백 */
   onReorderBlocks?: (activeId: string, overId: string) => void;
+  /** 블록 위로 이동 콜백 */
+  onMoveBlockUp?: (id: string) => void;
+  /** 블록 아래로 이동 콜백 */
+  onMoveBlockDown?: (id: string) => void;
 }
 
 export function PublicPageView({
@@ -58,6 +64,8 @@ export function PublicPageView({
   onToggleVisibility,
   onDeleteBlock,
   onReorderBlocks,
+  onMoveBlockUp,
+  onMoveBlockDown,
 }: PublicPageViewProps) {
   const { header, theme, chatbot } = config;
 
@@ -115,6 +123,14 @@ export function PublicPageView({
     isEditing,
   };
 
+  // 드래그 컨텍스트 (편집 모드에서만 사용)
+  const dragContext = useBlockEditorContextSafe();
+  const activeItem = dragContext?.activeItem;
+  const overBlockId = dragContext?.overBlockId;
+
+  // 팔레트에서 드래그 중인지 확인
+  const isDraggingFromPalette = activeItem?.source === 'palette' && activeItem.blockType;
+
   /**
    * 블록 콘텐츠 렌더링
    * - 편집 모드: EditableBlockWrapper로 감싸기 (외부 BlockEditorProvider 필요)
@@ -135,19 +151,42 @@ export function PublicPageView({
         items={blocks.map((b) => b.id)}
         strategy={verticalListSortingStrategy}
       >
+        {/* 편집 모드: 블록 간 간격은 일반 뷰와 동일하게 유지 (툴바는 호버 시 오버레이로 표시) */}
         <div className="space-y-4">
-          {blocks.map((block) => (
-            <EditableBlockWrapper
-              key={block.id}
-              block={block}
-              isSelected={selectedBlockId === block.id}
-              onSelect={() => onSelectBlock?.(block.id)}
-              onToggleVisibility={() => onToggleVisibility?.(block.id)}
-              onDelete={() => onDeleteBlock?.(block.id)}
-            >
-              <BlockRenderer block={block} {...blockRendererProps} />
-            </EditableBlockWrapper>
-          ))}
+          {blocks.map((block, index) => {
+            // 현재 블록이 드래그 오버 중인 블록인지 확인
+            const showDropIndicator = isDraggingFromPalette && overBlockId === block.id;
+
+            return (
+              <div key={block.id}>
+                {/* 드롭 인디케이터 (이 블록 위치에 삽입될 때 표시) */}
+                {showDropIndicator && activeItem?.blockType && (
+                  <div className="mb-4">
+                    <DropIndicator blockType={activeItem.blockType} />
+                  </div>
+                )}
+
+                <EditableBlockWrapper
+                  block={block}
+                  isSelected={selectedBlockId === block.id}
+                  isFirst={index === 0}
+                  isLast={index === blocks.length - 1}
+                  onSelect={() => onSelectBlock?.(block.id)}
+                  onToggleVisibility={() => onToggleVisibility?.(block.id)}
+                  onDelete={() => onDeleteBlock?.(block.id)}
+                  onMoveUp={() => onMoveBlockUp?.(block.id)}
+                  onMoveDown={() => onMoveBlockDown?.(block.id)}
+                >
+                  <BlockRenderer block={block} {...blockRendererProps} />
+                </EditableBlockWrapper>
+              </div>
+            );
+          })}
+
+          {/* 블록이 없거나 캔버스 끝에 드래그 중일 때 인디케이터 표시 */}
+          {isDraggingFromPalette && !overBlockId && activeItem?.blockType && (
+            <DropIndicator blockType={activeItem.blockType} />
+          )}
         </div>
       </SortableContext>
     );
@@ -165,8 +204,8 @@ export function PublicPageView({
       onClick={handleBackgroundClick}
     >
       <div className="mx-auto max-w-2xl px-4 py-8">
-        {/* 편집 모드 좌측 여백 확보 (편집 컨트롤용) */}
-        <div className={isEditing ? 'pl-12' : ''}>
+        {/* 편집 모드에서는 상단 여백 확보 (툴바 표시용) */}
+        <div className={isEditing ? 'pt-12' : ''}>
           {renderBlocks()}
         </div>
 

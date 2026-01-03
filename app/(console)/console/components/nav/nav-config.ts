@@ -1,8 +1,8 @@
 import {
   LayoutDashboard,
   Bot,
-  Palette,
-  Settings,
+  FileText,
+  Code,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -23,16 +23,17 @@ export interface NavItem {
 }
 
 /**
- * 1차 네비게이션 메뉴 구성
+ * 1차 네비게이션 메뉴 구성 (아웃풋 중심)
  *
  * 구조:
  * - Dashboard: 챗봇 개요, 최근 활동
- * - Chatbot: AI 설정, 문서, 데이터셋, FAQ, 검수 (챗봇 핵심 기능)
- * - Appearance: Page(공개 페이지), Widget(위젯 설정)
- * - Settings: 일반, 연동(카카오 등)
+ * - Chatbot: AI 설정, 문서, 데이터셋, FAQ, 검수, 연동(카카오) - 챗봇 응답 생성 관련
+ * - Page: 공개 페이지 디자인 및 설정 - 페이지라는 결과물 중심
+ * - Widget: 위젯 디자인 및 임베드 설정 - 위젯이라는 결과물 중심
  *
- * Note: AI 설정은 RAG 파이프라인의 핵심 게이트 역할을 하므로
- * 챗봇 섹션 최상단에 배치하여 중요도를 높임
+ * 설계 원칙:
+ * - 고객이 보는 "결과물(Output)" 중심으로 메뉴 구성
+ * - 관련 기능을 한 곳에 모아 탐색 비용 감소
  */
 export const navItems: NavItem[] = [
   {
@@ -51,24 +52,25 @@ export const navItems: NavItem[] = [
       { id: 'datasets', label: '데이터셋', href: '/console/chatbot/datasets' },
       { id: 'faq', label: 'FAQ', href: '/console/chatbot/faq' },
       { id: 'review', label: '검수', href: '/console/chatbot/review' },
+      { id: 'settings', label: '기본 설정', href: '/console/chatbot/settings' },
+      { id: 'integrations', label: '연동', href: '/console/chatbot/integrations' },
     ],
   },
   {
-    id: 'appearance',
-    label: '디자인',
-    icon: Palette,
+    id: 'page',
+    label: '페이지',
+    icon: FileText,
     subItems: [
-      { id: 'page', label: '공개 페이지', href: '/console/appearance' },
-      { id: 'widget', label: '위젯', href: '/console/appearance/widget' },
+      { id: 'design', label: '디자인', href: '/console/page' },
     ],
   },
   {
-    id: 'settings',
-    label: '설정',
-    icon: Settings,
+    id: 'widget',
+    label: '위젯',
+    icon: Code,
     subItems: [
-      { id: 'general', label: '일반', href: '/console/settings' },
-      { id: 'integrations', label: '연동', href: '/console/settings/integrations' },
+      { id: 'design', label: '디자인', href: '/console/widget' },
+      { id: 'embed', label: '임베드', href: '/console/widget/embed' },
     ],
   },
 ];

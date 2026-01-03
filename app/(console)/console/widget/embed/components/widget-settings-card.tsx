@@ -368,10 +368,10 @@ export function WidgetSettingsCard({
         <p className="text-sm text-muted-foreground">
           더 자세한 위젯 디자인 설정은{' '}
           <a
-            href="/console/appearance/widget"
+            href="/console/widget"
             className="text-primary hover:underline"
           >
-            디자인 → 위젯
+            위젯 → 디자인
           </a>{' '}
           메뉴에서 변경할 수 있습니다.
         </p>

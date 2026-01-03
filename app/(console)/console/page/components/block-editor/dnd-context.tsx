@@ -58,6 +58,8 @@ interface BlockEditorContextValue {
   activeItem: ActiveDragItem | null;
   /** 드롭 영역 위에 있는지 여부 */
   isOverCanvas: boolean;
+  /** 현재 드래그 오버 중인 블록 ID (삽입 위치 표시용) */
+  overBlockId: string | null;
 }
 
 const BlockEditorContext = createContext<BlockEditorContextValue | null>(null);
@@ -73,6 +75,14 @@ export function useBlockEditorContext(): BlockEditorContextValue {
     );
   }
   return context;
+}
+
+/**
+ * 블록 에디터 컨텍스트 훅 (옵셔널)
+ * Provider 외부에서도 안전하게 사용 가능
+ */
+export function useBlockEditorContextSafe(): BlockEditorContextValue | null {
+  return useContext(BlockEditorContext);
 }
 
 /**
@@ -96,6 +106,7 @@ export function BlockEditorProvider({
 }: BlockEditorProviderProps) {
   const [activeItem, setActiveItem] = useState<ActiveDragItem | null>(null);
   const [isOverCanvas, setIsOverCanvas] = useState(false);
+  const [overBlockId, setOverBlockId] = useState<string | null>(null);
 
   // 센서 설정
   const sensors = useSensors(
@@ -130,7 +141,15 @@ export function BlockEditorProvider({
   // 드래그 오버
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const { over } = event;
-    setIsOverCanvas(over?.id === 'canvas-droppable' || over?.data.current?.sortable !== undefined);
+    const isOnCanvas = over?.id === 'canvas-droppable' || over?.data.current?.sortable !== undefined;
+    setIsOverCanvas(isOnCanvas);
+
+    // 블록 위에 드래그 중인 경우 해당 블록 ID 저장
+    if (over && over.data.current?.sortable !== undefined) {
+      setOverBlockId(over.id as string);
+    } else {
+      setOverBlockId(null);
+    }
   }, []);
 
   // 드래그 종료
@@ -138,6 +157,7 @@ export function BlockEditorProvider({
     (event: DragEndEvent) => {
       setActiveItem(null);
       setIsOverCanvas(false);
+      setOverBlockId(null);
       onDragEnd(event);
     },
     [onDragEnd]
@@ -147,10 +167,11 @@ export function BlockEditorProvider({
   const handleDragCancel = useCallback(() => {
     setActiveItem(null);
     setIsOverCanvas(false);
+    setOverBlockId(null);
   }, []);
 
   return (
-    <BlockEditorContext.Provider value={{ activeItem, isOverCanvas }}>
+    <BlockEditorContext.Provider value={{ activeItem, isOverCanvas, overBlockId }}>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}

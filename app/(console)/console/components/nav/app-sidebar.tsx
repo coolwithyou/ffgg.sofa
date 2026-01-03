@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronsUpDown, LogOut, Settings, User } from 'lucide-react';
+import { ChevronsUpDown, LogOut, Settings2, User } from 'lucide-react';
 
 import {
   Sidebar,
@@ -259,15 +259,40 @@ function NavMain() {
 }
 
 /**
+ * 사용자 정보 타입
+ */
+interface UserProfile {
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+}
+
+/**
  * 사용자 메뉴 (SidebarFooter)
  */
 function NavUser() {
-  // TODO: 실제 사용자 정보로 교체
-  const user = {
-    name: '사용자',
-    email: 'user@example.com',
-    avatar: '',
-  };
+  const [user, setUser] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    fetch('/api/user/profile')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user) {
+          setUser({
+            name: data.user.name || '사용자',
+            email: data.user.email || '',
+            avatarUrl: data.user.avatarUrl,
+          });
+        }
+      })
+      .catch(() => {
+        // 프로필 로드 실패 시 기본값 유지
+      });
+  }, []);
+
+  const displayName = user?.name || '사용자';
+  const displayEmail = user?.email || '';
+  const avatarUrl = user?.avatarUrl || '';
 
   return (
     <SidebarMenu>
@@ -279,15 +304,15 @@ function NavUser() {
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Avatar className="size-8 rounded-lg">
-                <AvatarImage src={user.avatar} alt={user.name} />
+                <AvatarImage src={avatarUrl} alt={displayName} />
                 <AvatarFallback className="rounded-lg">
-                  {user.name.charAt(0).toUpperCase()}
+                  {displayName.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">{user.name}</span>
+                <span className="truncate font-semibold">{displayName}</span>
                 <span className="truncate text-xs text-muted-foreground">
-                  {user.email}
+                  {displayEmail}
                 </span>
               </div>
               <ChevronsUpDown className="ml-auto size-4" />
@@ -302,34 +327,40 @@ function NavUser() {
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="size-8 rounded-lg">
-                  <AvatarImage src={user.avatar} alt={user.name} />
+                  <AvatarImage src={avatarUrl} alt={displayName} />
                   <AvatarFallback className="rounded-lg">
-                    {user.name.charAt(0).toUpperCase()}
+                    {displayName.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">{user.name}</span>
+                  <span className="truncate font-semibold">{displayName}</span>
                   <span className="truncate text-xs text-muted-foreground">
-                    {user.email}
+                    {displayEmail}
                   </span>
                 </div>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <User className="mr-2 size-4" />
-                프로필
+              <DropdownMenuItem asChild>
+                <Link href="/console/account/profile">
+                  <User className="mr-2 size-4" />
+                  계정 설정
+                </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Settings className="mr-2 size-4" />
-                설정
+              <DropdownMenuItem asChild>
+                <Link href="/console/account/subscription">
+                  <Settings2 className="mr-2 size-4" />
+                  구독 관리
+                </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <LogOut className="mr-2 size-4" />
-              로그아웃
+            <DropdownMenuItem asChild>
+              <Link href="/api/auth/logout">
+                <LogOut className="mr-2 size-4" />
+                로그아웃
+              </Link>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

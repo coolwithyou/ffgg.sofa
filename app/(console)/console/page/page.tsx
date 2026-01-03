@@ -19,9 +19,9 @@ import {
 } from '@/lib/public-page/block-types';
 
 /**
- * Appearance (Page) 에디터
+ * 페이지 디자인 에디터
  *
- * 기존 Console Editor의 메인 기능
+ * 퍼블릭 페이지의 블록 기반 디자인 편집기
  * 2-컬럼 레이아웃:
  * - 좌측: 디바이스 프레임 프리뷰 + 블록 캔버스
  * - 우측: 설정 패널 (블록 팔레트 탭 포함)
@@ -29,7 +29,7 @@ import {
  * BlockEditorProvider로 전체를 감싸서
  * 팔레트 → 캔버스 간 드래그앤드롭을 지원합니다.
  */
-export default function AppearancePage() {
+export default function PageDesignPage() {
   const { isLoading } = useConsole();
   const { blocks, addBlock, reorderBlocks } = useBlocks();
 

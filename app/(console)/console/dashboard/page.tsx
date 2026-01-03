@@ -190,10 +190,10 @@ export default async function ConsoleDashboardPage() {
             description="데이터셋 연결 및 설정"
           />
           <QuickAction
-            href="/console/settings"
+            href="/console/chatbot/settings"
             icon={SettingsIcon}
-            title="설정 관리"
-            description="카카오 연동, 위젯 설정"
+            title="챗봇 설정"
+            description="기본 설정, 공개 설정"
           />
         </div>
       </div>

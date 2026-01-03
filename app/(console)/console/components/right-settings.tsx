@@ -1,16 +1,16 @@
 'use client';
 
-import Link from 'next/link';
 import { useMemo } from 'react';
-import { useConsole, useConsoleMode, useCurrentChatbot } from '../hooks/use-console-state';
-import { useAutoSaveContext } from '../hooks/use-auto-save';
+import { useConsoleMode, useCurrentChatbot } from '../hooks/use-console-state';
 import { useBlocks } from '../hooks/use-blocks';
+import { type Block } from '@/lib/public-page/block-types';
 import { HeaderSettings } from './settings/header-settings';
 import { ThemeSettings } from './settings/theme-settings';
 import { SeoSettings } from './settings/seo-settings';
 import { ChatbotSettings } from './settings/chatbot-settings';
-import { BlockPalette } from '../appearance/components/block-editor/block-palette';
-import { BlockSettingsPanel } from '../appearance/components/block-editor/block-settings-panel';
+import { PublishStatusCard } from './publish-status-card';
+import { BlockPalette } from '../page/components/block-editor/block-palette';
+import { BlockSettingsPanel } from '../page/components/block-editor/block-settings-panel';
 import {
   Accordion,
   AccordionContent,
@@ -18,16 +18,12 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/toast';
 import { Separator } from '@/components/ui/separator';
 import {
   FileText,
   Palette,
   Search,
   MessageSquare,
-  ExternalLink,
-  Rocket,
   LayoutGrid,
   Settings,
 } from 'lucide-react';
@@ -48,50 +44,6 @@ import {
 export function RightSettings() {
   const { mode } = useConsoleMode();
   const { currentChatbot } = useCurrentChatbot();
-  const { saveStatus, saveNow } = useAutoSaveContext();
-  const { success, error: showError } = useToast();
-  const { reloadChatbots } = useConsole();
-
-  // 발행 핸들러
-  const handlePublish = async () => {
-    if (!currentChatbot) return;
-
-    // 저장 중이면 완료될 때까지 대기
-    if (saveStatus === 'saving') {
-      await saveNow();
-    }
-
-    // 이미 공개된 상태면 페이지로 이동
-    if (currentChatbot.publicPageEnabled) {
-      window.open(`/${currentChatbot.slug}`, '_blank');
-      return;
-    }
-
-    try {
-      // POST /api/chatbots/:id/public-page 호출하여 활성화
-      const response = await fetch(
-        `/api/chatbots/${currentChatbot.id}/public-page`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled: true }),
-        }
-      );
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || '발행에 실패했습니다');
-      }
-
-      // 챗봇 목록 새로고침
-      await reloadChatbots();
-
-      success('발행 완료', `${currentChatbot.name} 페이지가 공개되었습니다.`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '발행 중 오류가 발생했습니다';
-      showError('발행 실패', message);
-    }
-  };
 
   if (!currentChatbot) {
     return (
@@ -101,14 +53,29 @@ export function RightSettings() {
     );
   }
 
-  // Widget 모드는 Phase 6에서 구현
+  // Widget 모드
   if (mode === 'widget') {
     return (
-      <aside className="w-80 border-l border-border bg-card p-4">
-        <h2 className="text-lg font-semibold text-foreground">위젯 설정</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          위젯 설정은 Phase 6에서 구현됩니다.
-        </p>
+      <aside className="flex w-80 flex-col overflow-hidden border-l border-border bg-card">
+        {/* 헤더 */}
+        <div className="border-b border-border p-4">
+          <h2 className="text-lg font-semibold text-foreground">위젯 설정</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {currentChatbot.name}의 임베드 위젯을 커스터마이징하세요.
+          </p>
+        </div>
+
+        {/* 발행 상태 카드 */}
+        <div className="border-b border-border p-4">
+          <PublishStatusCard mode="widget" />
+        </div>
+
+        {/* 추가 위젯 설정은 Phase 6에서 구현 */}
+        <div className="flex-1 p-4">
+          <p className="text-sm text-muted-foreground">
+            위젯 상세 설정은 추후 업데이트됩니다.
+          </p>
+        </div>
       </aside>
     );
   }
@@ -132,23 +99,9 @@ export function RightSettings() {
         </p>
       </div>
 
-      {/* 액션 버튼 */}
-      <div className="flex gap-2 border-b border-border p-4">
-        <Button variant="outline" size="sm" className="flex-1" asChild>
-          <Link href={`/${currentChatbot.slug}`} target="_blank">
-            <ExternalLink className="mr-2 h-4 w-4" />
-            미리보기
-          </Link>
-        </Button>
-        <Button
-          size="sm"
-          className="flex-1"
-          onClick={handlePublish}
-          disabled={saveStatus === 'saving'}
-        >
-          <Rocket className="mr-2 h-4 w-4" />
-          {currentChatbot.publicPageEnabled ? '공개됨' : '발행하기'}
-        </Button>
+      {/* 발행 상태 카드 */}
+      <div className="border-b border-border p-4">
+        <PublishStatusCard mode="public-page" />
       </div>
 
       {/* 탭: 블록 / 설정 */}
@@ -173,7 +126,7 @@ export function RightSettings() {
             <>
               <BlockSettingsPanel
                 selectedBlock={selectedBlock}
-                onUpdate={(updates) => updateBlock(selectedBlock.id, updates)}
+                onUpdate={(updates: Partial<Block>) => updateBlock(selectedBlock.id, updates)}
                 onClose={() => selectBlock(null)}
               />
               <Separator className="my-4" />
@@ -242,6 +195,7 @@ export function RightSettings() {
                 <SeoSettings />
               </AccordionContent>
             </AccordionItem>
+
           </Accordion>
         </TabsContent>
       </Tabs>
