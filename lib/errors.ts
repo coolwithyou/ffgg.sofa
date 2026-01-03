@@ -13,6 +13,7 @@ export const ErrorCode = {
   EMAIL_NOT_VERIFIED: 'AUTH_1005',
   INVALID_TOKEN: 'AUTH_1006',
   EMAIL_ALREADY_EXISTS: 'AUTH_1007',
+  ACCOUNT_DELETED: 'AUTH_1008',
 
   // 권한 관련 (2xxx)
   FORBIDDEN: 'PERM_2001',
@@ -60,6 +61,7 @@ const httpStatusMap: Record<ErrorCodeType, number> = {
   [ErrorCode.EMAIL_NOT_VERIFIED]: 403,
   [ErrorCode.INVALID_TOKEN]: 401,
   [ErrorCode.EMAIL_ALREADY_EXISTS]: 409,
+  [ErrorCode.ACCOUNT_DELETED]: 410, // Gone
   [ErrorCode.FORBIDDEN]: 403,
   [ErrorCode.TENANT_MISMATCH]: 403,
   [ErrorCode.INSUFFICIENT_PERMISSIONS]: 403,
@@ -91,6 +93,7 @@ const safeMessages: Record<ErrorCodeType, string> = {
   [ErrorCode.EMAIL_NOT_VERIFIED]: '이메일 인증이 필요합니다.',
   [ErrorCode.INVALID_TOKEN]: '유효하지 않은 토큰입니다.',
   [ErrorCode.EMAIL_ALREADY_EXISTS]: '이미 등록된 이메일 주소입니다.',
+  [ErrorCode.ACCOUNT_DELETED]: '계정이 삭제되었습니다.',
   [ErrorCode.FORBIDDEN]: '접근 권한이 없습니다.',
   [ErrorCode.TENANT_MISMATCH]: '접근 권한이 없습니다.',
   [ErrorCode.INSUFFICIENT_PERMISSIONS]: '권한이 부족합니다.',

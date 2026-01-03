@@ -115,6 +115,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 6.5. 삭제 예정 계정 확인 (유예 기간 처리)
+    let accountReactivated = false;
+    if (user.deleteScheduledAt) {
+      const now = new Date();
+      const scheduledDeletion = new Date(user.deleteScheduledAt);
+
+      if (scheduledDeletion <= now) {
+        // 유예 기간이 지난 경우 - 계정 삭제됨으로 처리
+        await logLoginFailure(request, email, 'account_deleted');
+
+        return NextResponse.json(
+          new AppError(
+            ErrorCode.ACCOUNT_DELETED,
+            '계정이 삭제되었습니다. 새 계정을 만들어주세요.'
+          ).toSafeResponse(),
+          { status: 410 } // Gone
+        );
+      }
+
+      // 유예 기간 내 로그인 - 자동 재활성화
+      await db
+        .update(users)
+        .set({
+          deleteScheduledAt: null,
+          deleteReason: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+
+      accountReactivated = true;
+    }
+
     // 7. 2FA 검증 (활성화된 경우)
     if (user.totpEnabled && user.totpSecret) {
       // TOTP 코드가 제공되지 않은 경우 - 2FA 필요 응답
@@ -190,6 +222,7 @@ export async function POST(request: NextRequest) {
         tenantId: user.tenantId,
       },
       passwordChangeRequired,
+      accountReactivated, // 삭제 예정이었던 계정이 재활성화된 경우 true
     });
   } catch (error) {
     return errorResponse(error);

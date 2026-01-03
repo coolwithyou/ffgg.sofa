@@ -13,6 +13,8 @@ import {
   retryFailedPayment,
   handleSubscriptionExpired,
   handlePaymentCompleted,
+  // 계정 관리 함수
+  processScheduledDeletions,
 } from '@/inngest/functions';
 
 // Inngest 함수들을 서빙 (실제 클라이언트 사용)
@@ -27,5 +29,7 @@ export const { GET, POST, PUT } = serve({
     retryFailedPayment,
     handleSubscriptionExpired,
     handlePaymentCompleted,
+    // 계정 관리
+    processScheduledDeletions,
   ],
 });

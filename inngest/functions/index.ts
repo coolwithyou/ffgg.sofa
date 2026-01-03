@@ -12,3 +12,6 @@ export {
   handleSubscriptionExpired,
   handlePaymentCompleted,
 } from './billing';
+
+// 계정 관리 함수
+export { processScheduledDeletions } from './account-deletion';
