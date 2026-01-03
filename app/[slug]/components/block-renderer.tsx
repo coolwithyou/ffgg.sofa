@@ -23,6 +23,12 @@ import { VideoBlock } from './video-block';
 import { FaqAccordionBlock } from './faq-accordion-block';
 import { ContactFormBlock } from './contact-form-block';
 import { MapBlock } from './map-block';
+// Phase 3 블록 (SOFA 차별화)
+import { AiChatPreviewBlock } from './ai-chat-preview-block';
+import { KnowledgeBaseLinkBlock } from './knowledge-base-link-block';
+import { FaqQuickActionsBlock } from './faq-quick-actions-block';
+import { ConversationStarterBlock } from './conversation-starter-block';
+import { OperatingHoursBlock } from './operating-hours-block';
 import {
   BlockType,
   type Block,
@@ -37,6 +43,12 @@ import {
   type FaqAccordionBlock as FaqAccordionBlockType,
   type ContactFormBlock as ContactFormBlockType,
   type MapBlock as MapBlockType,
+  // Phase 3 블록 타입 (SOFA 차별화)
+  type AiChatPreviewBlock as AiChatPreviewBlockType,
+  type KnowledgeBaseLinkBlock as KnowledgeBaseLinkBlockType,
+  type FaqQuickActionsBlock as FaqQuickActionsBlockType,
+  type ConversationStarterBlock as ConversationStarterBlockType,
+  type OperatingHoursBlock as OperatingHoursBlockType,
 } from '@/lib/public-page/block-types';
 import type { PublicPageConfig } from '@/lib/public-page/types';
 
@@ -222,6 +234,60 @@ export function BlockRenderer({
           lat={mapBlock.config.lat}
           lng={mapBlock.config.lng}
           zoom={mapBlock.config.zoom}
+        />
+      );
+    }
+
+    // Phase 3 블록 (SOFA 차별화)
+    case BlockType.AI_CHAT_PREVIEW: {
+      const aiChatBlock = block as AiChatPreviewBlockType;
+      return (
+        <AiChatPreviewBlock
+          conversations={aiChatBlock.config.conversations}
+          showTypingAnimation={aiChatBlock.config.showTypingAnimation}
+        />
+      );
+    }
+
+    case BlockType.KNOWLEDGE_BASE_LINK: {
+      const kbLinkBlock = block as KnowledgeBaseLinkBlockType;
+      return (
+        <KnowledgeBaseLinkBlock
+          documentId={kbLinkBlock.config.documentId}
+          title={kbLinkBlock.config.title}
+          showPreview={kbLinkBlock.config.showPreview}
+        />
+      );
+    }
+
+    case BlockType.FAQ_QUICK_ACTIONS: {
+      const faqQuickBlock = block as FaqQuickActionsBlockType;
+      return (
+        <FaqQuickActionsBlock
+          questions={faqQuickBlock.config.questions}
+          layout={faqQuickBlock.config.layout}
+        />
+      );
+    }
+
+    case BlockType.CONVERSATION_STARTER: {
+      const starterBlock = block as ConversationStarterBlockType;
+      return (
+        <ConversationStarterBlock
+          prompts={starterBlock.config.prompts}
+          randomize={starterBlock.config.randomize}
+          style={starterBlock.config.style}
+        />
+      );
+    }
+
+    case BlockType.OPERATING_HOURS: {
+      const hoursBlock = block as OperatingHoursBlockType;
+      return (
+        <OperatingHoursBlock
+          schedule={hoursBlock.config.schedule}
+          timezone={hoursBlock.config.timezone}
+          showCurrentStatus={hoursBlock.config.showCurrentStatus}
         />
       );
     }

@@ -59,6 +59,12 @@ import { VideoBlockSettings } from './video-settings';
 import { FaqAccordionBlockSettings } from './faq-accordion-settings';
 import { ContactFormBlockSettings } from './contact-form-settings';
 import { MapBlockSettings } from './map-settings';
+// Phase 3 블록 설정 (SOFA 차별화)
+import { AiChatPreviewBlockSettings } from './ai-chat-preview-settings';
+import { KnowledgeBaseLinkBlockSettings } from './knowledge-base-link-settings';
+import { FaqQuickActionsBlockSettings } from './faq-quick-actions-settings';
+import { ConversationStarterBlockSettings } from './conversation-starter-settings';
+import { OperatingHoursBlockSettings } from './operating-hours-settings';
 
 /**
  * 블록 타입별 설정 컴포넌트 레지스트리
@@ -90,6 +96,12 @@ export const BLOCK_SETTINGS_COMPONENTS: Partial<
   [BlockType.FAQ_ACCORDION]: FaqAccordionBlockSettings,
   [BlockType.CONTACT_FORM]: ContactFormBlockSettings,
   [BlockType.MAP]: MapBlockSettings,
+  // Phase 3 블록 (SOFA 차별화)
+  [BlockType.AI_CHAT_PREVIEW]: AiChatPreviewBlockSettings,
+  [BlockType.KNOWLEDGE_BASE_LINK]: KnowledgeBaseLinkBlockSettings,
+  [BlockType.FAQ_QUICK_ACTIONS]: FaqQuickActionsBlockSettings,
+  [BlockType.CONVERSATION_STARTER]: ConversationStarterBlockSettings,
+  [BlockType.OPERATING_HOURS]: OperatingHoursBlockSettings,
 };
 
 // 개별 설정 컴포넌트 re-export
@@ -108,3 +120,9 @@ export { VideoBlockSettings } from './video-settings';
 export { FaqAccordionBlockSettings } from './faq-accordion-settings';
 export { ContactFormBlockSettings } from './contact-form-settings';
 export { MapBlockSettings } from './map-settings';
+// Phase 3 블록 (SOFA 차별화)
+export { AiChatPreviewBlockSettings } from './ai-chat-preview-settings';
+export { KnowledgeBaseLinkBlockSettings } from './knowledge-base-link-settings';
+export { FaqQuickActionsBlockSettings } from './faq-quick-actions-settings';
+export { ConversationStarterBlockSettings } from './conversation-starter-settings';
+export { OperatingHoursBlockSettings } from './operating-hours-settings';

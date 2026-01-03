@@ -27,6 +27,12 @@ export const blockTypeSchema = z.enum([
   BlockType.FAQ_ACCORDION,
   BlockType.CONTACT_FORM,
   BlockType.MAP,
+  // Phase 3 블록 (SOFA 차별화)
+  BlockType.AI_CHAT_PREVIEW,
+  BlockType.KNOWLEDGE_BASE_LINK,
+  BlockType.FAQ_QUICK_ACTIONS,
+  BlockType.CONVERSATION_STARTER,
+  BlockType.OPERATING_HOURS,
 ]);
 
 /**
@@ -326,6 +332,118 @@ export const mapBlockSchema = z.object({
   }),
 });
 
+// ============================================
+// Phase 3 블록 스키마 (SOFA 차별화)
+// ============================================
+
+/**
+ * AI 채팅 역할 스키마
+ */
+export const aiChatRoleSchema = z.enum(['user', 'assistant']);
+
+/**
+ * AI 채팅 메시지 스키마
+ */
+export const aiChatMessageSchema = z.object({
+  role: aiChatRoleSchema,
+  content: z.string(),
+});
+
+/**
+ * AI 채팅 미리보기 블록 스키마
+ */
+export const aiChatPreviewBlockSchema = z.object({
+  ...baseBlockFields,
+  type: z.literal(BlockType.AI_CHAT_PREVIEW),
+  config: z.object({
+    conversations: z.array(aiChatMessageSchema),
+    showTypingAnimation: z.boolean(),
+  }),
+});
+
+/**
+ * 지식 베이스 링크 블록 스키마
+ */
+export const knowledgeBaseLinkBlockSchema = z.object({
+  ...baseBlockFields,
+  type: z.literal(BlockType.KNOWLEDGE_BASE_LINK),
+  config: z.object({
+    documentId: z.string(),
+    title: z.string().optional(),
+    showPreview: z.boolean(),
+  }),
+});
+
+/**
+ * FAQ 빠른 액션 레이아웃 스키마
+ */
+export const faqQuickActionsLayoutSchema = z.enum(['buttons', 'chips', 'list']);
+
+/**
+ * FAQ 빠른 액션 아이템 스키마
+ */
+export const faqQuickActionItemSchema = z.object({
+  text: z.string(),
+});
+
+/**
+ * FAQ 빠른 액션 블록 스키마
+ */
+export const faqQuickActionsBlockSchema = z.object({
+  ...baseBlockFields,
+  type: z.literal(BlockType.FAQ_QUICK_ACTIONS),
+  config: z.object({
+    questions: z.array(faqQuickActionItemSchema),
+    layout: faqQuickActionsLayoutSchema,
+  }),
+});
+
+/**
+ * 대화 시작 프롬프트 스타일 스키마
+ */
+export const conversationStarterStyleSchema = z.enum(['card', 'bubble', 'minimal']);
+
+/**
+ * 대화 시작 프롬프트 블록 스키마
+ */
+export const conversationStarterBlockSchema = z.object({
+  ...baseBlockFields,
+  type: z.literal(BlockType.CONVERSATION_STARTER),
+  config: z.object({
+    prompts: z.array(z.string()),
+    randomize: z.boolean(),
+    style: conversationStarterStyleSchema,
+  }),
+});
+
+/**
+ * 요일 스키마
+ */
+export const dayOfWeekSchema = z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
+
+/**
+ * 운영 시간 스케줄 아이템 스키마
+ */
+export const operatingHoursScheduleItemSchema = z.object({
+  day: dayOfWeekSchema,
+  open: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
+  close: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
+  closed: z.boolean(),
+});
+
+/**
+ * 운영 시간 블록 스키마
+ */
+export const operatingHoursBlockSchema = z.object({
+  ...baseBlockFields,
+  type: z.literal(BlockType.OPERATING_HOURS),
+  config: z.object({
+    schedule: z.array(operatingHoursScheduleItemSchema),
+    timezone: z.string(),
+    showCurrentStatus: z.boolean(),
+  }),
+});
+
 /**
  * 블록 유니온 스키마 (discriminatedUnion)
  *
@@ -347,6 +465,12 @@ export const blockSchema = z.discriminatedUnion('type', [
   faqAccordionBlockSchema,
   contactFormBlockSchema,
   mapBlockSchema,
+  // Phase 3 블록 (SOFA 차별화)
+  aiChatPreviewBlockSchema,
+  knowledgeBaseLinkBlockSchema,
+  faqQuickActionsBlockSchema,
+  conversationStarterBlockSchema,
+  operatingHoursBlockSchema,
 ]);
 
 /**
@@ -398,3 +522,9 @@ export type VideoBlockSchemaType = z.infer<typeof videoBlockSchema>;
 export type FaqAccordionBlockSchemaType = z.infer<typeof faqAccordionBlockSchema>;
 export type ContactFormBlockSchemaType = z.infer<typeof contactFormBlockSchema>;
 export type MapBlockSchemaType = z.infer<typeof mapBlockSchema>;
+// Phase 3 블록 타입 (SOFA 차별화)
+export type AiChatPreviewBlockSchemaType = z.infer<typeof aiChatPreviewBlockSchema>;
+export type KnowledgeBaseLinkBlockSchemaType = z.infer<typeof knowledgeBaseLinkBlockSchema>;
+export type FaqQuickActionsBlockSchemaType = z.infer<typeof faqQuickActionsBlockSchema>;
+export type ConversationStarterBlockSchemaType = z.infer<typeof conversationStarterBlockSchema>;
+export type OperatingHoursBlockSchemaType = z.infer<typeof operatingHoursBlockSchema>;

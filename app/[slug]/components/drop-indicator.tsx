@@ -27,6 +27,10 @@ import {
   HelpCircle,
   FileText,
   MapPin,
+  Bot,
+  BookOpen,
+  Sparkles,
+  Clock,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -47,6 +51,11 @@ const ICON_MAP: Record<string, LucideIcon> = {
   HelpCircle,
   FileText,
   MapPin,
+  // Phase 3 블록 (SOFA 차별화)
+  Bot,
+  BookOpen,
+  Sparkles,
+  Clock,
 };
 
 /**
@@ -68,6 +77,12 @@ const BLOCK_HEIGHT_MAP: Record<BlockTypeValue, number> = {
   faq_accordion: 200,
   contact_form: 300,
   map: 280,
+  // Phase 3 블록 (SOFA 차별화)
+  ai_chat_preview: 200,
+  knowledge_base_link: 100,
+  faq_quick_actions: 120,
+  conversation_starter: 150,
+  operating_hours: 250,
 };
 
 interface DropIndicatorProps {

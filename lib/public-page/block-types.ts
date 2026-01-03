@@ -26,6 +26,12 @@ export const BlockType = {
   FAQ_ACCORDION: 'faq_accordion',
   CONTACT_FORM: 'contact_form',
   MAP: 'map',
+  // Phase 3 블록 (SOFA 차별화)
+  AI_CHAT_PREVIEW: 'ai_chat_preview',
+  KNOWLEDGE_BASE_LINK: 'knowledge_base_link',
+  FAQ_QUICK_ACTIONS: 'faq_quick_actions',
+  CONVERSATION_STARTER: 'conversation_starter',
+  OPERATING_HOURS: 'operating_hours',
 } as const;
 
 export type BlockTypeValue = (typeof BlockType)[keyof typeof BlockType];
@@ -38,6 +44,7 @@ export const BlockCategory = {
   CONTENT: 'content',
   MEDIA: 'media',
   INTERACTIVE: 'interactive',
+  SOFA: 'sofa', // Phase 3: SOFA 차별화 블록
 } as const;
 
 export type BlockCategoryValue =
@@ -410,6 +417,144 @@ export interface MapBlock extends BaseBlock {
   };
 }
 
+// ============================================
+// Phase 3 블록 타입 정의 (SOFA 차별화)
+// ============================================
+
+/**
+ * AI 채팅 미리보기 메시지 역할
+ */
+export type AiChatRole = 'user' | 'assistant';
+
+/**
+ * AI 채팅 미리보기 메시지
+ */
+export interface AiChatMessage {
+  /** 메시지 역할 */
+  role: AiChatRole;
+  /** 메시지 내용 */
+  content: string;
+}
+
+/**
+ * AI 채팅 미리보기 블록
+ * - 챗봇 대화 예시를 미리보기로 표시
+ * - 타이핑 애니메이션 효과
+ * - 클릭 시 실제 챗봇으로 전환
+ */
+export interface AiChatPreviewBlock extends BaseBlock {
+  type: typeof BlockType.AI_CHAT_PREVIEW;
+  config: {
+    /** 대화 예시 */
+    conversations: AiChatMessage[];
+    /** 타이핑 애니메이션 표시 여부 */
+    showTypingAnimation: boolean;
+  };
+}
+
+/**
+ * 지식 베이스 링크 블록
+ * - 지식 베이스 문서와 연결
+ * - 문서 미리보기 표시 옵션
+ */
+export interface KnowledgeBaseLinkBlock extends BaseBlock {
+  type: typeof BlockType.KNOWLEDGE_BASE_LINK;
+  config: {
+    /** 연결할 문서 ID */
+    documentId: string;
+    /** 표시 제목 (미지정 시 문서 제목 사용) */
+    title?: string;
+    /** 미리보기 표시 여부 */
+    showPreview: boolean;
+  };
+}
+
+/**
+ * FAQ 빠른 액션 레이아웃
+ */
+export type FaqQuickActionsLayout = 'buttons' | 'chips' | 'list';
+
+/**
+ * FAQ 빠른 액션 질문 아이템
+ */
+export interface FaqQuickActionItem {
+  /** 질문 텍스트 */
+  text: string;
+}
+
+/**
+ * FAQ 빠른 액션 블록
+ * - 자주 묻는 질문 버튼
+ * - 클릭 시 챗봇에 질문 자동 입력
+ */
+export interface FaqQuickActionsBlock extends BaseBlock {
+  type: typeof BlockType.FAQ_QUICK_ACTIONS;
+  config: {
+    /** 질문 목록 */
+    questions: FaqQuickActionItem[];
+    /** 레이아웃 */
+    layout: FaqQuickActionsLayout;
+  };
+}
+
+/**
+ * 대화 시작 프롬프트 스타일
+ */
+export type ConversationStarterStyle = 'card' | 'bubble' | 'minimal';
+
+/**
+ * 대화 시작 프롬프트 블록
+ * - 대화 시작 프롬프트 제안
+ * - 랜덤 표시 옵션
+ */
+export interface ConversationStarterBlock extends BaseBlock {
+  type: typeof BlockType.CONVERSATION_STARTER;
+  config: {
+    /** 프롬프트 목록 */
+    prompts: string[];
+    /** 랜덤 표시 여부 */
+    randomize: boolean;
+    /** 스타일 */
+    style: ConversationStarterStyle;
+  };
+}
+
+/**
+ * 요일 타입
+ */
+export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+/**
+ * 운영 시간 스케줄 항목
+ */
+export interface OperatingHoursScheduleItem {
+  /** 요일 */
+  day: DayOfWeek;
+  /** 오픈 시간 (HH:mm) */
+  open: string;
+  /** 마감 시간 (HH:mm) */
+  close: string;
+  /** 휴무 여부 */
+  closed: boolean;
+}
+
+/**
+ * 운영 시간 블록
+ * - 요일별 운영 시간 표시
+ * - 현재 상태 자동 표시 (운영 중/종료)
+ */
+export interface OperatingHoursBlock extends BaseBlock {
+  type: typeof BlockType.OPERATING_HOURS;
+  config: {
+    /** 스케줄 목록 */
+    schedule: OperatingHoursScheduleItem[];
+    /** 타임존 */
+    timezone: string;
+    /** 현재 상태 표시 여부 */
+    showCurrentStatus: boolean;
+  };
+}
+
 /**
  * 블록 유니온 타입
  */
@@ -427,7 +572,13 @@ export type Block =
   | VideoBlock
   | FaqAccordionBlock
   | ContactFormBlock
-  | MapBlock;
+  | MapBlock
+  // Phase 3 블록 (SOFA 차별화)
+  | AiChatPreviewBlock
+  | KnowledgeBaseLinkBlock
+  | FaqQuickActionsBlock
+  | ConversationStarterBlock
+  | OperatingHoursBlock;
 
 /**
  * 블록 메타데이터 (UI 표시용)
@@ -555,6 +706,47 @@ export const BLOCK_METAS: Record<BlockTypeValue, BlockMeta> = {
     description: '지도를 임베드합니다',
     category: BlockCategory.MEDIA,
     icon: 'MapPin',
+    maxInstances: 1, // 페이지당 1개
+  },
+  // Phase 3 블록 메타데이터 (SOFA 차별화)
+  [BlockType.AI_CHAT_PREVIEW]: {
+    type: BlockType.AI_CHAT_PREVIEW,
+    name: 'AI 채팅 미리보기',
+    description: '챗봇 대화 예시를 미리보기로 표시합니다',
+    category: BlockCategory.SOFA,
+    icon: 'MessageCircle',
+    maxInstances: 1, // 페이지당 1개
+  },
+  [BlockType.KNOWLEDGE_BASE_LINK]: {
+    type: BlockType.KNOWLEDGE_BASE_LINK,
+    name: '지식 베이스 링크',
+    description: '지식 베이스 문서와 연결합니다',
+    category: BlockCategory.SOFA,
+    icon: 'FileText',
+    maxInstances: 0, // 무제한
+  },
+  [BlockType.FAQ_QUICK_ACTIONS]: {
+    type: BlockType.FAQ_QUICK_ACTIONS,
+    name: 'FAQ 빠른 액션',
+    description: '자주 묻는 질문을 버튼으로 표시합니다',
+    category: BlockCategory.SOFA,
+    icon: 'Zap',
+    maxInstances: 1, // 페이지당 1개
+  },
+  [BlockType.CONVERSATION_STARTER]: {
+    type: BlockType.CONVERSATION_STARTER,
+    name: '대화 시작 프롬프트',
+    description: '대화 시작 프롬프트를 제안합니다',
+    category: BlockCategory.SOFA,
+    icon: 'Sparkles',
+    maxInstances: 1, // 페이지당 1개
+  },
+  [BlockType.OPERATING_HOURS]: {
+    type: BlockType.OPERATING_HOURS,
+    name: '운영 시간',
+    description: '요일별 운영 시간을 표시합니다',
+    category: BlockCategory.SOFA,
+    icon: 'Clock',
     maxInstances: 1, // 페이지당 1개
   },
 };
@@ -825,6 +1017,127 @@ export function createMapBlock(id: string, order: number): MapBlock {
   };
 }
 
+// ============================================
+// Phase 3 블록 팩토리 함수 (SOFA 차별화)
+// ============================================
+
+/**
+ * AI 채팅 미리보기 블록 생성
+ */
+export function createAiChatPreviewBlock(
+  id: string,
+  order: number
+): AiChatPreviewBlock {
+  return {
+    id,
+    type: BlockType.AI_CHAT_PREVIEW,
+    order,
+    visible: true,
+    config: {
+      conversations: [
+        { role: 'user', content: '안녕하세요, 궁금한 점이 있어요' },
+        { role: 'assistant', content: '안녕하세요! 무엇을 도와드릴까요?' },
+      ],
+      showTypingAnimation: true,
+    },
+  };
+}
+
+/**
+ * 지식 베이스 링크 블록 생성
+ */
+export function createKnowledgeBaseLinkBlock(
+  id: string,
+  order: number
+): KnowledgeBaseLinkBlock {
+  return {
+    id,
+    type: BlockType.KNOWLEDGE_BASE_LINK,
+    order,
+    visible: true,
+    config: {
+      documentId: '',
+      title: '',
+      showPreview: true,
+    },
+  };
+}
+
+/**
+ * FAQ 빠른 액션 블록 생성
+ */
+export function createFaqQuickActionsBlock(
+  id: string,
+  order: number
+): FaqQuickActionsBlock {
+  return {
+    id,
+    type: BlockType.FAQ_QUICK_ACTIONS,
+    order,
+    visible: true,
+    config: {
+      questions: [
+        { text: '자주 묻는 질문 1' },
+        { text: '자주 묻는 질문 2' },
+        { text: '자주 묻는 질문 3' },
+      ],
+      layout: 'buttons',
+    },
+  };
+}
+
+/**
+ * 대화 시작 프롬프트 블록 생성
+ */
+export function createConversationStarterBlock(
+  id: string,
+  order: number
+): ConversationStarterBlock {
+  return {
+    id,
+    type: BlockType.CONVERSATION_STARTER,
+    order,
+    visible: true,
+    config: {
+      prompts: [
+        '서비스 이용 방법이 궁금해요',
+        '가격 정보를 알려주세요',
+        '문의 사항이 있어요',
+      ],
+      randomize: false,
+      style: 'card',
+    },
+  };
+}
+
+/**
+ * 운영 시간 블록 생성
+ */
+export function createOperatingHoursBlock(
+  id: string,
+  order: number
+): OperatingHoursBlock {
+  return {
+    id,
+    type: BlockType.OPERATING_HOURS,
+    order,
+    visible: true,
+    config: {
+      schedule: [
+        { day: 'mon', open: '09:00', close: '18:00', closed: false },
+        { day: 'tue', open: '09:00', close: '18:00', closed: false },
+        { day: 'wed', open: '09:00', close: '18:00', closed: false },
+        { day: 'thu', open: '09:00', close: '18:00', closed: false },
+        { day: 'fri', open: '09:00', close: '18:00', closed: false },
+        { day: 'sat', open: '10:00', close: '14:00', closed: false },
+        { day: 'sun', open: '00:00', close: '00:00', closed: true },
+      ],
+      timezone: 'Asia/Seoul',
+      showCurrentStatus: true,
+    },
+  };
+}
+
 /**
  * 블록 타입에 따른 팩토리 함수 매핑
  */
@@ -843,6 +1156,12 @@ export const BLOCK_FACTORIES: Record<BlockTypeValue, BlockFactory> = {
   [BlockType.FAQ_ACCORDION]: createFaqAccordionBlock,
   [BlockType.CONTACT_FORM]: createContactFormBlock,
   [BlockType.MAP]: createMapBlock,
+  // Phase 3 블록 (SOFA 차별화)
+  [BlockType.AI_CHAT_PREVIEW]: createAiChatPreviewBlock,
+  [BlockType.KNOWLEDGE_BASE_LINK]: createKnowledgeBaseLinkBlock,
+  [BlockType.FAQ_QUICK_ACTIONS]: createFaqQuickActionsBlock,
+  [BlockType.CONVERSATION_STARTER]: createConversationStarterBlock,
+  [BlockType.OPERATING_HOURS]: createOperatingHoursBlock,
 };
 
 /**
