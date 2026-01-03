@@ -46,8 +46,8 @@ export function ChangePasswordForm({ email }: ChangePasswordFormProps) {
       const result = await changePassword(formData);
 
       if (result.success) {
-        // 성공 시 대시보드로 이동
-        router.push('/dashboard');
+        // 성공 시 콘솔로 이동
+        router.push('/console');
         router.refresh();
       } else {
         setError(result.error || '비밀번호 변경에 실패했습니다.');

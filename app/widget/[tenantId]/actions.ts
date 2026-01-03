@@ -6,7 +6,7 @@
  */
 
 import { db, tenants } from '@/lib/db';
-import { chatbots } from '@/drizzle/schema';
+import { chatbots, chatbotConfigVersions } from '@/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 import { processChat } from '@/lib/chat';
 import { logger } from '@/lib/logger';
@@ -45,14 +45,24 @@ export async function validateWidgetAccess(
       return { valid: false, error: '비활성화된 테넌트입니다.' };
     }
 
-    // API 키로 챗봇 조회
-    const [chatbot] = await db
+    // API 키로 챗봇 조회 - published 버전에서 설정 읽기
+    const [result] = await db
       .select({
         id: chatbots.id,
         widgetEnabled: chatbots.widgetEnabled,
-        widgetConfig: chatbots.widgetConfig,
+        // chatbots 테이블 값 (폴백용)
+        chatbotWidgetConfig: chatbots.widgetConfig,
+        // published 버전 값 (우선)
+        publishedWidgetConfig: chatbotConfigVersions.widgetConfig,
       })
       .from(chatbots)
+      .leftJoin(
+        chatbotConfigVersions,
+        and(
+          eq(chatbotConfigVersions.chatbotId, chatbots.id),
+          eq(chatbotConfigVersions.versionType, 'published')
+        )
+      )
       .where(
         and(
           eq(chatbots.tenantId, tenantId),
@@ -60,16 +70,17 @@ export async function validateWidgetAccess(
         )
       );
 
-    if (!chatbot) {
+    if (!result) {
       return { valid: false, error: '유효하지 않은 API 키입니다.' };
     }
 
-    if (!chatbot.widgetEnabled) {
+    if (!result.widgetEnabled) {
       return { valid: false, error: '위젯이 비활성화되어 있습니다.' };
     }
 
-    // 위젯 설정 로드
-    const widgetConfig = (chatbot.widgetConfig as Partial<WidgetConfig>) || {};
+    // 위젯 설정 로드 (published 버전 우선, 없으면 chatbots 테이블로 폴백)
+    const effectiveConfig = result.publishedWidgetConfig ?? result.chatbotWidgetConfig;
+    const widgetConfig = (effectiveConfig as Partial<WidgetConfig>) || {};
 
     return {
       valid: true,
@@ -77,7 +88,7 @@ export async function validateWidgetAccess(
         ...widgetConfig,
         tenantId,
       },
-      chatbotId: chatbot.id,
+      chatbotId: result.id,
     };
   } catch (error) {
     logger.error('Widget access validation failed', error as Error, { tenantId });

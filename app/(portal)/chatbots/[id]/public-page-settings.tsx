@@ -23,7 +23,7 @@ import {
   Loader2,
   Image as ImageIcon,
 } from 'lucide-react';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 import type { PublicPageConfig } from '@/lib/public-page/types';
 import { useDebouncedCallback } from 'use-debounce';
 
@@ -71,8 +71,6 @@ export function PublicPageSettings({
   // SEO 설정
   const [seoTitle, setSeoTitle] = useState('');
   const [seoDescription, setSeoDescription] = useState('');
-
-  const { success, error: showError } = useToast();
 
   // 데이터 로드
   useEffect(() => {
@@ -157,12 +155,12 @@ export function PublicPageSettings({
 
     // 활성화하려면 슬러그가 필요
     if (!data.enabled && !slug) {
-      showError('슬러그 필요', '공개 페이지를 활성화하려면 슬러그를 설정해야 합니다.');
+      toast.error('슬러그 필요', { description: '공개 페이지를 활성화하려면 슬러그를 설정해야 합니다.' });
       return;
     }
 
     if (!data.enabled && slugAvailable === false) {
-      showError('슬러그 오류', '사용 가능한 슬러그를 설정해주세요.');
+      toast.error('슬러그 오류', { description: '사용 가능한 슬러그를 설정해주세요.' });
       return;
     }
 
@@ -177,19 +175,19 @@ export function PublicPageSettings({
       if (response.ok) {
         await fetchPublicPage();
         onUpdate();
-        success(
+        toast.success(
           data.enabled ? '비활성화됨' : '활성화됨',
-          data.enabled
+          { description: data.enabled
             ? '공개 페이지가 비활성화되었습니다.'
-            : '공개 페이지가 활성화되었습니다.'
+            : '공개 페이지가 활성화되었습니다.' }
         );
       } else {
         const result = await response.json();
-        showError('오류', result.error || '설정을 저장할 수 없습니다.');
+        toast.error('오류', { description: result.error || '설정을 저장할 수 없습니다.' });
       }
     } catch (err) {
       console.error('Toggle error:', err);
-      showError('오류', '설정을 저장할 수 없습니다.');
+      toast.error('오류', { description: '설정을 저장할 수 없습니다.' });
     } finally {
       setIsToggling(false);
     }
@@ -198,7 +196,7 @@ export function PublicPageSettings({
   // 설정 저장
   const handleSave = async () => {
     if (slugAvailable === false) {
-      showError('슬러그 오류', '사용 가능한 슬러그를 설정해주세요.');
+      toast.error('슬러그 오류', { description: '사용 가능한 슬러그를 설정해주세요.' });
       return;
     }
 
@@ -231,14 +229,14 @@ export function PublicPageSettings({
 
       if (response.ok) {
         await fetchPublicPage();
-        success('저장 완료', '공개 페이지 설정이 저장되었습니다.');
+        toast.success('저장 완료', { description: '공개 페이지 설정이 저장되었습니다.' });
       } else {
         const result = await response.json();
-        showError('저장 실패', result.error || '설정을 저장할 수 없습니다.');
+        toast.error('저장 실패', { description: result.error || '설정을 저장할 수 없습니다.' });
       }
     } catch (err) {
       console.error('Save error:', err);
-      showError('저장 실패', '설정을 저장할 수 없습니다.');
+      toast.error('저장 실패', { description: '설정을 저장할 수 없습니다.' });
     } finally {
       setIsSaving(false);
     }

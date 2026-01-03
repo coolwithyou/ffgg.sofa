@@ -14,7 +14,7 @@ import { CategoryList } from './category-list';
 import { QAList } from './qa-list';
 import { FAQPreview } from './faq-preview';
 import { ExportModal } from './export-modal';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 import { useCurrentChatbot, useTenantSettings } from '../../hooks/use-console-state';
 // 데이터셋 타입
 interface Dataset {
@@ -26,7 +26,6 @@ interface Dataset {
 export function FAQEditor() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const { warning, error: showError } = useToast();
   const { currentChatbot } = useCurrentChatbot();
   const { isAdvancedModeEnabled } = useTenantSettings();
 
@@ -102,14 +101,14 @@ export function FAQEditor() {
         }
       } catch (error) {
         console.error('초안 목록 로드 실패:', error);
-        showError('로드 실패', 'FAQ 초안을 불러오는데 실패했습니다.');
+        toast.error('로드 실패', { description: 'FAQ 초안을 불러오는데 실패했습니다.' });
       } finally {
         setIsLoadingDrafts(false);
       }
     };
 
     loadDrafts();
-  }, [currentChatbot?.id, showError]);
+  }, [currentChatbot?.id]);
 
   // 데이터셋 목록 로드 (현재 챗봇의 연결된 데이터셋만 표시)
   useEffect(() => {
@@ -150,7 +149,7 @@ export function FAQEditor() {
   // 저장
   const handleSave = useCallback(async () => {
     if (!currentChatbot?.id) {
-      showError('챗봇 선택 필요', '챗봇을 먼저 선택해주세요.');
+      toast.error('챗봇 선택 필요', { description: '챗봇을 먼저 선택해주세요.' });
       return;
     }
 
@@ -169,11 +168,11 @@ export function FAQEditor() {
       setLastSaved(new Date());
     } catch (error) {
       console.error('저장 실패:', error);
-      showError('저장 실패', 'FAQ 저장에 실패했습니다.');
+      toast.error('저장 실패', { description: 'FAQ 저장에 실패했습니다.' });
     } finally {
       setIsSaving(false);
     }
-  }, [currentDraftId, draftName, categories, qaPairs, currentChatbot?.id, showError]);
+  }, [currentDraftId, draftName, categories, qaPairs, currentChatbot?.id]);
 
   // 새 초안 생성
   const handleNewDraft = useCallback(() => {
@@ -330,7 +329,7 @@ export function FAQEditor() {
 
       const draftId = currentDraftId;
       if (!draftId) {
-        warning('저장 필요', 'FAQ를 먼저 저장해주세요.');
+        toast.warning('저장 필요', { description: 'FAQ를 먼저 저장해주세요.' });
         return;
       }
 
@@ -350,7 +349,7 @@ export function FAQEditor() {
         setLastSaved(new Date());
       } catch (error) {
         console.error('업로드 실패:', error);
-        showError('업로드 실패', error instanceof Error ? error.message : '업로드에 실패했습니다.');
+        toast.error('업로드 실패', { description: error instanceof Error ? error.message : '업로드에 실패했습니다.' });
       } finally {
         setUploadingQAId(null);
       }
@@ -373,7 +372,7 @@ export function FAQEditor() {
         );
       } catch (error) {
         console.error('잠금 해제 실패:', error);
-        showError('잠금 해제 실패', error instanceof Error ? error.message : '잠금 해제에 실패했습니다.');
+        toast.error('잠금 해제 실패', { description: error instanceof Error ? error.message : '잠금 해제에 실패했습니다.' });
       }
     },
     [currentDraftId, qaPairs]

@@ -28,8 +28,8 @@ interface UseBlocksReturn {
   blocks: Block[];
   /** 선택된 블록 ID */
   selectedBlockId: string | null;
-  /** 블록 추가 */
-  addBlock: (type: BlockTypeValue) => void;
+  /** 블록 추가 (insertBeforeId가 있으면 해당 블록 앞에 삽입, 없으면 끝에 추가) */
+  addBlock: (type: BlockTypeValue, insertBeforeId?: string) => void;
   /** 블록 삭제 */
   removeBlock: (id: string) => void;
   /** 블록 업데이트 */
@@ -38,6 +38,10 @@ interface UseBlocksReturn {
   toggleBlockVisibility: (id: string) => void;
   /** 블록 순서 변경 */
   reorderBlocks: (activeId: string, overId: string) => void;
+  /** 블록 위로 이동 */
+  moveBlockUp: (id: string) => void;
+  /** 블록 아래로 이동 */
+  moveBlockDown: (id: string) => void;
   /** 블록 선택 */
   selectBlock: (id: string | null) => void;
 }
@@ -64,13 +68,29 @@ export function useBlocks(): UseBlocksReturn {
 
   /**
    * 블록 추가
+   * @param type 블록 타입
+   * @param insertBeforeId 이 블록 앞에 삽입 (없으면 끝에 추가)
    */
   const addBlock = useCallback(
-    (type: BlockTypeValue) => {
+    (type: BlockTypeValue, insertBeforeId?: string) => {
       const id = nanoid();
+
+      if (insertBeforeId) {
+        // 특정 블록 앞에 삽입
+        const insertIndex = blocks.findIndex((b) => b.id === insertBeforeId);
+        if (insertIndex !== -1) {
+          const newBlock = createBlock(type, id, insertIndex);
+          const newBlocks = [...blocks];
+          newBlocks.splice(insertIndex, 0, newBlock);
+          setBlocks(newBlocks);
+          selectBlock(id);
+          return;
+        }
+      }
+
+      // 끝에 추가
       const order = blocks.length;
       const newBlock = createBlock(type, id, order);
-
       setBlocks([...blocks, newBlock]);
       selectBlock(id);
     },
@@ -148,6 +168,40 @@ export function useBlocks(): UseBlocksReturn {
     [blocks, setBlocks]
   );
 
+  /**
+   * 블록 위로 이동
+   */
+  const moveBlockUp = useCallback(
+    (id: string) => {
+      const index = blocks.findIndex((b) => b.id === id);
+      if (index <= 0) return; // 이미 맨 위이거나 찾을 수 없음
+
+      const newBlocks = [...blocks];
+      const [removed] = newBlocks.splice(index, 1);
+      newBlocks.splice(index - 1, 0, removed);
+
+      setBlocks(newBlocks);
+    },
+    [blocks, setBlocks]
+  );
+
+  /**
+   * 블록 아래로 이동
+   */
+  const moveBlockDown = useCallback(
+    (id: string) => {
+      const index = blocks.findIndex((b) => b.id === id);
+      if (index === -1 || index >= blocks.length - 1) return; // 이미 맨 아래이거나 찾을 수 없음
+
+      const newBlocks = [...blocks];
+      const [removed] = newBlocks.splice(index, 1);
+      newBlocks.splice(index + 1, 0, removed);
+
+      setBlocks(newBlocks);
+    },
+    [blocks, setBlocks]
+  );
+
   return {
     blocks,
     selectedBlockId,
@@ -156,6 +210,8 @@ export function useBlocks(): UseBlocksReturn {
     updateBlock,
     toggleBlockVisibility,
     reorderBlocks,
+    moveBlockUp,
+    moveBlockDown,
     selectBlock,
   };
 }

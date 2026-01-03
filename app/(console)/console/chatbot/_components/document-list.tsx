@@ -3,6 +3,8 @@
 /**
  * 문서 목록 컴포넌트
  * [Week 9] 문서 목록 표시 및 삭제
+ *
+ * 챗봇별 데이터 격리: 현재 선택된 챗봇에 연결된 데이터셋의 문서만 표시
  */
 
 import { useState, useEffect, useTransition } from 'react';
@@ -17,14 +19,16 @@ import {
 import { DocumentProgressModal } from '@/components/document-progress-modal';
 import { DocumentStatusBadge } from '@/components/ui/document-status-badge';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 import { canReprocessDocument, getReprocessType } from '@/lib/constants/document';
+import { useCurrentChatbot } from '../../hooks/use-console-state';
 
 interface DocumentListProps {
   initialData: GetDocumentsResult;
 }
 
 export function DocumentList({ initialData }: DocumentListProps) {
+  const { currentChatbot } = useCurrentChatbot();
   const [documents, setDocuments] = useState(initialData.documents);
   const [pagination, setPagination] = useState(initialData.pagination);
   const [isPageLoading, setIsPageLoading] = useState(false);
@@ -33,7 +37,6 @@ export function DocumentList({ initialData }: DocumentListProps) {
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [progressModalDocId, setProgressModalDocId] = useState<string | null>(null);
   const { confirm } = useAlertDialog();
-  const { error: showError } = useToast();
 
   // 처리 중인 문서 폴링
   useEffect(() => {
@@ -143,7 +146,7 @@ export function DocumentList({ initialData }: DocumentListProps) {
           )
         );
       } else {
-        showError('재처리 실패', result.error || '재처리 요청에 실패했습니다.');
+        toast.error('재처리 실패', { description: result.error || '재처리 요청에 실패했습니다.' });
       }
 
       setReprocessingId(null);
@@ -152,15 +155,16 @@ export function DocumentList({ initialData }: DocumentListProps) {
 
   // 페이지 변경 핸들러
   const handlePageChange = async (newPage: number) => {
+    if (!currentChatbot?.id) return;
     if (newPage < 1 || newPage > pagination.totalPages || isPageLoading) return;
 
     setIsPageLoading(true);
     try {
-      const result = await getDocuments(newPage, pagination.limit);
+      const result = await getDocuments(currentChatbot.id, newPage, pagination.limit);
       setDocuments(result.documents);
       setPagination(result.pagination);
     } catch (error) {
-      showError('페이지 로딩 실패', '문서 목록을 불러오는데 실패했습니다.');
+      toast.error('페이지 로딩 실패', { description: '문서 목록을 불러오는데 실패했습니다.' });
     } finally {
       setIsPageLoading(false);
     }
@@ -168,12 +172,13 @@ export function DocumentList({ initialData }: DocumentListProps) {
 
   // 현재 페이지 새로고침 (삭제 후 등)
   const refreshCurrentPage = async () => {
+    if (!currentChatbot?.id) return;
     setIsPageLoading(true);
     try {
       // 현재 페이지가 비었고 이전 페이지가 있으면 이전 페이지로
       const targetPage =
         documents.length === 1 && pagination.page > 1 ? pagination.page - 1 : pagination.page;
-      const result = await getDocuments(targetPage, pagination.limit);
+      const result = await getDocuments(currentChatbot.id, targetPage, pagination.limit);
       setDocuments(result.documents);
       setPagination(result.pagination);
     } catch (error) {

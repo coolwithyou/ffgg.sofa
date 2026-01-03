@@ -27,7 +27,7 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
   const hasLegacyAccess = session.role === 'internal_operator' || session.role === 'admin';
 
   if (!isPlatformOperator && !hasLegacyAccess) {
-    redirect('/dashboard');
+    redirect('/console');
   }
 
   // 임시 비밀번호 변경 필요 시 비밀번호 변경 페이지로 리다이렉트

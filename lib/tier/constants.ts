@@ -29,6 +29,9 @@ export const TIER_LIMITS = {
     apiRequestsPerMinute: 60,
     chatRequestsPerDay: 100,
     uploadRequestsPerHour: 10,
+
+    // 버전 관리 (발행 이력 저장 횟수)
+    maxPublishHistory: 3,
   },
 
   standard: {
@@ -55,6 +58,9 @@ export const TIER_LIMITS = {
     apiRequestsPerMinute: 300,
     chatRequestsPerDay: 1000,
     uploadRequestsPerHour: 50,
+
+    // 버전 관리 (발행 이력 저장 횟수)
+    maxPublishHistory: 10,
   },
 
   premium: {
@@ -81,6 +87,9 @@ export const TIER_LIMITS = {
     apiRequestsPerMinute: 1000,
     chatRequestsPerDay: 10000,
     uploadRequestsPerHour: 200,
+
+    // 버전 관리 (발행 이력 저장 횟수)
+    maxPublishHistory: 30,
   },
 } as const;
 

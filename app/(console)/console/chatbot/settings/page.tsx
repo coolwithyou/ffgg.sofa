@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useCurrentChatbot, useTenantSettings } from '../hooks/use-console-state';
+import { useCurrentChatbot, useTenantSettings } from '../../hooks/use-console-state';
 import {
   Card,
   CardHeader,

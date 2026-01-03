@@ -6,11 +6,13 @@ export type ModelProvider = 'google' | 'openai' | 'anthropic';
 
 export type ModelId =
   | 'gemini-2.5-flash-lite'
+  | 'gemini-2.0-flash'
   | 'gpt-4o-mini'
   | 'text-embedding-3-small'
-  | 'claude-3-haiku-20240307';
+  | 'claude-3-haiku-20240307'
+  | (string & {}); // Allow any string for future model IDs
 
-export type FeatureType = 'chat' | 'embedding' | 'rewrite' | 'context_generation';
+export type FeatureType = 'chat' | 'embedding' | 'rewrite' | 'context_generation' | 'rerank';
 
 export interface TokenUsageParams {
   tenantId: string;

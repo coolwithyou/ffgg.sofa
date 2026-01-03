@@ -11,25 +11,19 @@ import { hashPassword, passwordSchema } from '@/lib/auth';
 import { withRateLimit } from '@/lib/middleware';
 import { ErrorCode, AppError, errorResponse } from '@/lib/errors';
 import { v4 as uuidv4 } from 'uuid';
-import { sendVerificationEmail } from '@/lib/email';
 
 const signupSchema = z.object({
   email: z.string().email('유효한 이메일 주소를 입력하세요.'),
   password: passwordSchema,
-  passwordConfirm: z.string(),
-  companyName: z.string().min(2, '회사명은 2자 이상이어야 합니다.'),
-  contactName: z.string().min(2, '담당자명은 2자 이상이어야 합니다.'),
+  // Phase 1: 폼 간소화 - 회사 정보는 온보딩에서 수집
+  companyName: z.string().min(2, '회사명은 2자 이상이어야 합니다.').optional(),
+  contactName: z.string().min(2, '담당자명은 2자 이상이어야 합니다.').optional(),
   contactPhone: z.string().optional(),
   plan: z.enum(['starter', 'pro', 'enterprise']).default('starter'),
+  // 통합 약관 동의 (이용약관 + 개인정보처리방침)
   agreedToTerms: z.boolean().refine((val) => val === true, {
-    message: '이용약관에 동의해야 합니다.',
+    message: '서비스 이용약관 및 개인정보처리방침에 동의해야 합니다.',
   }),
-  agreedToPrivacy: z.boolean().refine((val) => val === true, {
-    message: '개인정보처리방침에 동의해야 합니다.',
-  }),
-}).refine((data) => data.password === data.passwordConfirm, {
-  message: '비밀번호가 일치하지 않습니다.',
-  path: ['passwordConfirm'],
 });
 
 export async function POST(request: NextRequest) {
@@ -84,15 +78,18 @@ export async function POST(request: NextRequest) {
       enterprise: { monthlyConversations: -1, documents: -1 }, // 무제한
     };
 
+    // 회사명이 없으면 이메일에서 기본값 생성
+    const defaultCompanyName = companyName || email.split('@')[0] + '의 워크스페이스';
+
     await db.insert(tenants).values({
       id: tenantId,
-      name: companyName,
+      name: defaultCompanyName,
       email: email,
       tier: tierMap[plan],
       usageLimits: usageLimitsMap[plan],
       settings: {
-        contactName,
-        contactPhone,
+        ...(contactName && { contactName }),
+        ...(contactPhone && { contactPhone }),
         plan,
       },
       status: 'active',
@@ -120,22 +117,14 @@ export async function POST(request: NextRequest) {
       isDefault: true,
     });
 
-    // 7. 이메일 인증 발송
-    const emailResult = await sendVerificationEmail({
-      to: email,
-      token: emailVerificationToken,
-      userName: contactName,
-    });
-
-    if (!emailResult.success) {
-      console.warn('[SIGNUP] 인증 이메일 발송 실패:', emailResult.error);
-      // 이메일 발송 실패해도 가입은 완료 처리 (재발송 가능)
-    }
+    // 7. 이메일 인증 - Delayed Verification 전략
+    // 가입 시점에는 이메일을 발송하지 않고, 핵심 기능(발행 등) 사용 시 요청
+    // 인증 토큰은 미리 생성해두어 나중에 재발송 시 사용
 
     return NextResponse.json({
       success: true,
-      message: '회원가입이 완료되었습니다. 이메일을 확인해주세요.',
-      emailSent: emailResult.success,
+      message: '회원가입이 완료되었습니다.',
+      emailVerificationPending: true, // 이메일 인증 대기 상태
       user: {
         id: userId,
         email,

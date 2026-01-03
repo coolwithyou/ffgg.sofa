@@ -20,7 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 import { Palette, Type, Move, Code } from 'lucide-react';
 
 /**
@@ -35,7 +35,6 @@ export function WidgetSettings() {
   const { currentChatbot } = useCurrentChatbot();
   const { widgetConfig, widgetSaveStatus } = useWidgetConfig();
   const { saveNow } = useWidgetAutoSave();
-  const { success, error: showError } = useToast();
   const { reloadChatbots } = useConsole();
 
   const [isToggling, setIsToggling] = useState(false);
@@ -73,9 +72,9 @@ export function WidgetSettings() {
       // 챗봇 목록 새로고침
       await reloadChatbots();
 
-      success(checked ? '위젯이 활성화되었습니다!' : '위젯이 비활성화되었습니다');
+      toast.success(checked ? '위젯이 활성화되었습니다!' : '위젯이 비활성화되었습니다');
     } catch (err) {
-      showError(err instanceof Error ? err.message : '오류가 발생했습니다');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다');
     } finally {
       setIsToggling(false);
     }

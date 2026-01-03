@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { eq, and } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { chatbots, tenants } from '@/drizzle/schema';
+import { chatbots, tenants, chatbotConfigVersions } from '@/drizzle/schema';
 import { DEFAULT_CONFIG, DEFAULT_THEME } from '@/lib/widget/types';
 
 /**
@@ -57,17 +57,38 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 챗봇 조회 (API 키로)
-    const [chatbot] = await db
+    // 챗봇 조회 (API 키로) - published 버전에서 설정 읽기
+    const [result] = await db
       .select({
         id: chatbots.id,
         name: chatbots.name,
         tenantId: chatbots.tenantId,
         widgetEnabled: chatbots.widgetEnabled,
-        widgetConfig: chatbots.widgetConfig,
+        // chatbots 테이블 값 (폴백용)
+        chatbotWidgetConfig: chatbots.widgetConfig,
+        // published 버전 값 (우선)
+        publishedWidgetConfig: chatbotConfigVersions.widgetConfig,
       })
       .from(chatbots)
+      .leftJoin(
+        chatbotConfigVersions,
+        and(
+          eq(chatbotConfigVersions.chatbotId, chatbots.id),
+          eq(chatbotConfigVersions.versionType, 'published')
+        )
+      )
       .where(eq(chatbots.widgetApiKey, apiKey));
+
+    // published 버전이 있으면 사용, 없으면 chatbots 테이블 값으로 폴백
+    const chatbot = result
+      ? {
+          id: result.id,
+          name: result.name,
+          tenantId: result.tenantId,
+          widgetEnabled: result.widgetEnabled,
+          widgetConfig: result.publishedWidgetConfig ?? result.chatbotWidgetConfig,
+        }
+      : null;
 
     // 챗봇 없음
     if (!chatbot) {

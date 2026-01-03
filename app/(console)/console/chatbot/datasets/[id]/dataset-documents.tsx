@@ -15,7 +15,7 @@ import { DocumentStatusBadge } from '@/components/ui/document-status-badge';
 import { DocumentChunks } from './document-chunks';
 import { unassignDocumentFromDataset } from '@/app/(console)/console/chatbot/actions';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 
 interface DocumentItem {
   id: string;
@@ -45,7 +45,6 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
   const [progressModalDocId, setProgressModalDocId] = useState<string | null>(null);
   const [documentSearch, setDocumentSearch] = useState('');
   const { confirm } = useAlertDialog();
-  const { error: showError } = useToast();
 
   useEffect(() => {
     fetchDocuments();
@@ -139,11 +138,11 @@ export function DatasetDocuments({ datasetId, onUpdate }: DatasetDocumentsProps)
             )
           );
         } else {
-          showError('재처리 실패', '재처리 요청에 실패했습니다.');
+          toast.error('재처리 실패', { description: '재처리 요청에 실패했습니다.' });
         }
       } catch (err) {
         console.error('Reprocess error:', err);
-        showError('재처리 실패', '재처리 요청 중 오류가 발생했습니다.');
+        toast.error('재처리 실패', { description: '재처리 요청 중 오류가 발생했습니다.' });
       } finally {
         setReprocessingId(null);
       }

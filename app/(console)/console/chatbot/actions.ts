@@ -7,7 +7,7 @@
 
 import { validateSession } from '@/lib/auth';
 import { getSession } from '@/lib/auth/session';
-import { db, documents, datasets, chunks } from '@/lib/db';
+import { db, documents, datasets, chunks, chatbotDatasets } from '@/lib/db';
 import { eq, desc, count, sql, inArray, and, asc } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import { revalidatePath } from 'next/cache';
@@ -45,9 +45,23 @@ export interface GetDocumentsResult {
 }
 
 /**
+ * 챗봇에 연결된 데이터셋 ID 목록 조회 (내부 헬퍼)
+ */
+async function getLinkedDatasetIds(chatbotId: string): Promise<string[]> {
+  const links = await db
+    .select({ datasetId: chatbotDatasets.datasetId })
+    .from(chatbotDatasets)
+    .where(eq(chatbotDatasets.chatbotId, chatbotId));
+
+  return links.map((l) => l.datasetId);
+}
+
+/**
  * 문서 목록 조회 (페이지네이션 지원)
+ * @param chatbotId - 현재 선택된 챗봇 ID (챗봇에 연결된 데이터셋의 문서만 조회)
  */
 export async function getDocuments(
+  chatbotId: string,
   page: number = 1,
   limit: number = 10
 ): Promise<GetDocumentsResult> {
@@ -63,18 +77,31 @@ export async function getDocuments(
   }
 
   try {
+    // 챗봇에 연결된 데이터셋 ID 조회
+    const linkedDatasetIds = await getLinkedDatasetIds(chatbotId);
+
+    // 연결된 데이터셋이 없으면 빈 결과 반환
+    if (linkedDatasetIds.length === 0) {
+      return emptyResult;
+    }
+
     const offset = (page - 1) * limit;
 
-    // 전체 문서 수 조회
+    // 전체 문서 수 조회 (챗봇에 연결된 데이터셋 내 문서만)
     const [totalResult] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(documents)
-      .where(eq(documents.tenantId, session.tenantId));
+      .where(
+        and(
+          eq(documents.tenantId, session.tenantId),
+          inArray(documents.datasetId, linkedDatasetIds)
+        )
+      );
 
     const total = totalResult?.count || 0;
     const totalPages = Math.ceil(total / limit);
 
-    // 문서 목록 조회 (데이터셋 JOIN 포함, 페이지네이션 적용)
+    // 문서 목록 조회 (챗봇에 연결된 데이터셋 내 문서만)
     const docs = await db
       .select({
         id: documents.id,
@@ -90,7 +117,12 @@ export async function getDocuments(
       })
       .from(documents)
       .leftJoin(datasets, eq(documents.datasetId, datasets.id))
-      .where(eq(documents.tenantId, session.tenantId))
+      .where(
+        and(
+          eq(documents.tenantId, session.tenantId),
+          inArray(documents.datasetId, linkedDatasetIds)
+        )
+      )
       .orderBy(desc(documents.createdAt))
       .limit(limit)
       .offset(offset);
@@ -337,15 +369,24 @@ export interface DatasetOption {
 }
 
 /**
- * 라이브러리 문서 목록 조회 (모든 문서)
+ * 라이브러리 문서 목록 조회 (챗봇에 연결된 데이터셋의 문서만)
+ * @param chatbotId - 현재 선택된 챗봇 ID
  */
-export async function getLibraryDocuments(): Promise<LibraryDocument[]> {
+export async function getLibraryDocuments(chatbotId: string): Promise<LibraryDocument[]> {
   const session = await getSession();
   if (!session?.tenantId) {
     throw new Error('인증이 필요합니다.');
   }
 
-  // 모든 문서 조회 (LEFT JOIN으로 데이터셋 이름 포함)
+  // 챗봇에 연결된 데이터셋 ID 조회
+  const linkedDatasetIds = await getLinkedDatasetIds(chatbotId);
+
+  // 연결된 데이터셋이 없으면 빈 배열 반환
+  if (linkedDatasetIds.length === 0) {
+    return [];
+  }
+
+  // 챗봇에 연결된 데이터셋의 문서만 조회
   const docs = await db
     .select({
       id: documents.id,
@@ -362,7 +403,12 @@ export async function getLibraryDocuments(): Promise<LibraryDocument[]> {
     })
     .from(documents)
     .leftJoin(datasets, eq(documents.datasetId, datasets.id))
-    .where(eq(documents.tenantId, session.tenantId))
+    .where(
+      and(
+        eq(documents.tenantId, session.tenantId),
+        inArray(documents.datasetId, linkedDatasetIds)
+      )
+    )
     .orderBy(desc(documents.createdAt));
 
   // 각 문서의 청크 통계 조회
@@ -400,12 +446,21 @@ export async function getLibraryDocuments(): Promise<LibraryDocument[]> {
 }
 
 /**
- * 데이터셋 목록 조회 (맵핑 대상 선택용)
+ * 데이터셋 목록 조회 (챗봇에 연결된 데이터셋만)
+ * @param chatbotId - 현재 선택된 챗봇 ID
  */
-export async function getDatasets(): Promise<DatasetOption[]> {
+export async function getDatasets(chatbotId: string): Promise<DatasetOption[]> {
   const session = await getSession();
   if (!session?.tenantId) {
     throw new Error('인증이 필요합니다.');
+  }
+
+  // 챗봇에 연결된 데이터셋 ID 조회
+  const linkedDatasetIds = await getLinkedDatasetIds(chatbotId);
+
+  // 연결된 데이터셋이 없으면 빈 배열 반환
+  if (linkedDatasetIds.length === 0) {
+    return [];
   }
 
   const datasetList = await db
@@ -415,7 +470,12 @@ export async function getDatasets(): Promise<DatasetOption[]> {
       isDefault: datasets.isDefault,
     })
     .from(datasets)
-    .where(eq(datasets.tenantId, session.tenantId))
+    .where(
+      and(
+        eq(datasets.tenantId, session.tenantId),
+        inArray(datasets.id, linkedDatasetIds)
+      )
+    )
     .orderBy(desc(datasets.isDefault), asc(datasets.name));
 
   return datasetList.map((d) => ({

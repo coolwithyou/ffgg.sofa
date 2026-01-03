@@ -33,7 +33,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // 챗봇 존재 확인
     const [chatbot] = await db
-      .select({ id: chatbots.id, personaConfig: chatbots.personaConfig })
+      .select({
+        id: chatbots.id,
+        personaConfig: chatbots.personaConfig,
+        ragIndexConfig: chatbots.ragIndexConfig,
+      })
       .from(chatbots)
       .where(and(eq(chatbots.id, id), eq(chatbots.tenantId, tenantId)));
 
@@ -50,18 +54,36 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       sampleSize: 50,
     });
 
-    // 생성된 페르소나를 DB에 저장 (기존 설정과 병합)
+    // 결과를 두 config으로 분리 저장
+    // personaConfig: 사용자 편집 가능한 챗봇 성격/태도
+    // ragIndexConfig: AI 자동 생성, 사용자 편집 불가 (RAG 검색 트리거)
+    const now = new Date().toISOString();
+
     const existingPersonaConfig = (chatbot.personaConfig as object) || {};
     const updatedPersonaConfig = {
       ...existingPersonaConfig,
-      ...generatedPersona,
-      lastGeneratedAt: new Date().toISOString(),
+      // AI가 생성한 페르소나 필드 (사용자도 편집 가능)
+      name: (existingPersonaConfig as { name?: string }).name || generatedPersona.name,
+      expertiseArea: generatedPersona.expertiseArea,
+      expertiseDescription: generatedPersona.expertiseDescription,
+      tone: generatedPersona.tone,
+    };
+
+    // RAG 인덱스 설정 (AI 전용, 사용자 편집 불가)
+    const updatedRagIndexConfig = {
+      keywords: generatedPersona.keywords,
+      includedTopics: generatedPersona.includedTopics,
+      excludedTopics: generatedPersona.excludedTopics,
+      confidence: generatedPersona.confidence,
+      lastGeneratedAt: now,
+      documentSampleCount: 50, // sampleSize와 동일
     };
 
     await db
       .update(chatbots)
       .set({
         personaConfig: updatedPersonaConfig,
+        ragIndexConfig: updatedRagIndexConfig,
         updatedAt: new Date(),
       })
       .where(eq(chatbots.id, id));
@@ -69,6 +91,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       success: true,
       persona: updatedPersonaConfig,
+      ragIndex: updatedRagIndexConfig,
     });
   } catch (error) {
     // 사용자 친화적 에러 메시지 반환

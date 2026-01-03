@@ -9,7 +9,7 @@ import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 import type { ChunkReviewItem, ChunkStatus } from '@/lib/review/types';
 
 interface ChunkDetailProps {
@@ -25,7 +25,6 @@ export function ChunkDetail({ chunkId }: ChunkDetailProps) {
   const [editContent, setEditContent] = useState('');
   const [isPending, startTransition] = useTransition();
   const { confirm } = useAlertDialog();
-  const { error: showError } = useToast();
 
   // 청크 조회
   useEffect(() => {
@@ -72,7 +71,7 @@ export function ChunkDetail({ chunkId }: ChunkDetailProps) {
         const data = await response.json();
         setChunk(data.chunk);
       } catch (err) {
-        showError('상태 변경 실패', '상태 변경에 실패했습니다.');
+        toast.error('상태 변경 실패', { description: '상태 변경에 실패했습니다.' });
       }
     });
   };
@@ -100,7 +99,7 @@ export function ChunkDetail({ chunkId }: ChunkDetailProps) {
         setChunk(data.chunk);
         setIsEditing(false);
       } catch (err) {
-        showError('저장 실패', '저장에 실패했습니다.');
+        toast.error('저장 실패', { description: '저장에 실패했습니다.' });
       }
     });
   };

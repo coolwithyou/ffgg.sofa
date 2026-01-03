@@ -9,7 +9,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { FolderOpen, FileText, MoreVertical, Pencil, Trash2, Star } from 'lucide-react';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 import type { DatasetSummary } from './actions';
 import { deleteDataset, updateDataset, setDefaultDataset } from './actions';
 
@@ -26,7 +26,6 @@ export function DatasetList({ datasets: initialDatasets }: DatasetListProps) {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [isSettingDefault, setIsSettingDefault] = useState(false);
   const { confirm } = useAlertDialog();
-  const { error } = useToast();
 
   // 서버에서 재검증된 데이터로 동기화
   useEffect(() => {
@@ -51,7 +50,7 @@ export function DatasetList({ datasets: initialDatasets }: DatasetListProps) {
     if (result.success) {
       setEditingId(null);
     } else {
-      error('저장 실패', result.error);
+      toast.error('저장 실패', { description: result.error });
     }
   };
 
@@ -85,7 +84,7 @@ export function DatasetList({ datasets: initialDatasets }: DatasetListProps) {
     setMenuOpenId(null);
 
     if (!result.success) {
-      error('설정 실패', result.error);
+      toast.error('설정 실패', { description: result.error });
     }
   };
 

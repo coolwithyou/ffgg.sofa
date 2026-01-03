@@ -9,7 +9,7 @@ import { useState } from 'react';
 import type { LibraryDocument, DatasetOption } from '../actions';
 import { moveDocumentToDataset, duplicateDocumentToDataset } from '../actions';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 
 interface DocumentMapperProps {
   document: LibraryDocument | null;
@@ -22,7 +22,6 @@ export function DocumentMapper({ document, datasets, onSuccess }: DocumentMapper
     datasets.find((d) => d.isDefault)?.id || datasets[0]?.id || ''
   );
   const { confirm } = useAlertDialog();
-  const { success, error: showError, warning } = useToast();
 
   // 문서가 선택되지 않은 경우
   if (!document) {
@@ -44,13 +43,13 @@ export function DocumentMapper({ document, datasets, onSuccess }: DocumentMapper
 
   const handleAction = async () => {
     if (!targetDatasetId) {
-      warning('데이터셋 선택 필요', '대상 데이터셋을 선택해주세요.');
+      toast.warning('데이터셋 선택 필요', { description: '대상 데이터셋을 선택해주세요.' });
       return;
     }
 
     // 같은 데이터셋 선택 시 방지
     if (document.datasetId === targetDatasetId) {
-      warning('동일 데이터셋', '이미 해당 데이터셋에 속한 문서입니다.');
+      toast.warning('동일 데이터셋', { description: '이미 해당 데이터셋에 속한 문서입니다.' });
       return;
     }
 
@@ -71,7 +70,7 @@ export function DocumentMapper({ document, datasets, onSuccess }: DocumentMapper
           if (!result.success) {
             throw new Error(result.error || '이동에 실패했습니다.');
           }
-          success('이동 완료', '문서가 성공적으로 이동되었습니다.');
+          toast.success('이동 완료', { description: '문서가 성공적으로 이동되었습니다.' });
           onSuccess?.();
         } else {
           // 이미 배치된 문서 → 복제
@@ -79,7 +78,7 @@ export function DocumentMapper({ document, datasets, onSuccess }: DocumentMapper
           if (!result.success) {
             throw new Error(result.error || '복제에 실패했습니다.');
           }
-          success('복제 완료', `문서가 성공적으로 복제되었습니다. (${result.copiedChunkCount}개 청크 복제됨)`);
+          toast.success('복제 완료', { description: `문서가 성공적으로 복제되었습니다. (${result.copiedChunkCount}개 청크 복제됨)` });
           onSuccess?.();
         }
       },

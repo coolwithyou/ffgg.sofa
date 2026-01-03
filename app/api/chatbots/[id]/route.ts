@@ -19,6 +19,8 @@ import {
 import { validateSession } from '@/lib/auth/session';
 
 // 챗봇 수정 스키마
+// personaConfig: 사용자 편집 가능한 필드만 허용
+// ragIndexConfig: AI 자동 생성 필드로, PATCH로 수정 불가
 const updateChatbotSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional().nullable(),
@@ -36,19 +38,16 @@ const updateChatbotSchema = z.object({
       minScore: z.number().min(0).max(1).optional(),
     })
     .optional(),
+  // 페르소나 설정 (사용자 편집 가능한 챗봇 성격/태도만)
   personaConfig: z
     .object({
       name: z.string().max(100).optional(),
       expertiseArea: z.string().max(200).optional(),
       expertiseDescription: z.string().max(500).optional(),
-      includedTopics: z.array(z.string().max(50)).max(20).optional(),
-      excludedTopics: z.array(z.string().max(50)).max(20).optional(),
       tone: z.enum(['professional', 'friendly', 'casual']).optional(),
-      keywords: z.array(z.string().max(50)).max(20).optional(),
-      confidence: z.number().min(0).max(1).optional(),
-      lastGeneratedAt: z.string().datetime().optional().nullable(),
     })
     .optional(),
+  // ragIndexConfig는 스키마에서 제외 (AI 자동 생성, 사용자 편집 불가)
 });
 
 interface RouteParams {

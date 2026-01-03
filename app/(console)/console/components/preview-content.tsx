@@ -21,6 +21,8 @@ export function PreviewContent() {
     toggleBlockVisibility,
     removeBlock,
     reorderBlocks,
+    moveBlockUp,
+    moveBlockDown,
   } = useBlocks();
 
   if (!currentChatbot) {
@@ -47,6 +49,8 @@ export function PreviewContent() {
       onToggleVisibility={toggleBlockVisibility}
       onDeleteBlock={removeBlock}
       onReorderBlocks={reorderBlocks}
+      onMoveBlockUp={moveBlockUp}
+      onMoveBlockDown={moveBlockDown}
     />
   );
 }

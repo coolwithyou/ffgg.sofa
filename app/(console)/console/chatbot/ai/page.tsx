@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useCurrentChatbot } from '../../hooks/use-console-state';
 import {
   Card,
@@ -10,6 +10,7 @@ import {
   CardContent,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 import {
   Brain,
   Sparkles,
@@ -18,7 +19,11 @@ import {
   Loader2,
   AlertTriangle,
   RefreshCw,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
+
+type RagIndexStatus = 'idle' | 'generating' | 'completed' | 'failed';
 
 interface LlmConfig {
   temperature: number;
@@ -31,16 +36,22 @@ interface SearchConfig {
   minScore: number;
 }
 
+// 페르소나 설정 (사용자 편집 가능)
 interface PersonaConfig {
   name: string;
   expertiseArea: string;
   expertiseDescription?: string;
-  includedTopics?: string[];
-  excludedTopics?: string[];
   tone: 'professional' | 'friendly' | 'casual';
-  keywords?: string[];
-  confidence?: number;
-  lastGeneratedAt?: string | null;
+}
+
+// RAG 인덱스 설정 (AI 자동 생성, 읽기 전용)
+interface RagIndexConfig {
+  keywords: string[];
+  includedTopics: string[];
+  excludedTopics: string[];
+  confidence: number | null;
+  lastGeneratedAt: string | null;
+  documentSampleCount: number;
 }
 
 interface DatasetInfo {
@@ -54,8 +65,10 @@ interface ChatbotData {
     llmConfig: LlmConfig;
     searchConfig: SearchConfig;
     personaConfig: PersonaConfig;
+    ragIndexConfig: RagIndexConfig;
     datasets: DatasetInfo[];
     updatedAt: string;
+    contentUpdatedAt: string | null;
   };
 }
 
@@ -71,9 +84,15 @@ export default function AISettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // RAG 인덱스 생성 상태 (백그라운드 자동 생성 모니터링)
+  const [ragStatus, setRagStatus] = useState<RagIndexStatus>('idle');
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const prevStatusRef = useRef<RagIndexStatus>('idle');
+
   // 데이터셋 정보 상태
   const [datasets, setDatasets] = useState<DatasetInfo[]>([]);
-  const [chatbotUpdatedAt, setChatbotUpdatedAt] = useState<string | null>(null);
+  // 콘텐츠(데이터셋, 문서) 변경 시점 - 페르소나 재생성 필요 여부 판단에 사용
+  const [contentUpdatedAt, setContentUpdatedAt] = useState<string | null>(null);
 
   // LLM 설정 상태
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({
@@ -88,85 +107,148 @@ export default function AISettingsPage() {
     minScore: 0.5,
   });
 
-  // 페르소나 설정 상태
+  // 페르소나 설정 상태 (사용자 편집 가능)
   const [personaConfig, setPersonaConfig] = useState<PersonaConfig>({
     name: 'AI 어시스턴트',
     expertiseArea: '',
     expertiseDescription: '',
+    tone: 'friendly',
+  });
+
+  // RAG 인덱스 설정 상태 (AI 자동 생성, 읽기 전용)
+  const [ragIndexConfig, setRagIndexConfig] = useState<RagIndexConfig>({
+    keywords: [],
     includedTopics: [],
     excludedTopics: [],
-    tone: 'friendly',
+    confidence: null,
     lastGeneratedAt: null,
+    documentSampleCount: 0,
   });
 
   // 페르소나 업데이트 필요 여부 체크
+  // contentUpdatedAt: 데이터셋 연결/해제 등 RAG에 영향을 주는 변경만 추적
   const needsPersonaUpdate = (): boolean => {
-    if (!personaConfig.lastGeneratedAt) return true;
-    if (!chatbotUpdatedAt) return false;
+    if (!ragIndexConfig.lastGeneratedAt) return true;
+    if (!contentUpdatedAt) return false;
 
-    const personaDate = new Date(personaConfig.lastGeneratedAt);
-    const chatbotDate = new Date(chatbotUpdatedAt);
+    const ragDate = new Date(ragIndexConfig.lastGeneratedAt);
+    const contentDate = new Date(contentUpdatedAt);
 
-    // 챗봇이 페르소나 생성 이후에 업데이트되었으면 갱신 필요
-    return chatbotDate > personaDate;
+    // 콘텐츠가 RAG 인덱스 생성 이후에 변경되었으면 갱신 필요
+    return contentDate > ragDate;
   };
 
   const hasDatasets = datasets.length > 0;
   const totalChunks = datasets.reduce((sum, d) => sum + d.chunkCount, 0);
 
-  // 챗봇 데이터 로드
+  // 챗봇 데이터 로드 함수 (재사용 가능하도록 useCallback으로 래핑)
+  const fetchChatbot = useCallback(async (showLoader = true) => {
+    if (!currentChatbot?.id) return;
+
+    if (showLoader) setIsLoading(true);
+    try {
+      const response = await fetch(`/api/chatbots/${currentChatbot.id}`);
+      if (!response.ok) throw new Error('챗봇 데이터를 불러올 수 없습니다');
+
+      const data: ChatbotData = await response.json();
+      const { chatbot } = data;
+
+      setDatasets(chatbot.datasets || []);
+      setContentUpdatedAt(chatbot.contentUpdatedAt);
+
+      if (chatbot.llmConfig) {
+        setLlmConfig({
+          temperature: chatbot.llmConfig.temperature ?? 0.7,
+          maxTokens: chatbot.llmConfig.maxTokens ?? 1024,
+          systemPrompt: chatbot.llmConfig.systemPrompt ?? '',
+        });
+      }
+
+      if (chatbot.searchConfig) {
+        setSearchConfig({
+          maxChunks: chatbot.searchConfig.maxChunks ?? 5,
+          minScore: chatbot.searchConfig.minScore ?? 0.5,
+        });
+      }
+
+      // 페르소나 설정 (사용자 편집 가능)
+      if (chatbot.personaConfig) {
+        setPersonaConfig({
+          name: chatbot.personaConfig.name ?? 'AI 어시스턴트',
+          expertiseArea: chatbot.personaConfig.expertiseArea ?? '',
+          expertiseDescription: chatbot.personaConfig.expertiseDescription ?? '',
+          tone: chatbot.personaConfig.tone ?? 'friendly',
+        });
+      }
+
+      // RAG 인덱스 설정 (AI 자동 생성, 읽기 전용)
+      if (chatbot.ragIndexConfig) {
+        setRagIndexConfig({
+          keywords: chatbot.ragIndexConfig.keywords ?? [],
+          includedTopics: chatbot.ragIndexConfig.includedTopics ?? [],
+          excludedTopics: chatbot.ragIndexConfig.excludedTopics ?? [],
+          confidence: chatbot.ragIndexConfig.confidence ?? null,
+          lastGeneratedAt: chatbot.ragIndexConfig.lastGeneratedAt ?? null,
+          documentSampleCount: chatbot.ragIndexConfig.documentSampleCount ?? 0,
+        });
+      }
+    } catch (error) {
+      console.error('챗봇 데이터 로드 오류:', error);
+    } finally {
+      if (showLoader) setIsLoading(false);
+    }
+  }, [currentChatbot?.id]);
+
+  // 초기 데이터 로드
+  useEffect(() => {
+    fetchChatbot();
+  }, [fetchChatbot]);
+
+  // RAG 인덱스 상태 폴링
   useEffect(() => {
     if (!currentChatbot?.id) return;
 
-    const fetchChatbot = async () => {
-      setIsLoading(true);
+    const checkRagStatus = async () => {
       try {
-        const response = await fetch(`/api/chatbots/${currentChatbot.id}`);
-        if (!response.ok) throw new Error('챗봇 데이터를 불러올 수 없습니다');
+        const response = await fetch(`/api/chatbots/${currentChatbot.id}/rag-status`);
+        if (!response.ok) return;
 
-        const data: ChatbotData = await response.json();
-        const { chatbot } = data;
+        const data = await response.json();
+        const newStatus = data.status as RagIndexStatus;
+        setRagStatus(newStatus);
 
-        setDatasets(chatbot.datasets || []);
-        setChatbotUpdatedAt(chatbot.updatedAt);
-
-        if (chatbot.llmConfig) {
-          setLlmConfig({
-            temperature: chatbot.llmConfig.temperature ?? 0.7,
-            maxTokens: chatbot.llmConfig.maxTokens ?? 1024,
-            systemPrompt: chatbot.llmConfig.systemPrompt ?? '',
+        // 상태 변화 감지 및 알림
+        if (prevStatusRef.current === 'generating' && newStatus === 'completed') {
+          // 생성 완료 시 데이터 새로고침 및 알림
+          await fetchChatbot(false);
+          toast.success('RAG 인덱스 생성 완료', {
+            description: '데이터셋 변경에 따라 RAG 검색 인덱스가 자동으로 업데이트되었습니다.',
+          });
+        } else if (prevStatusRef.current === 'generating' && newStatus === 'failed') {
+          // 생성 실패 시 알림
+          toast.error('RAG 인덱스 생성 실패', {
+            description: 'RAG 검색 인덱스 생성 중 오류가 발생했습니다. 다시 시도해주세요.',
           });
         }
 
-        if (chatbot.searchConfig) {
-          setSearchConfig({
-            maxChunks: chatbot.searchConfig.maxChunks ?? 5,
-            minScore: chatbot.searchConfig.minScore ?? 0.5,
-          });
-        }
-
-        if (chatbot.personaConfig) {
-          setPersonaConfig({
-            name: chatbot.personaConfig.name ?? 'AI 어시스턴트',
-            expertiseArea: chatbot.personaConfig.expertiseArea ?? '',
-            expertiseDescription: chatbot.personaConfig.expertiseDescription ?? '',
-            includedTopics: chatbot.personaConfig.includedTopics ?? [],
-            excludedTopics: chatbot.personaConfig.excludedTopics ?? [],
-            tone: chatbot.personaConfig.tone ?? 'friendly',
-            keywords: chatbot.personaConfig.keywords ?? [],
-            confidence: chatbot.personaConfig.confidence,
-            lastGeneratedAt: chatbot.personaConfig.lastGeneratedAt ?? null,
-          });
-        }
+        prevStatusRef.current = newStatus;
       } catch (error) {
-        console.error('챗봇 데이터 로드 오류:', error);
-      } finally {
-        setIsLoading(false);
+        console.error('RAG 상태 조회 오류:', error);
       }
     };
 
-    fetchChatbot();
-  }, [currentChatbot?.id]);
+    // 초기 상태 체크
+    checkRagStatus();
+
+    // 폴링 시작 (3초마다)
+    pollingRef.current = setInterval(checkRagStatus, 3000);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, [currentChatbot?.id, fetchChatbot]);
 
   const handleSave = async () => {
     if (!currentChatbot?.id) return;
@@ -211,11 +293,18 @@ export default function AISettingsPage() {
       }
 
       const data = await response.json();
+      // 페르소나 설정 업데이트 (사용자 편집 가능 필드)
       if (data.persona) {
-        setPersonaConfig((prev) => ({
-          ...prev,
-          ...data.persona,
-        }));
+        setPersonaConfig({
+          name: data.persona.name ?? personaConfig.name,
+          expertiseArea: data.persona.expertiseArea ?? '',
+          expertiseDescription: data.persona.expertiseDescription ?? '',
+          tone: data.persona.tone ?? 'friendly',
+        });
+      }
+      // RAG 인덱스 설정 업데이트 (AI 자동 생성, 읽기 전용)
+      if (data.ragIndex) {
+        setRagIndexConfig(data.ragIndex);
       }
     } catch (error) {
       console.error('페르소나 생성 오류:', error);
@@ -269,7 +358,7 @@ export default function AISettingsPage() {
               </div>
             </CardContent>
           </Card>
-        ) : needsPersonaUpdate() ? (
+        ) : needsPersonaUpdate() && ragStatus !== 'generating' ? (
           <Card size="md" className="border-primary/30 bg-primary/5">
             <CardContent className="flex items-start gap-4 pt-6">
               <RefreshCw className="h-5 w-5 shrink-0 text-primary" />
@@ -296,27 +385,48 @@ export default function AISettingsPage() {
                   페르소나 다시 생성
                 </Button>
               </div>
-              {personaConfig.lastGeneratedAt && (
+              {ragIndexConfig.lastGeneratedAt && (
                 <p className="text-xs text-muted-foreground">
-                  마지막 생성: {new Date(personaConfig.lastGeneratedAt).toLocaleDateString('ko-KR')}
+                  마지막 생성: {new Date(ragIndexConfig.lastGeneratedAt).toLocaleDateString('ko-KR')}
                 </p>
               )}
             </CardContent>
           </Card>
         ) : null}
 
-        {/* 페르소나 설정 카드 - RAG 파이프라인 게이트 역할로 최상단 배치 */}
-        <Card size="md">
+        {/* RAG 인덱스 자동 생성 중 알림 배너 */}
+        {ragStatus === 'generating' && (
+          <Card size="md" className="animate-pulse border-purple-500/30 bg-purple-500/5">
+            <CardContent className="flex items-center gap-4 pt-6">
+              <Loader2 className="h-5 w-5 shrink-0 animate-spin text-purple-500" />
+              <div className="flex-1">
+                <p className="font-medium text-foreground">
+                  RAG 검색 인덱스 자동 생성 중...
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  데이터셋 변경이 감지되어 RAG 검색 인덱스를 자동으로 업데이트하고 있습니다.
+                  완료되면 알림을 표시합니다.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* RAG 인덱스 카드 - AI 자동 생성, 읽기 전용 */}
+        <Card size="md" className="border-purple-500/20 bg-purple-500/5">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-muted-foreground" />
-                <CardTitle>페르소나 설정</CardTitle>
+                <Search className="h-5 w-5 text-purple-500" />
+                <CardTitle>RAG 검색 인덱스</CardTitle>
+                <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-xs text-purple-500">
+                  AI 자동 생성
+                </span>
               </div>
               <div className="flex items-center gap-2">
-                {personaConfig.confidence && (
+                {ragIndexConfig.confidence && (
                   <span className="text-xs text-muted-foreground">
-                    신뢰도: {Math.round(personaConfig.confidence * 100)}%
+                    신뢰도: {Math.round(ragIndexConfig.confidence * 100)}%
                   </span>
                 )}
                 <Button
@@ -330,34 +440,106 @@ export default function AISettingsPage() {
                   ) : (
                     <Sparkles className="mr-2 h-4 w-4" />
                   )}
-                  AI 자동 생성
+                  다시 생성
                 </Button>
               </div>
             </div>
             <CardDescription>
-              챗봇의 성격과 전문 분야를 설정합니다. 데이터셋 문서를 분석하여 자동 생성할 수 있습니다.
+              데이터셋 문서를 분석하여 자동 생성됩니다. 사용자가 수정할 수 없으며, RAG 검색 활성화 조건으로 사용됩니다.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* 키워드 (자동 생성됨) */}
-            {personaConfig.keywords && personaConfig.keywords.length > 0 && (
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-foreground">
-                  키워드 (자동 생성)
-                </label>
+            {/* 키워드 (읽기 전용) */}
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                트리거 키워드
+              </label>
+              {ragIndexConfig.keywords.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {personaConfig.keywords.map((keyword, idx) => (
+                  {ragIndexConfig.keywords.map((keyword, idx) => (
                     <span
                       key={idx}
-                      className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary"
+                      className="rounded-full bg-purple-500/10 px-3 py-1 text-sm text-purple-500"
                     >
                       {keyword}
                     </span>
                   ))}
                 </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">아직 생성되지 않았습니다</p>
+              )}
+            </div>
+
+            {/* 포함 주제 (읽기 전용) */}
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                포함 주제
+              </label>
+              {ragIndexConfig.includedTopics.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {ragIndexConfig.includedTopics.map((topic, idx) => (
+                    <span
+                      key={idx}
+                      className="rounded-full bg-green-500/10 px-3 py-1 text-sm text-green-600 dark:text-green-400"
+                    >
+                      {topic}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">아직 생성되지 않았습니다</p>
+              )}
+              <p className="mt-1 text-xs text-muted-foreground">
+                이 주제가 감지되면 RAG 검색을 실행합니다
+              </p>
+            </div>
+
+            {/* 제외 주제 (읽기 전용) */}
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                제외 주제
+              </label>
+              {ragIndexConfig.excludedTopics.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {ragIndexConfig.excludedTopics.map((topic, idx) => (
+                    <span
+                      key={idx}
+                      className="rounded-full bg-destructive/10 px-3 py-1 text-sm text-destructive"
+                    >
+                      {topic}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">아직 생성되지 않았습니다</p>
+              )}
+              <p className="mt-1 text-xs text-muted-foreground">
+                이 주제가 감지되면 RAG 검색을 건너뜁니다
+              </p>
+            </div>
+
+            {/* 메타 정보 */}
+            {ragIndexConfig.lastGeneratedAt && (
+              <div className="flex items-center gap-4 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                <span>마지막 생성: {new Date(ragIndexConfig.lastGeneratedAt).toLocaleString('ko-KR')}</span>
+                <span>분석 문서: {ragIndexConfig.documentSampleCount}개</span>
               </div>
             )}
+          </CardContent>
+        </Card>
 
+        {/* 페르소나 설정 카드 - 사용자 편집 가능 */}
+        <Card size="md">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-muted-foreground" />
+              <CardTitle>페르소나 설정</CardTitle>
+            </div>
+            <CardDescription>
+              챗봇의 성격과 응답 스타일을 설정합니다. 자유롭게 수정할 수 있습니다.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
             {/* 이름 */}
             <div>
               <label className="mb-1.5 block text-sm font-medium text-foreground">
@@ -431,56 +613,6 @@ export default function AISettingsPage() {
                 <option value="friendly">친근한 (Friendly)</option>
                 <option value="casual">캐주얼 (Casual)</option>
               </select>
-            </div>
-
-            {/* 포함 주제 */}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                포함 주제
-              </label>
-              <input
-                type="text"
-                value={(personaConfig.includedTopics ?? []).join(', ')}
-                onChange={(e) =>
-                  setPersonaConfig((prev) => ({
-                    ...prev,
-                    includedTopics: e.target.value
-                      .split(',')
-                      .map((t) => t.trim())
-                      .filter(Boolean),
-                  }))
-                }
-                placeholder="쉼표로 구분: 제품 문의, 배송, 환불"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                챗봇이 응답할 주제들
-              </p>
-            </div>
-
-            {/* 제외 주제 */}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                제외 주제
-              </label>
-              <input
-                type="text"
-                value={(personaConfig.excludedTopics ?? []).join(', ')}
-                onChange={(e) =>
-                  setPersonaConfig((prev) => ({
-                    ...prev,
-                    excludedTopics: e.target.value
-                      .split(',')
-                      .map((t) => t.trim())
-                      .filter(Boolean),
-                  }))
-                }
-                placeholder="쉼표로 구분: 경쟁사, 가격 협상"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                챗봇이 응답하지 않을 주제들
-              </p>
             </div>
           </CardContent>
         </Card>

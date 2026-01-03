@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 import { Copy, Check, AlertTriangle } from 'lucide-react';
 
 type EmbedType = 'javascript' | 'iframe' | 'react';
@@ -33,7 +33,6 @@ export function WidgetEmbedDialog({
 }: WidgetEmbedDialogProps) {
   const [embedType, setEmbedType] = useState<EmbedType>('javascript');
   const [copied, setCopied] = useState(false);
-  const { success } = useToast();
 
   // 복사 상태 리셋
   useEffect(() => {
@@ -105,7 +104,7 @@ export function SofaChatWidget() {
     try {
       await navigator.clipboard.writeText(code);
       setCopied(true);
-      success('클립보드에 복사되었습니다!');
+      toast.success('클립보드에 복사되었습니다!');
     } catch (err) {
       // Fallback for older browsers
       const textarea = document.createElement('textarea');
@@ -115,7 +114,7 @@ export function SofaChatWidget() {
       document.execCommand('copy');
       document.body.removeChild(textarea);
       setCopied(true);
-      success('클립보드에 복사되었습니다!');
+      toast.success('클립보드에 복사되었습니다!');
     }
   };
 

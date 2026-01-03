@@ -12,7 +12,8 @@ import { ReviewActions } from './review-actions';
 import { StatusSummary } from './status-summary';
 import { ChunkDetailDialog } from './chunk-detail-dialog';
 import type { ChunkReviewItem, ChunkReviewItemWithMetrics, ChunkStatus } from '@/lib/review/types';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
+import { useCurrentChatbot } from '../../../hooks/use-console-state';
 // 메트릭 포함 여부에 따른 응답 타입
 type ChunkItem = ChunkReviewItem | ChunkReviewItemWithMetrics;
 
@@ -30,6 +31,7 @@ interface ReviewContentProps {
 }
 
 export function ReviewContent({ initialFilters }: ReviewContentProps) {
+  const { currentChatbot } = useCurrentChatbot();
   const [chunks, setChunks] = useState<ChunkItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -38,7 +40,6 @@ export function ReviewContent({ initialFilters }: ReviewContentProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [isLoading, setIsLoading] = useState(true);
-  const { error: showError } = useToast();
 
   // 다이얼로그 상태
   const [selectedChunkId, setSelectedChunkId] = useState<string | null>(null);
@@ -65,11 +66,16 @@ export function ReviewContent({ initialFilters }: ReviewContentProps) {
 
   // 청크 목록 조회
   const fetchChunks = useCallback(async () => {
+    if (!currentChatbot?.id) return;
+
     setIsLoading(true);
     try {
       const params = new URLSearchParams();
       params.set('page', page.toString());
       params.set('limit', limit.toString());
+
+      // 챗봇별 필터링
+      params.set('chatbotId', currentChatbot.id);
 
       // 문서 필터
       if (filters.documentId) {
@@ -137,7 +143,7 @@ export function ReviewContent({ initialFilters }: ReviewContentProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [page, limit, filters]);
+  }, [page, limit, filters, currentChatbot?.id]);
 
   useEffect(() => {
     fetchChunks();
@@ -202,7 +208,7 @@ export function ReviewContent({ initialFilters }: ReviewContentProps) {
         setSelectedIds(new Set());
       } catch (error) {
         console.error('Bulk update error:', error);
-        showError('일괄 업데이트 실패', '선택한 항목들의 상태 변경에 실패했습니다.');
+        toast.error('일괄 업데이트 실패', { description: '선택한 항목들의 상태 변경에 실패했습니다.' });
       }
     });
   };
@@ -228,7 +234,7 @@ export function ReviewContent({ initialFilters }: ReviewContentProps) {
         );
       } catch (error) {
         console.error('Status change error:', error);
-        showError('상태 변경 실패', '청크 상태 변경에 실패했습니다.');
+        toast.error('상태 변경 실패', { description: '청크 상태 변경에 실패했습니다.' });
       }
     });
   };

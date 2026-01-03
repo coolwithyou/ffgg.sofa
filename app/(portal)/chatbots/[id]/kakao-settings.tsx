@@ -13,7 +13,7 @@ import {
   ExternalLink,
   Settings,
 } from 'lucide-react';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 
 interface KakaoData {
   enabled: boolean;
@@ -51,8 +51,6 @@ export function KakaoSettings({
   const [isSavingBotId, setIsSavingBotId] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  const { success, error: showError, warning } = useToast();
 
   // 설정 폼 상태
   const [botId, setBotId] = useState('');

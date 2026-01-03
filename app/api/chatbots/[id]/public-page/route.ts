@@ -1,16 +1,16 @@
 /**
  * 공개 페이지 설정 API
  *
- * GET /api/chatbots/:id/public-page - 설정 조회
+ * GET /api/chatbots/:id/public-page - draft 설정 조회
  * POST /api/chatbots/:id/public-page - 활성화/비활성화 토글
- * PATCH /api/chatbots/:id/public-page - 설정 업데이트
+ * PATCH /api/chatbots/:id/public-page - draft 설정 업데이트
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { eq, and, ne } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { chatbots } from '@/drizzle/schema';
+import { chatbots, chatbotConfigVersions } from '@/drizzle/schema';
 import { validateSession } from '@/lib/auth/session';
 import { validateSlug } from '@/lib/public-page/reserved-slugs';
 import {
@@ -45,9 +45,24 @@ const updateSchema = z.object({
         .optional(),
       theme: z
         .object({
+          // 기본 색상
           backgroundColor: z.string().optional(),
           primaryColor: z.string().optional(),
           textColor: z.string().optional(),
+          fontFamily: z.string().optional(),
+          // 배경 이미지
+          backgroundImage: z.string().optional(),
+          backgroundSize: z.enum(['cover', 'contain', 'auto']).optional(),
+          backgroundRepeat: z
+            .enum(['no-repeat', 'repeat', 'repeat-x', 'repeat-y'])
+            .optional(),
+          backgroundPosition: z.string().optional(),
+          // 카드 스타일
+          cardBackgroundColor: z.string().optional(),
+          cardShadow: z.number().optional(),
+          cardMarginY: z.number().optional(),
+          cardPaddingX: z.number().optional(),
+          cardBorderRadius: z.number().optional(),
         })
         .optional(),
       seo: z
@@ -63,8 +78,44 @@ const updateSchema = z.object({
 });
 
 /**
+ * draft 버전 조회 또는 생성
+ */
+async function getOrCreateDraftVersion(chatbotId: string, chatbot: {
+  publicPageConfig: unknown;
+  widgetConfig: unknown;
+}) {
+  // draft 버전 조회
+  const [draftVersion] = await db
+    .select()
+    .from(chatbotConfigVersions)
+    .where(
+      and(
+        eq(chatbotConfigVersions.chatbotId, chatbotId),
+        eq(chatbotConfigVersions.versionType, 'draft')
+      )
+    );
+
+  if (draftVersion) {
+    return draftVersion;
+  }
+
+  // draft가 없으면 chatbot의 현재 설정으로 생성
+  const [newDraft] = await db
+    .insert(chatbotConfigVersions)
+    .values({
+      chatbotId,
+      versionType: 'draft',
+      publicPageConfig: chatbot.publicPageConfig ?? {},
+      widgetConfig: chatbot.widgetConfig ?? {},
+    })
+    .returning();
+
+  return newDraft;
+}
+
+/**
  * GET /api/chatbots/:id/public-page
- * 공개 페이지 설정 조회
+ * draft 버전 설정 조회
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
@@ -83,6 +134,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         slug: chatbots.slug,
         publicPageEnabled: chatbots.publicPageEnabled,
         publicPageConfig: chatbots.publicPageConfig,
+        widgetConfig: chatbots.widgetConfig,
       })
       .from(chatbots)
       .where(and(eq(chatbots.id, id), eq(chatbots.tenantId, tenantId)));
@@ -94,8 +146,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // config 파싱
-    const config = parsePublicPageConfig(chatbot.publicPageConfig);
+    // draft 버전 조회 또는 생성
+    const draftVersion = await getOrCreateDraftVersion(id, chatbot);
+
+    // config 파싱 (draft 버전에서)
+    const config = parsePublicPageConfig(draftVersion.publicPageConfig);
 
     return NextResponse.json({
       publicPage: {
@@ -220,7 +275,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
 /**
  * PATCH /api/chatbots/:id/public-page
- * 공개 페이지 설정 업데이트
+ * draft 버전 설정 업데이트
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
@@ -278,10 +333,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           { status: 400 }
         );
       }
+
+      // chatbots 테이블의 slug 업데이트
+      await db
+        .update(chatbots)
+        .set({
+          slug,
+          updatedAt: new Date(),
+        })
+        .where(eq(chatbots.id, id));
     }
 
+    // draft 버전 조회 또는 생성
+    const draftVersion = await getOrCreateDraftVersion(id, chatbot);
+
     // 기존 config와 병합
-    const existingConfig = parsePublicPageConfig(chatbot.publicPageConfig);
+    const existingConfig = parsePublicPageConfig(draftVersion.publicPageConfig);
     const updatedConfig = config
       ? toPublicPageConfigJson({
           header: { ...existingConfig.header, ...config.header },
@@ -290,17 +357,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           // blocks는 전체 교체 (deep merge 아님)
           blocks: config.blocks ?? existingConfig.blocks,
         })
-      : chatbot.publicPageConfig;
+      : draftVersion.publicPageConfig;
 
-    // 업데이트
+    // draft 버전 업데이트
     await db
-      .update(chatbots)
+      .update(chatbotConfigVersions)
       .set({
-        slug: slug !== undefined ? slug : chatbot.slug,
         publicPageConfig: updatedConfig,
         updatedAt: new Date(),
       })
-      .where(eq(chatbots.id, id));
+      .where(eq(chatbotConfigVersions.id, draftVersion.id));
 
     return NextResponse.json({
       message: '설정이 저장되었습니다',

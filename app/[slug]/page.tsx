@@ -10,7 +10,7 @@
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { Metadata } from 'next';
-import { db, chatbots, tenants } from '@/lib/db';
+import { db, chatbots, tenants, chatbotConfigVersions } from '@/lib/db';
 import { eq, and } from 'drizzle-orm';
 import { isReservedSlug } from '@/lib/public-page/reserved-slugs';
 import { parsePublicPageConfig } from '@/lib/public-page/types';
@@ -21,7 +21,10 @@ interface PublicPageProps {
 }
 
 /**
- * 슬러그로 챗봇 조회
+ * 슬러그로 챗봇 조회 (published 버전에서 설정 읽기)
+ *
+ * published 버전이 있으면 해당 설정 사용,
+ * 없으면 chatbots 테이블의 기존 설정으로 폴백 (기존 데이터 호환성)
  */
 async function getChatbotBySlug(slug: string) {
   const result = await db
@@ -31,11 +34,22 @@ async function getChatbotBySlug(slug: string) {
       tenantId: chatbots.tenantId,
       slug: chatbots.slug,
       publicPageEnabled: chatbots.publicPageEnabled,
-      publicPageConfig: chatbots.publicPageConfig,
-      widgetConfig: chatbots.widgetConfig,
+      // chatbots 테이블 값 (폴백용)
+      chatbotPublicPageConfig: chatbots.publicPageConfig,
+      chatbotWidgetConfig: chatbots.widgetConfig,
+      // published 버전 값 (우선)
+      publishedPublicPageConfig: chatbotConfigVersions.publicPageConfig,
+      publishedWidgetConfig: chatbotConfigVersions.widgetConfig,
     })
     .from(chatbots)
     .innerJoin(tenants, eq(chatbots.tenantId, tenants.id))
+    .leftJoin(
+      chatbotConfigVersions,
+      and(
+        eq(chatbotConfigVersions.chatbotId, chatbots.id),
+        eq(chatbotConfigVersions.versionType, 'published')
+      )
+    )
     .where(
       and(
         eq(chatbots.slug, slug),
@@ -45,7 +59,20 @@ async function getChatbotBySlug(slug: string) {
     )
     .limit(1);
 
-  return result[0] || null;
+  if (!result[0]) return null;
+
+  const row = result[0];
+
+  // published 버전이 있으면 사용, 없으면 chatbots 테이블 값으로 폴백
+  return {
+    id: row.id,
+    name: row.name,
+    tenantId: row.tenantId,
+    slug: row.slug,
+    publicPageEnabled: row.publicPageEnabled,
+    publicPageConfig: row.publishedPublicPageConfig ?? row.chatbotPublicPageConfig,
+    widgetConfig: row.publishedWidgetConfig ?? row.chatbotWidgetConfig,
+  };
 }
 
 export default async function PublicPage({ params }: PublicPageProps) {

@@ -10,7 +10,7 @@
 import { useState, useEffect, useTransition, useMemo } from 'react';
 import { ChevronDown, ChevronUp, Eye, EyeOff, Trash2, Search, X } from 'lucide-react';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 
 interface ChunkItem {
   id: string;
@@ -42,7 +42,6 @@ export function DocumentChunks({ documentId, onChunkUpdate, showSearch = false }
   const [processingChunkId, setProcessingChunkId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const { confirm } = useAlertDialog();
-  const { error: showError } = useToast();
 
   useEffect(() => {
     fetchChunks();
@@ -92,7 +91,7 @@ export function DocumentChunks({ documentId, onChunkUpdate, showSearch = false }
 
         onChunkUpdate?.();
       } catch (err) {
-        showError('상태 변경 실패', err instanceof Error ? err.message : '오류가 발생했습니다.');
+        toast.error('상태 변경 실패', { description: err instanceof Error ? err.message : '오류가 발생했습니다.' });
       } finally {
         setProcessingChunkId(null);
       }

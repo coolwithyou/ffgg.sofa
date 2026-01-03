@@ -141,6 +141,20 @@
       "when": 1767421068875,
       "tag": "0019_perfect_paibok",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1767438604890,
+      "tag": "0020_hesitant_hardball",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1767443862354,
+      "tag": "0021_add_kakao_id",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,2 @@
+ALTER TABLE "chatbots" ALTER COLUMN "persona_config" SET DEFAULT '{"name":"AI 어시스턴트","expertiseArea":"기업 문서 및 FAQ","tone":"friendly","expertiseDescription":null}'::jsonb;--> statement-breakpoint
+ALTER TABLE "chatbots" ADD COLUMN "rag_index_config" jsonb DEFAULT '{"keywords":[],"includedTopics":[],"excludedTopics":[],"confidence":null,"lastGeneratedAt":null,"documentSampleCount":0}'::jsonb;

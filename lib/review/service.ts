@@ -3,7 +3,7 @@
  * 청크 조회, 수정, 승인/거부 로직
  */
 
-import { db, chunks, documents } from '@/lib/db';
+import { db, chunks, documents, chatbotDatasets } from '@/lib/db';
 import { eq, and, or, gte, lte, like, desc, asc, sql, inArray } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import type {
@@ -55,6 +55,7 @@ export async function getChunkList(
 ): Promise<ChunkListResult | ChunkListResultWithMetrics> {
   const {
     tenantId,
+    chatbotId,
     documentId,
     status,
     minQualityScore,
@@ -79,6 +80,26 @@ export async function getChunkList(
 
   // 조건 구성
   const conditions = [eq(chunks.tenantId, tenantId)];
+
+  // 챗봇별 필터링: 연결된 데이터셋의 문서만 조회
+  if (chatbotId) {
+    // 서브쿼리: 챗봇에 연결된 데이터셋 ID 목록
+    const linkedDatasetSubquery = db
+      .select({ datasetId: chatbotDatasets.datasetId })
+      .from(chatbotDatasets)
+      .where(eq(chatbotDatasets.chatbotId, chatbotId));
+
+    // documents.datasetId가 연결된 데이터셋에 포함되는 문서의 청크만 조회
+    conditions.push(
+      inArray(
+        chunks.documentId,
+        db
+          .select({ id: documents.id })
+          .from(documents)
+          .where(inArray(documents.datasetId, linkedDatasetSubquery))
+      )
+    );
+  }
 
   if (documentId) {
     conditions.push(eq(chunks.documentId, documentId));

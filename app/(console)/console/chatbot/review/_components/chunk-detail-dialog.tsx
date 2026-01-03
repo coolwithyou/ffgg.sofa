@@ -11,7 +11,7 @@
 import { useState, useEffect, useTransition, useCallback } from 'react';
 import { Dialog } from '@/components/ui/dialog';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 import type { ChunkReviewItem, ChunkStatus } from '@/lib/review/types';
 
 interface ChunkDetailDialogProps {
@@ -41,7 +41,6 @@ export function ChunkDetailDialog({
   const [editContent, setEditContent] = useState('');
   const [isPending, startTransition] = useTransition();
   const { confirm } = useAlertDialog();
-  const { error: showError } = useToast();
 
   // 현재 인덱스 계산
   const currentIndex = chunkId ? chunkIds.indexOf(chunkId) : -1;
@@ -104,11 +103,11 @@ export function ChunkDetailDialog({
           setChunk(data.chunk);
           onChunkUpdated(chunkId, { status: data.chunk.status });
         } catch (err) {
-          showError('상태 변경 실패', '상태 변경에 실패했습니다.');
+          toast.error('상태 변경 실패', { description: '상태 변경에 실패했습니다.' });
         }
       });
     },
-    [chunk, chunkId, onChunkUpdated, showError]
+    [chunk, chunkId, onChunkUpdated]
   );
 
   // 내용 저장
@@ -138,7 +137,7 @@ export function ChunkDetailDialog({
           status: data.chunk.status,
         });
       } catch (err) {
-        showError('저장 실패', '저장에 실패했습니다.');
+        toast.error('저장 실패', { description: '저장에 실패했습니다.' });
       }
     });
   };

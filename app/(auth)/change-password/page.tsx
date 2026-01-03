@@ -14,9 +14,9 @@ export default async function ChangePasswordPage() {
     redirect('/login');
   }
 
-  // 비밀번호 변경이 필요하지 않으면 대시보드로
+  // 비밀번호 변경이 필요하지 않으면 콘솔로
   if (!session.mustChangePassword) {
-    redirect('/dashboard');
+    redirect('/console');
   }
 
   return (

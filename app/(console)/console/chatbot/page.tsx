@@ -3,6 +3,8 @@
 /**
  * Knowledge 페이지 (문서 + 라이브러리 통합)
  * 탭으로 문서/라이브러리 전환
+ *
+ * 챗봇별 데이터 격리: 현재 선택된 챗봇에 연결된 데이터셋의 문서만 표시
  */
 
 import { useState, useEffect } from 'react';
@@ -11,6 +13,7 @@ import { DocumentUpload } from './_components/document-upload';
 import { LibraryDocumentList } from './_components/library-document-list';
 import { UploadGuide } from './_components/upload-guide';
 import { TemplateDownload } from './_components/template-download';
+import { useCurrentChatbot } from '../hooks/use-console-state';
 import {
   getDocuments,
   getLibraryDocuments,
@@ -23,6 +26,7 @@ import {
 type TabType = 'documents' | 'library';
 
 export default function KnowledgePage() {
+  const { currentChatbot } = useCurrentChatbot();
   const [activeTab, setActiveTab] = useState<TabType>('documents');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -33,15 +37,18 @@ export default function KnowledgePage() {
   const [libraryDocuments, setLibraryDocuments] = useState<LibraryDocument[]>([]);
   const [datasets, setDatasets] = useState<DatasetOption[]>([]);
 
-  // 초기 데이터 로딩
+  // 초기 데이터 로딩 (챗봇 변경 시 재로딩)
   useEffect(() => {
+    if (!currentChatbot?.id) return;
+
     async function loadInitialData() {
       setIsLoading(true);
       try {
+        const chatbotId = currentChatbot!.id;
         const [docsResult, libDocs, dsOptions] = await Promise.all([
-          getDocuments(1, 10),
-          getLibraryDocuments(),
-          getDatasets(),
+          getDocuments(chatbotId, 1, 10),
+          getLibraryDocuments(chatbotId),
+          getDatasets(chatbotId),
         ]);
         setDocumentsData(docsResult);
         setLibraryDocuments(libDocs);
@@ -53,15 +60,18 @@ export default function KnowledgePage() {
       }
     }
     loadInitialData();
-  }, []);
+  }, [currentChatbot?.id]);
 
   // 데이터 새로고침
   const refreshData = async () => {
+    if (!currentChatbot?.id) return;
+
     try {
+      const chatbotId = currentChatbot.id;
       const [docsResult, libDocs, dsOptions] = await Promise.all([
-        getDocuments(1, 10),
-        getLibraryDocuments(),
-        getDatasets(),
+        getDocuments(chatbotId, 1, 10),
+        getLibraryDocuments(chatbotId),
+        getDatasets(chatbotId),
       ]);
       setDocumentsData(docsResult);
       setLibraryDocuments(libDocs);

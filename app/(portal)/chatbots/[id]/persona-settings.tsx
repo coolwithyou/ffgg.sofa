@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { User, Check, RotateCcw, Sparkles, Plus, X } from 'lucide-react';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 
 interface PersonaConfig {
   name?: string;
@@ -44,7 +44,6 @@ export function PersonaSettings({ chatbotId, onUpdate }: PersonaSettingsProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const { confirm } = useAlertDialog();
-  const { success, error: showError } = useToast();
 
   // 페르소나 상태
   const [name, setName] = useState(DEFAULT_PERSONA.name!);

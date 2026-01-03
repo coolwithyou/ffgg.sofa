@@ -14,6 +14,7 @@ import type { ChunkListFilter, ChunkStatus } from '@/lib/review/types';
 
 // 청크 목록 조회 스키마
 const listQuerySchema = z.object({
+  chatbotId: z.string().uuid().optional(), // 챗봇별 필터링
   documentId: z.string().uuid().optional(),
   status: z
     .union([

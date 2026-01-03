@@ -14,7 +14,7 @@ import {
   Palette,
   MessageSquare,
 } from 'lucide-react';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 
 interface WidgetData {
   enabled: boolean;
@@ -46,8 +46,6 @@ export function WidgetSettings({
   const [isToggling, setIsToggling] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  const { success, error: showError } = useToast();
 
   // 설정 폼 상태
   const [primaryColor, setPrimaryColor] = useState('#3B82F6');

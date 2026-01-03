@@ -1,9 +1,9 @@
 'use client';
 
-import { WidgetPreview } from '../../components/widget-preview';
-import { WidgetSettings } from '../../components/widget-settings';
-import { useConsole } from '../../hooks/use-console-state';
-import { useWidgetAutoSave } from '../../hooks/use-widget-auto-save';
+import { WidgetPreview } from '../components/widget-preview';
+import { WidgetSettings } from '../components/widget-settings';
+import { useConsole } from '../hooks/use-console-state';
+import { useWidgetAutoSave } from '../hooks/use-widget-auto-save';
 
 /**
  * Widget 에디터

@@ -20,7 +20,7 @@ export function SaveStatusIndicator() {
   const config = {
     saved: {
       icon: Check,
-      text: '저장됨',
+      text: '초안 저장됨',
       className: 'text-green-500',
     },
     saving: {

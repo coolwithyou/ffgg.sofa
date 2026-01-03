@@ -230,9 +230,13 @@ export function PublicPageView({
     borderRadius: `${theme.cardBorderRadius ?? 16}px`,
   };
 
+  // 편집 모드: 부모 컨테이너 채우기 (min-h-full + h-full)
+  // 보기 모드: 전체 화면 채우기 (min-h-screen)
+  const mainClassName = isEditing ? 'min-h-full h-full' : 'min-h-screen';
+
   return (
     <main
-      className="min-h-screen"
+      className={mainClassName}
       style={backgroundStyles}
       onClick={handleBackgroundClick}
     >

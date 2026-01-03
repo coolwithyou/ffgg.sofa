@@ -1,0 +1,1 @@
+ALTER TABLE "chatbots" ADD COLUMN "content_updated_at" timestamp with time zone;

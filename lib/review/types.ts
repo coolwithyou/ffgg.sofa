@@ -24,6 +24,7 @@ export interface ChunkReviewItem {
 
 export interface ChunkListFilter {
   tenantId: string;
+  chatbotId?: string; // 챗봇별 필터링 (연결된 데이터셋의 문서만)
   documentId?: string;
   status?: ChunkStatus | ChunkStatus[];
   minQualityScore?: number;
