@@ -12,6 +12,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronDown, Database, Library } from 'lucide-react';
 import { PreviewModal } from './preview-modal';
 import { DocumentProgressModal } from '@/components/document-progress-modal';
+import { useTenantSettings } from '../../hooks/use-console-state';
 
 interface DatasetOption {
   id: string;
@@ -78,7 +79,11 @@ export function DocumentUpload() {
     progress: 0,
   });
 
-  // 저장 위치 선택 상태
+  // 고급 모드 여부 확인
+  const { isAdvancedModeEnabled } = useTenantSettings();
+  const showAdvancedOptions = isAdvancedModeEnabled();
+
+  // 저장 위치 선택 상태 (일반 모드에서는 항상 'dataset')
   const [destination, setDestination] = useState<'dataset' | 'library'>('dataset');
 
   // 데이터셋 선택 상태
@@ -293,115 +298,138 @@ export function DocumentUpload() {
 
   return (
     <>
-      {/* 업로드 설정 카드 */}
-      <div className="rounded-lg border border-border bg-card p-6">
-        {/* 저장 위치 선택 - 탭 스타일 */}
-        <div className="mb-6">
-          <label className="mb-3 block text-sm font-medium text-foreground">
-            저장 위치
-          </label>
-          <div className="flex rounded-lg border border-border bg-muted p-1">
-            <button
-              type="button"
-              onClick={() => setDestination('dataset')}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors ${
-                destination === 'dataset'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Database className="h-4 w-4" />
-              데이터셋에 저장
-            </button>
-            <button
-              type="button"
-              onClick={() => setDestination('library')}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors ${
-                destination === 'library'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Library className="h-4 w-4" />
-              라이브러리에 저장
-            </button>
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {destination === 'dataset'
-              ? '문서가 선택한 데이터셋에 바로 추가되어 챗봇 검색에 활용됩니다.'
-              : '문서가 라이브러리에 저장되고, 나중에 청크를 원하는 데이터셋에 복사할 수 있습니다.'}
-          </p>
-        </div>
-
-        {/* 데이터셋 선택 (destination이 'dataset'일 때만 표시) */}
-        {destination === 'dataset' && (
-          <div>
-            <label className="mb-2 block text-sm font-medium text-foreground">
-              업로드할 데이터셋
+      {/* 업로드 설정 카드 - 고급 모드에서만 표시 */}
+      {showAdvancedOptions ? (
+        <div className="rounded-lg border border-border bg-card p-6">
+          {/* 저장 위치 선택 - 탭 스타일 */}
+          <div className="mb-6">
+            <label className="mb-3 block text-sm font-medium text-foreground">
+              저장 위치
             </label>
-            <div className="relative">
+            <div className="flex rounded-lg border border-border bg-muted p-1">
               <button
                 type="button"
-                onClick={() => setShowDatasetDropdown(!showDatasetDropdown)}
-                disabled={isLoadingDatasets || datasets.length === 0}
-                className="flex w-full items-center justify-between rounded-md border border-border bg-background px-4 py-2.5 text-left text-sm text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => setDestination('dataset')}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors ${
+                  destination === 'dataset'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
               >
-                <div className="flex items-center gap-2">
-                  <Database className="h-4 w-4 text-muted-foreground" />
-                  {isLoadingDatasets ? (
-                    <span className="text-muted-foreground">로딩 중...</span>
-                  ) : selectedDataset ? (
-                    <span>
-                      {selectedDataset.name}
-                      {selectedDataset.isDefault && (
-                        <span className="ml-2 text-xs text-muted-foreground">(기본)</span>
-                      )}
-                    </span>
-                  ) : datasets.length === 0 ? (
-                    <span className="text-muted-foreground">데이터셋이 없습니다</span>
-                  ) : (
-                    <span className="text-muted-foreground">데이터셋 선택</span>
-                  )}
-                </div>
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                <Database className="h-4 w-4" />
+                데이터셋에 저장
               </button>
+              <button
+                type="button"
+                onClick={() => setDestination('library')}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors ${
+                  destination === 'library'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Library className="h-4 w-4" />
+                라이브러리에 저장
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {destination === 'dataset'
+                ? '문서가 선택한 데이터셋에 바로 추가되어 챗봇 검색에 활용됩니다.'
+                : '문서가 라이브러리에 저장되고, 나중에 청크를 원하는 데이터셋에 복사할 수 있습니다.'}
+            </p>
+          </div>
 
-              {showDatasetDropdown && datasets.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full rounded-md border border-border bg-card shadow-lg">
-                  <div className="max-h-60 overflow-auto py-1">
-                    {datasets.map((dataset) => (
-                      <button
-                        key={dataset.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedDatasetId(dataset.id);
-                          setShowDatasetDropdown(false);
-                        }}
-                        className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-muted ${
-                          selectedDatasetId === dataset.id
-                            ? 'bg-primary/10 text-primary'
-                            : 'text-foreground'
-                        }`}
-                      >
-                        <Database className="h-4 w-4" />
-                        <span>{dataset.name}</span>
-                        {dataset.isDefault && (
-                          <span className="ml-auto text-xs text-muted-foreground">(기본)</span>
+          {/* 데이터셋 선택 (destination이 'dataset'일 때만 표시) */}
+          {destination === 'dataset' && (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                업로드할 데이터셋
+              </label>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowDatasetDropdown(!showDatasetDropdown)}
+                  disabled={isLoadingDatasets || datasets.length === 0}
+                  className="flex w-full items-center justify-between rounded-md border border-border bg-background px-4 py-2.5 text-left text-sm text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-2">
+                    <Database className="h-4 w-4 text-muted-foreground" />
+                    {isLoadingDatasets ? (
+                      <span className="text-muted-foreground">로딩 중...</span>
+                    ) : selectedDataset ? (
+                      <span>
+                        {selectedDataset.name}
+                        {selectedDataset.isDefault && (
+                          <span className="ml-2 text-xs text-muted-foreground">(기본)</span>
                         )}
-                      </button>
-                    ))}
+                      </span>
+                    ) : datasets.length === 0 ? (
+                      <span className="text-muted-foreground">데이터셋이 없습니다</span>
+                    ) : (
+                      <span className="text-muted-foreground">데이터셋 선택</span>
+                    )}
                   </div>
-                </div>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                </button>
+
+                {showDatasetDropdown && datasets.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full rounded-md border border-border bg-card shadow-lg">
+                    <div className="max-h-60 overflow-auto py-1">
+                      {datasets.map((dataset) => (
+                        <button
+                          key={dataset.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedDatasetId(dataset.id);
+                            setShowDatasetDropdown(false);
+                          }}
+                          className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-muted ${
+                            selectedDatasetId === dataset.id
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-foreground'
+                          }`}
+                        >
+                          <Database className="h-4 w-4" />
+                          <span>{dataset.name}</span>
+                          {dataset.isDefault && (
+                            <span className="ml-auto text-xs text-muted-foreground">(기본)</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {datasets.length === 0 && !isLoadingDatasets && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  먼저 <a href="/console/chatbot/datasets" className="text-primary hover:underline">데이터셋을 생성</a>하세요.
+                </p>
               )}
             </div>
-            {datasets.length === 0 && !isLoadingDatasets && (
-              <p className="mt-2 text-sm text-muted-foreground">
-                먼저 <a href="/console/chatbot/datasets" className="text-primary hover:underline">데이터셋을 생성</a>하세요.
+          )}
+        </div>
+      ) : (
+        /* 일반 모드 - 간소화된 안내 */
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Database className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {isLoadingDatasets
+                  ? '데이터셋 확인 중...'
+                  : selectedDataset
+                    ? `${selectedDataset.name}에 저장됩니다`
+                    : '기본 데이터셋에 저장됩니다'}
               </p>
-            )}
+              <p className="text-xs text-muted-foreground">
+                업로드된 문서는 챗봇의 지식으로 활용됩니다
+              </p>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* 드래그 앤 드롭 영역 */}
       <div

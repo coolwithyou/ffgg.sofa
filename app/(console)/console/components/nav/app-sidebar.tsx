@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronsUpDown, LogOut, Settings, User } from 'lucide-react';
@@ -30,7 +31,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 import { navItems, type NavItem } from './nav-config';
-import { useCurrentChatbot } from '../../hooks/use-console-state';
+import { useCurrentChatbot, useTenantSettings } from '../../hooks/use-console-state';
 import { Bot, Check, Plus, Sofa } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -134,6 +135,24 @@ function SidebarChatbotSwitcher() {
  */
 function NavMain() {
   const pathname = usePathname();
+  const { isAdvancedModeEnabled } = useTenantSettings();
+
+  // 고급 모드 비활성화 시 데이터셋 메뉴 숨김
+  const filteredNavItems = useMemo(() => {
+    if (isAdvancedModeEnabled()) {
+      return navItems;
+    }
+
+    return navItems.map((item) => {
+      if (item.id === 'chatbot' && item.subItems) {
+        return {
+          ...item,
+          subItems: item.subItems.filter((sub) => sub.id !== 'datasets'),
+        };
+      }
+      return item;
+    });
+  }, [isAdvancedModeEnabled]);
 
   /**
    * 서브아이템이 활성화되어 있는지 확인
@@ -177,7 +196,7 @@ function NavMain() {
     <SidebarGroup>
       <SidebarGroupLabel>메뉴</SidebarGroupLabel>
       <SidebarMenu>
-        {navItems.map((item) => {
+        {filteredNavItems.map((item) => {
           const Icon = item.icon;
           const hasSubItems = item.subItems && item.subItems.length > 0;
 

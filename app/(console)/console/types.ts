@@ -1,5 +1,7 @@
 import type { PublicPageConfig } from '@/lib/public-page/types';
 import type { WidgetConfig } from '@/lib/widget/types';
+import type { Tier } from '@/lib/tier/constants';
+import type { TenantSettings } from '@/lib/tier/types';
 
 // 챗봇 기본 정보 (목록용)
 export interface ConsoleChatbot {
@@ -25,6 +27,11 @@ export type SaveStatus = 'saved' | 'saving' | 'error' | 'unsaved';
 export interface ConsoleState {
   // 모드
   mode: ConsoleMode;
+
+  // 테넌트 설정 (티어 + 고급 모드)
+  tier: Tier;
+  tenantSettings: TenantSettings;
+  isTenantLoading: boolean;
 
   // 챗봇
   chatbots: ConsoleChatbot[];
@@ -60,7 +67,12 @@ export interface ConsoleState {
 export interface ConsoleActions {
   setMode: (mode: ConsoleMode) => void;
   selectChatbot: (index: number) => void;
+  selectChatbotById: (id: string) => void;
   navigateChatbot: (direction: 'prev' | 'next') => void;
+  // 테넌트 설정 액션
+  isAdvancedModeEnabled: () => boolean;
+  canEnableAdvancedMode: () => boolean;
+  setAdvancedMode: (enabled: boolean) => Promise<void>;
   // Page 설정 액션
   updatePageConfig: (partial: Partial<PublicPageConfig>) => void;
   updateHeaderConfig: (partial: Partial<PublicPageConfig['header']>) => void;

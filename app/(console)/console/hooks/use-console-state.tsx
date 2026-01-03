@@ -25,6 +25,12 @@ import {
   parseWidgetConfig,
   type WidgetConfig,
 } from '@/lib/widget/types';
+import { type Tier } from '@/lib/tier/constants';
+import {
+  type TenantSettings,
+  DEFAULT_TENANT_SETTINGS,
+  canEnableAdvancedMode as checkCanEnableAdvancedMode,
+} from '@/lib/tier/types';
 
 // Context 생성
 const ConsoleContext = createContext<ConsoleContextValue | null>(null);
@@ -52,6 +58,13 @@ export function ConsoleProvider({
 
   // 블록 에디터 상태
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+
+  // 테넌트 설정 상태
+  const [tier, setTier] = useState<Tier>('basic');
+  const [tenantSettings, setTenantSettings] = useState<TenantSettings>(
+    DEFAULT_TENANT_SETTINGS
+  );
+  const [isTenantLoading, setIsTenantLoading] = useState(true);
 
   // 현재 챗봇 (파생 상태)
   const currentChatbot = useMemo(
@@ -135,7 +148,68 @@ export function ConsoleProvider({
     }
   }, [initialChatbots.length, reloadChatbots]);
 
-  // 챗봇 선택
+  // 테넌트 설정 로드
+  const loadTenantSettings = useCallback(async () => {
+    setIsTenantLoading(true);
+    try {
+      const res = await fetch('/api/tenants/settings');
+      if (!res.ok) throw new Error('Failed to fetch tenant settings');
+      const data = await res.json();
+      setTier(data.tier || 'basic');
+      setTenantSettings(data.settings || DEFAULT_TENANT_SETTINGS);
+    } catch (error) {
+      console.error('Failed to load tenant settings:', error);
+    } finally {
+      setIsTenantLoading(false);
+    }
+  }, []);
+
+  // 테넌트 설정 초기 로드
+  useEffect(() => {
+    loadTenantSettings();
+  }, [loadTenantSettings]);
+
+  // 고급 모드 활성화 여부 확인
+  const isAdvancedModeEnabled = useCallback(() => {
+    return tenantSettings.advancedDatasetMode === true;
+  }, [tenantSettings]);
+
+  // 고급 모드 활성화 가능 여부 (티어 기반)
+  const canEnableAdvancedMode = useCallback(() => {
+    return checkCanEnableAdvancedMode(tier);
+  }, [tier]);
+
+  // 고급 모드 설정
+  const setAdvancedMode = useCallback(
+    async (enabled: boolean) => {
+      // Premium 아닌 경우 활성화 불가
+      if (enabled && !checkCanEnableAdvancedMode(tier)) {
+        console.warn('Advanced mode is only available for premium tier');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/tenants/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ advancedDatasetMode: enabled }),
+        });
+
+        if (!res.ok) throw new Error('Failed to update settings');
+
+        setTenantSettings((prev) => ({
+          ...prev,
+          advancedDatasetMode: enabled,
+        }));
+      } catch (error) {
+        console.error('Failed to set advanced mode:', error);
+        throw error;
+      }
+    },
+    [tier]
+  );
+
+  // 챗봇 선택 (인덱스)
   const selectChatbot = useCallback(
     (index: number) => {
       if (index >= 0 && index < chatbots.length) {
@@ -143,6 +217,17 @@ export function ConsoleProvider({
       }
     },
     [chatbots.length]
+  );
+
+  // 챗봇 선택 (ID)
+  const selectChatbotById = useCallback(
+    (id: string) => {
+      const index = chatbots.findIndex((bot) => bot.id === id);
+      if (index !== -1) {
+        setCurrentChatbotIndex(index);
+      }
+    },
+    [chatbots]
   );
 
   // 챗봇 네비게이션 (캐러셀용)
@@ -251,6 +336,10 @@ export function ConsoleProvider({
       pageConfig,
       originalPageConfig,
       saveStatus,
+      // 테넌트 상태
+      tier,
+      tenantSettings,
+      isTenantLoading,
       // Widget 상태
       widgetConfig,
       originalWidgetConfig,
@@ -260,7 +349,13 @@ export function ConsoleProvider({
       // 액션
       setMode,
       selectChatbot,
+      selectChatbotById,
       navigateChatbot,
+      // 테넌트 설정 액션
+      isAdvancedModeEnabled,
+      canEnableAdvancedMode,
+      setAdvancedMode,
+      // Page 설정 액션
       updatePageConfig,
       updateHeaderConfig,
       updateThemeConfig,
@@ -287,12 +382,19 @@ export function ConsoleProvider({
       pageConfig,
       originalPageConfig,
       saveStatus,
+      tier,
+      tenantSettings,
+      isTenantLoading,
       widgetConfig,
       originalWidgetConfig,
       widgetSaveStatus,
       selectedBlockId,
       selectChatbot,
+      selectChatbotById,
       navigateChatbot,
+      isAdvancedModeEnabled,
+      canEnableAdvancedMode,
+      setAdvancedMode,
       updatePageConfig,
       updateHeaderConfig,
       updateThemeConfig,
@@ -326,9 +428,22 @@ export function useConsoleMode() {
 }
 
 export function useCurrentChatbot() {
-  const { currentChatbot, currentChatbotIndex, chatbots, selectChatbot, navigateChatbot } =
-    useConsole();
-  return { currentChatbot, currentChatbotIndex, chatbots, selectChatbot, navigateChatbot };
+  const {
+    currentChatbot,
+    currentChatbotIndex,
+    chatbots,
+    selectChatbot,
+    selectChatbotById,
+    navigateChatbot,
+  } = useConsole();
+  return {
+    currentChatbot,
+    currentChatbotIndex,
+    chatbots,
+    selectChatbot,
+    selectChatbotById,
+    navigateChatbot,
+  };
 }
 
 export function usePageConfig() {
@@ -373,5 +488,24 @@ export function useWidgetConfig() {
     updateWidgetTheme,
     setWidgetSaveStatus,
     setOriginalWidgetConfig,
+  };
+}
+
+export function useTenantSettings() {
+  const {
+    tier,
+    tenantSettings,
+    isTenantLoading,
+    isAdvancedModeEnabled,
+    canEnableAdvancedMode,
+    setAdvancedMode,
+  } = useConsole();
+  return {
+    tier,
+    tenantSettings,
+    isTenantLoading,
+    isAdvancedModeEnabled,
+    canEnableAdvancedMode,
+    setAdvancedMode,
   };
 }
