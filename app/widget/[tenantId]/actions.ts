@@ -10,7 +10,21 @@ import { chatbots, chatbotConfigVersions } from '@/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 import { processChat } from '@/lib/chat';
 import { logger } from '@/lib/logger';
+import { validatePointsForResponse, usePoints } from '@/lib/points';
 import type { WidgetConfig, WidgetChatResponse } from '@/lib/widget/types';
+
+/**
+ * 위젯 채팅 에러 타입
+ */
+export interface WidgetChatError {
+  error: string;
+  code?: 'INSUFFICIENT_POINTS' | 'RATE_LIMIT' | 'VALIDATION_ERROR';
+  details?: {
+    currentBalance?: number;
+    requiredPoints?: number;
+    message?: string;
+  };
+}
 
 interface ValidationResult {
   valid: boolean;
@@ -110,15 +124,44 @@ export async function sendWidgetMessage(
 ): Promise<WidgetChatResponse> {
   // 메시지 길이 검증
   if (!message || message.length > MAX_MESSAGE_LENGTH) {
-    throw new Error('메시지는 1자 이상 4000자 이하여야 합니다.');
+    const error: WidgetChatError = {
+      error: '메시지는 1자 이상 4000자 이하여야 합니다.',
+      code: 'VALIDATION_ERROR',
+    };
+    throw new Error(JSON.stringify(error));
   }
 
   try {
+    // 포인트 검증
+    const pointValidation = await validatePointsForResponse(tenantId);
+    if (!pointValidation.canProceed) {
+      const error: WidgetChatError = {
+        error: '포인트가 부족합니다',
+        code: 'INSUFFICIENT_POINTS',
+        details: {
+          currentBalance: pointValidation.currentBalance,
+          requiredPoints: pointValidation.requiredPoints,
+          message: '운영자의 포인트가 부족합니다. 잠시 후 다시 시도해주세요.',
+        },
+      };
+      throw new Error(JSON.stringify(error));
+    }
+
     const response = await processChat(tenantId, {
       message: message.trim(),
       sessionId,
       chatbotId,
       channel: 'web',
+    });
+
+    // 포인트 차감
+    await usePoints({
+      tenantId,
+      metadata: {
+        chatbotId,
+        conversationId: response.sessionId,
+        channel: 'widget',
+      },
     });
 
     return {
@@ -127,7 +170,14 @@ export async function sendWidgetMessage(
       sources: response.sources,
     };
   } catch (error) {
+    // 이미 구조화된 에러면 그대로 전달
+    if (error instanceof Error && error.message.startsWith('{')) {
+      throw error;
+    }
     logger.error('Widget chat failed', error as Error, { tenantId });
-    throw new Error('메시지 처리 중 오류가 발생했습니다.');
+    const chatError: WidgetChatError = {
+      error: '메시지 처리 중 오류가 발생했습니다.',
+    };
+    throw new Error(JSON.stringify(chatError));
   }
 }

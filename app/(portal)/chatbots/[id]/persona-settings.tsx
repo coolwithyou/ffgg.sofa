@@ -105,14 +105,14 @@ export function PersonaSettings({ chatbotId, onUpdate }: PersonaSettingsProps) {
 
       if (response.ok) {
         onUpdate();
-        success('저장 완료', '페르소나 설정이 저장되었습니다');
+        toast.success('페르소나 설정이 저장되었습니다');
       } else {
         const data = await response.json();
-        showError('저장 실패', data.error || '저장에 실패했습니다');
+        toast.error(data.error || '저장에 실패했습니다');
       }
     } catch (err) {
       console.error('Save error:', err);
-      showError('저장 실패', '저장 중 오류가 발생했습니다');
+      toast.error('저장 중 오류가 발생했습니다');
     } finally {
       setIsSaving(false);
     }
@@ -186,11 +186,11 @@ export function PersonaSettings({ chatbotId, onUpdate }: PersonaSettingsProps) {
         setGeneratedKeywords(data.persona.keywords || []);
         setGeneratedConfidence(data.persona.confidence || null);
       } else {
-        showError('생성 실패', data.error || '페르소나 생성에 실패했습니다');
+        toast.error(data.error || '페르소나 생성에 실패했습니다');
       }
     } catch (err) {
       console.error('Generate error:', err);
-      showError('생성 실패', '페르소나 생성 중 오류가 발생했습니다');
+      toast.error('페르소나 생성 중 오류가 발생했습니다');
     } finally {
       setIsGenerating(false);
     }

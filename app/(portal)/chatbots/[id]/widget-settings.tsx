@@ -97,7 +97,7 @@ export function WidgetSettings({
         onUpdate();
       } else {
         const data = await response.json();
-        showError('위젯 설정 오류', data.error || '오류가 발생했습니다.');
+        toast.error(data.error || '오류가 발생했습니다.');
       }
     } catch (err) {
       console.error('Toggle error:', err);
@@ -122,7 +122,7 @@ export function WidgetSettings({
 
       if (response.ok) {
         await fetchWidget();
-        success('저장 완료', '위젯 설정이 저장되었습니다.');
+        toast.success('위젯 설정이 저장되었습니다.');
       }
     } catch (err) {
       console.error('Save error:', err);

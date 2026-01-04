@@ -11,7 +11,11 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { sendPublicPageMessage, type PublicPageChatResponse } from '../actions';
+import {
+  sendPublicPageMessage,
+  type PublicPageChatResponse,
+  type PublicPageChatError,
+} from '../actions';
 import { ProgressIndicator } from '@/components/chat/progress-indicator';
 import { SourcesCollapsible, type Source } from '@/components/chat/sources-collapsible';
 
@@ -41,6 +45,33 @@ interface Message {
 // 메시지 최대 길이
 const MAX_MESSAGE_LENGTH = 4000;
 
+// 에러 상태
+interface ChatError {
+  message: string;
+  code?: 'INSUFFICIENT_POINTS' | 'RATE_LIMIT' | 'VALIDATION_ERROR';
+}
+
+/**
+ * 에러 메시지 파싱
+ * JSON 형식의 에러 메시지를 파싱하여 구조화된 에러 정보를 반환
+ */
+function parseError(error: unknown): ChatError {
+  if (!(error instanceof Error)) {
+    return { message: '메시지 전송에 실패했습니다.' };
+  }
+
+  try {
+    const parsed = JSON.parse(error.message) as PublicPageChatError;
+    return {
+      message: parsed.details?.message || parsed.error,
+      code: parsed.code,
+    };
+  } catch {
+    // JSON 파싱 실패 시 원본 메시지 사용
+    return { message: error.message };
+  }
+}
+
 export function ChatbotBlock({
   chatbotId,
   tenantId,
@@ -54,7 +85,7 @@ export function ChatbotBlock({
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ChatError | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -118,7 +149,7 @@ export function ChatbotBlock({
       setMessages((prev) => [...prev, assistantMessage]);
       setSessionId(response.sessionId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '메시지 전송에 실패했습니다.');
+      setError(parseError(err));
     } finally {
       setIsLoading(false);
     }
@@ -154,7 +185,12 @@ export function ChatbotBlock({
           )}
           {error && (
             <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
+              {error.message}
+              {error.code === 'INSUFFICIENT_POINTS' && (
+                <p className="mt-1 text-xs opacity-80">
+                  서비스 이용이 일시적으로 제한되었습니다.
+                </p>
+              )}
             </div>
           )}
           <div ref={messagesEndRef} />

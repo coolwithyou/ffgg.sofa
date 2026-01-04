@@ -7,7 +7,8 @@
 
 import { validateSession } from '@/lib/auth';
 import { db, tenants, documents, chunks, conversations } from '@/lib/db';
-import { sql, count } from 'drizzle-orm';
+import { tenantPoints, pointTransactions } from '@/drizzle/schema';
+import { sql, count, eq, gte, and } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import {
   getUsageOverview,
@@ -16,6 +17,7 @@ import {
   detectAnomalies,
 } from '@/lib/usage/cost-calculator';
 import type { UsageOverview, Forecast, CacheCostComparison } from '@/lib/usage/types';
+import { LOW_POINTS_THRESHOLD, POINT_TRANSACTION_TYPES } from '@/lib/points/constants';
 
 export interface SystemStats {
   totalTenants: number;
@@ -33,6 +35,8 @@ export interface TenantUsage {
   name: string;
   email: string;
   status: string;
+  tier: string;                  // 🆕 테넌트 플랜 티어
+  balance: number;               // 🆕 포인트 잔액
   documentCount: number;
   chunkCount: number;
   conversationCount: number;
@@ -51,15 +55,33 @@ export interface AIUsageSummary {
   anomalyCount: number;
 }
 
+// 포인트 시스템 통계
+export interface PointsStats {
+  totalBalance: number;           // 전체 테넌트 포인트 잔액 합계
+  activeTenantsWithPoints: number; // 포인트를 보유한 활성 테넌트 수
+  lowBalanceCount: number;        // 저잔액 테넌트 수 (100P 이하)
+  todayUsage: number;             // 오늘 사용된 포인트
+  monthUsage: number;             // 이번 달 사용된 포인트
+  todayCharges: number;           // 오늘 충전된 포인트
+  monthCharges: number;           // 이번 달 충전된 포인트
+}
+
 export interface AdminDashboardData {
   stats: SystemStats;
   topTenants: TenantUsage[];
   aiUsage: AIUsageSummary;
+  pointsStats: PointsStats;
   anomalies: Array<{
     tenantId: string;
     tenantName: string;
     todayCost: number;
     increaseRatio: number;
+  }>;
+  lowBalanceTenants: Array<{
+    tenantId: string;
+    tenantName: string;
+    tier: string;
+    balance: number;
   }>;
   recentErrors: Array<{
     id: string;
@@ -84,8 +106,9 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    // 병렬로 통계 조회 (기존 5개 + AI 사용량 4개)
+    // 병렬로 통계 조회 (기존 5개 + AI 사용량 4개 + 포인트 5개)
     const [
       tenantStats,
       documentCount,
@@ -98,6 +121,13 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
       forecast,
       cacheCost,
       anomaliesRaw,
+      // 포인트 통계 데이터
+      pointsOverview,
+      todayPointUsage,
+      monthPointUsage,
+      todayPointCharges,
+      monthPointCharges,
+      lowBalanceTenantsData,
     ] = await Promise.all([
       // 테넌트 통계
       db
@@ -127,18 +157,21 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
         })
         .from(conversations),
 
-      // 상위 테넌트 (사용량 기준)
+      // 상위 테넌트 (사용량 기준) - 티어 및 포인트 잔액 포함
       db.execute(sql`
         SELECT
           t.id,
           t.name,
           t.email,
           t.status,
+          t.tier,
+          COALESCE(tp.balance, 0) as balance,
           COALESCE(d.doc_count, 0) as document_count,
           COALESCE(c.chunk_count, 0) as chunk_count,
           COALESCE(cv.conv_count, 0) as conversation_count,
           t.created_at
         FROM tenants t
+        LEFT JOIN tenant_points tp ON tp.tenant_id = t.id
         LEFT JOIN (
           SELECT tenant_id, count(*) as doc_count
           FROM documents
@@ -169,6 +202,82 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
       getCacheCostComparison('month'),
       // 이상 징후 감지
       detectAnomalies(2.0),
+
+      // 포인트 통계: 전체 잔액 및 테넌트 수
+      db
+        .select({
+          totalBalance: sql<number>`COALESCE(SUM(balance), 0)`,
+          activeCount: sql<number>`COUNT(*) FILTER (WHERE balance > 0)`,
+          lowBalanceCount: sql<number>`COUNT(*) FILTER (WHERE balance <= ${LOW_POINTS_THRESHOLD} AND balance >= 0)`,
+        })
+        .from(tenantPoints),
+
+      // 포인트 통계: 오늘 사용량 (음수 트랜잭션)
+      db
+        .select({
+          total: sql<number>`COALESCE(SUM(ABS(amount)), 0)`,
+        })
+        .from(pointTransactions)
+        .where(
+          and(
+            eq(pointTransactions.type, POINT_TRANSACTION_TYPES.AI_RESPONSE),
+            gte(pointTransactions.createdAt, todayStart)
+          )
+        ),
+
+      // 포인트 통계: 이번 달 사용량
+      db
+        .select({
+          total: sql<number>`COALESCE(SUM(ABS(amount)), 0)`,
+        })
+        .from(pointTransactions)
+        .where(
+          and(
+            eq(pointTransactions.type, POINT_TRANSACTION_TYPES.AI_RESPONSE),
+            gte(pointTransactions.createdAt, monthStart)
+          )
+        ),
+
+      // 포인트 통계: 오늘 충전량
+      db
+        .select({
+          total: sql<number>`COALESCE(SUM(amount), 0)`,
+        })
+        .from(pointTransactions)
+        .where(
+          and(
+            sql`${pointTransactions.type} IN (${POINT_TRANSACTION_TYPES.SUBSCRIPTION_CHARGE}, ${POINT_TRANSACTION_TYPES.PURCHASE}, ${POINT_TRANSACTION_TYPES.FREE_TRIAL})`,
+            gte(pointTransactions.createdAt, todayStart)
+          )
+        ),
+
+      // 포인트 통계: 이번 달 충전량
+      db
+        .select({
+          total: sql<number>`COALESCE(SUM(amount), 0)`,
+        })
+        .from(pointTransactions)
+        .where(
+          and(
+            sql`${pointTransactions.type} IN (${POINT_TRANSACTION_TYPES.SUBSCRIPTION_CHARGE}, ${POINT_TRANSACTION_TYPES.PURCHASE}, ${POINT_TRANSACTION_TYPES.FREE_TRIAL})`,
+            gte(pointTransactions.createdAt, monthStart)
+          )
+        ),
+
+      // 저잔액 테넌트 목록
+      db.execute(sql`
+        SELECT
+          tp.tenant_id,
+          t.name as tenant_name,
+          t.tier,
+          tp.balance
+        FROM tenant_points tp
+        JOIN tenants t ON t.id = tp.tenant_id
+        WHERE tp.balance <= ${LOW_POINTS_THRESHOLD}
+          AND t.status = 'active'
+        ORDER BY tp.balance ASC
+        LIMIT 10
+      `),
     ]);
 
     const stats: SystemStats = {
@@ -187,6 +296,8 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
       name: string | null;
       email: string;
       status: string | null;
+      tier: string | null;
+      balance: number | string;
       document_count: string;
       chunk_count: string;
       conversation_count: string;
@@ -196,6 +307,8 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
       name: row.name || row.email.split('@')[0],
       email: row.email,
       status: row.status || 'active',
+      tier: row.tier || 'free',
+      balance: typeof row.balance === 'number' ? row.balance : parseInt(String(row.balance)) || 0,
       documentCount: parseInt(row.document_count) || 0,
       chunkCount: parseInt(row.chunk_count) || 0,
       conversationCount: parseInt(row.conversation_count) || 0,
@@ -241,6 +354,30 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
       increaseRatio: a.increaseRatio,
     }));
 
+    // 포인트 통계 생성
+    const pointsStats: PointsStats = {
+      totalBalance: pointsOverview[0]?.totalBalance ?? 0,
+      activeTenantsWithPoints: pointsOverview[0]?.activeCount ?? 0,
+      lowBalanceCount: pointsOverview[0]?.lowBalanceCount ?? 0,
+      todayUsage: todayPointUsage[0]?.total ?? 0,
+      monthUsage: monthPointUsage[0]?.total ?? 0,
+      todayCharges: todayPointCharges[0]?.total ?? 0,
+      monthCharges: monthPointCharges[0]?.total ?? 0,
+    };
+
+    // 저잔액 테넌트 목록 처리
+    const lowBalanceTenants = (lowBalanceTenantsData.rows as Array<{
+      tenant_id: string;
+      tenant_name: string | null;
+      tier: string | null;
+      balance: number;
+    }>).map((row) => ({
+      tenantId: row.tenant_id,
+      tenantName: row.tenant_name || 'Unknown',
+      tier: row.tier || 'free',
+      balance: row.balance,
+    }));
+
     logger.info('Admin dashboard data fetched', {
       operatorId: session.userId,
       stats: {
@@ -258,7 +395,9 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
       stats,
       topTenants,
       aiUsage,
+      pointsStats,
       anomalies,
+      lowBalanceTenants,
       recentErrors: [], // 에러 로그 테이블이 있다면 여기서 조회
     };
   } catch (error) {
@@ -284,11 +423,14 @@ export async function getTenantDetails(tenantId: string): Promise<TenantUsage | 
         t.name,
         t.email,
         t.status,
+        t.tier,
+        COALESCE(tp.balance, 0) as balance,
         COALESCE(d.doc_count, 0) as document_count,
         COALESCE(c.chunk_count, 0) as chunk_count,
         COALESCE(cv.conv_count, 0) as conversation_count,
         t.created_at
       FROM tenants t
+      LEFT JOIN tenant_points tp ON tp.tenant_id = t.id
       LEFT JOIN (
         SELECT tenant_id, count(*) as doc_count
         FROM documents
@@ -317,6 +459,8 @@ export async function getTenantDetails(tenantId: string): Promise<TenantUsage | 
       name: string | null;
       email: string;
       status: string | null;
+      tier: string | null;
+      balance: number | string;
       document_count: string;
       chunk_count: string;
       conversation_count: string;
@@ -328,6 +472,8 @@ export async function getTenantDetails(tenantId: string): Promise<TenantUsage | 
       name: row.name || row.email.split('@')[0],
       email: row.email,
       status: row.status || 'active',
+      tier: row.tier || 'free',
+      balance: typeof row.balance === 'number' ? row.balance : parseInt(String(row.balance)) || 0,
       documentCount: parseInt(row.document_count) || 0,
       chunkCount: parseInt(row.chunk_count) || 0,
       conversationCount: parseInt(row.conversation_count) || 0,

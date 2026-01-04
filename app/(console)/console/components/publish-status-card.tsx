@@ -2,12 +2,13 @@
 
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
-import { useCurrentChatbot, usePageConfig } from '../hooks/use-console-state';
+import { useCurrentChatbot, usePageConfig, useTenantSettings } from '../hooks/use-console-state';
 import { useAutoSaveContext } from '../hooks/use-auto-save';
 import { useVersions } from '../hooks/use-versions';
 import { VersionManagementDialog } from './version-management-dialog';
 import { savePreviewData } from '@/lib/public-page/preview-storage';
 import { Button } from '@/components/ui/button';
+import { TIER_FEATURES } from '@/lib/tier/constants';
 import {
   Eye,
   ExternalLink,
@@ -16,6 +17,8 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  Sparkles,
+  Lock,
 } from 'lucide-react';
 
 interface PublishStatusCardProps {
@@ -38,10 +41,14 @@ export function PublishStatusCard({ mode = 'public-page' }: PublishStatusCardPro
   const { pageConfig } = usePageConfig();
   const { saveStatus } = useAutoSaveContext();
   const { versions, hasChanges, isPublishing } = useVersions();
+  const { tier } = useTenantSettings();
 
   const [showVersionDialog, setShowVersionDialog] = useState(false);
 
   if (!currentChatbot) return null;
+
+  // 배포 가능 여부 확인
+  const canDeploy = TIER_FEATURES[tier]?.canDeploy ?? false;
 
   const publishedVersion = versions?.published;
   const isWidgetMode = mode === 'widget';
@@ -137,39 +144,57 @@ export function PublishStatusCard({ mode = 'public-page' }: PublishStatusCardPro
             </div>
           )}
 
-          {/* 발행 버튼 */}
-          <Button
-            size="sm"
-            className="w-full"
-            onClick={() => setShowVersionDialog(true)}
-            disabled={saveStatus === 'saving' || isPublishing}
-          >
-            {isPublishing ? (
-              <>
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                발행 중...
-              </>
-            ) : hasChanges ? (
-              <>
-                <Rocket className="mr-1.5 h-4 w-4" />
-                발행하기
-              </>
-            ) : (
-              <>
-                <Check className="mr-1.5 h-4 w-4" />
-                버전 관리
-              </>
-            )}
-          </Button>
+          {/* 발행 버튼 또는 업그레이드 유도 */}
+          {canDeploy ? (
+            <Button
+              size="sm"
+              className="w-full"
+              onClick={() => setShowVersionDialog(true)}
+              disabled={saveStatus === 'saving' || isPublishing}
+            >
+              {isPublishing ? (
+                <>
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  발행 중...
+                </>
+              ) : hasChanges ? (
+                <>
+                  <Rocket className="mr-1.5 h-4 w-4" />
+                  발행하기
+                </>
+              ) : (
+                <>
+                  <Check className="mr-1.5 h-4 w-4" />
+                  버전 관리
+                </>
+              )}
+            </Button>
+          ) : (
+            /* Free 플랜: 발행 불가 - 업그레이드 유도 */
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 rounded-md bg-muted p-2.5 text-xs text-muted-foreground">
+                <Lock className="h-3.5 w-3.5 shrink-0" />
+                <span>Free 플랜은 미리보기만 가능합니다</span>
+              </div>
+              <Button size="sm" className="w-full" asChild>
+                <Link href="/console/account/subscription/plans">
+                  <Sparkles className="mr-1.5 h-4 w-4" />
+                  Pro로 업그레이드
+                </Link>
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 버전 관리 다이얼로그 */}
-      <VersionManagementDialog
-        isOpen={showVersionDialog}
-        onClose={() => setShowVersionDialog(false)}
-        mode={mode}
-      />
+      {/* 버전 관리 다이얼로그 (canDeploy일 때만 사용) */}
+      {canDeploy && (
+        <VersionManagementDialog
+          isOpen={showVersionDialog}
+          onClose={() => setShowVersionDialog(false)}
+          mode={mode}
+        />
+      )}
     </>
   );
 }

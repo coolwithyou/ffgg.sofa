@@ -4,8 +4,10 @@ import { useState } from 'react';
 import {
   useConsole,
   useCurrentChatbot,
+  useTenantSettings,
   useWidgetConfig,
 } from '../hooks/use-console-state';
+import { TIER_FEATURES } from '@/lib/tier/constants';
 import { useWidgetAutoSave } from '../hooks/use-widget-auto-save';
 import { WidgetAppearanceSettings } from './settings/widget-appearance-settings';
 import { WidgetTextSettings } from './settings/widget-text-settings';
@@ -21,7 +23,8 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Palette, Type, Move, Code } from 'lucide-react';
+import { Palette, Type, Move, Code, Lock, Sparkles } from 'lucide-react';
+import Link from 'next/link';
 
 /**
  * 위젯 설정 패널
@@ -36,11 +39,15 @@ export function WidgetSettings() {
   const { widgetConfig, widgetSaveStatus } = useWidgetConfig();
   const { saveNow } = useWidgetAutoSave();
   const { reloadChatbots } = useConsole();
+  const { tier } = useTenantSettings();
 
   const [isToggling, setIsToggling] = useState(false);
   const [embedDialogOpen, setEmbedDialogOpen] = useState(false);
 
   const isEnabled = currentChatbot?.widgetEnabled ?? false;
+
+  // 배포 가능 여부 확인
+  const canDeploy = TIER_FEATURES[tier]?.canDeploy ?? false;
 
   // 위젯 활성화/비활성화 토글
   const handleToggle = async (checked: boolean) => {
@@ -83,31 +90,49 @@ export function WidgetSettings() {
   return (
     <div className="flex h-full w-[360px] flex-col border-l border-border bg-card">
       {/* 상단 액션 */}
-      <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
-        <div className="flex items-center gap-3">
-          <Switch
-            id="widget-enabled"
-            size="sm"
-            checked={isEnabled}
-            onCheckedChange={handleToggle}
-            disabled={isToggling}
-          />
-          <Label
-            htmlFor="widget-enabled"
-            className="cursor-pointer text-sm font-medium text-foreground"
-          >
-            {isEnabled ? '활성화' : '비활성화'}
-          </Label>
-        </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setEmbedDialogOpen(true)}
-          disabled={!isEnabled}
-        >
-          <Code className="mr-1.5 h-4 w-4" />
-          임베드 코드
-        </Button>
+      <div className="shrink-0 border-b border-border px-4 py-3">
+        {canDeploy ? (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Switch
+                id="widget-enabled"
+                size="sm"
+                checked={isEnabled}
+                onCheckedChange={handleToggle}
+                disabled={isToggling}
+              />
+              <Label
+                htmlFor="widget-enabled"
+                className="cursor-pointer text-sm font-medium text-foreground"
+              >
+                {isEnabled ? '활성화' : '비활성화'}
+              </Label>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setEmbedDialogOpen(true)}
+              disabled={!isEnabled}
+            >
+              <Code className="mr-1.5 h-4 w-4" />
+              임베드 코드
+            </Button>
+          </div>
+        ) : (
+          /* Free 플랜: 위젯 배포 불가 - 업그레이드 유도 */
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 rounded-md bg-muted p-2.5 text-xs text-muted-foreground">
+              <Lock className="h-3.5 w-3.5 shrink-0" />
+              <span>Free 플랜은 위젯 배포가 불가능합니다</span>
+            </div>
+            <Button size="sm" className="w-full" asChild>
+              <Link href="/console/account/subscription/plans">
+                <Sparkles className="mr-1.5 h-4 w-4" />
+                Pro로 업그레이드
+              </Link>
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* 설정 아코디언 */}

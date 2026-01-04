@@ -26,28 +26,54 @@ export default async function AdminDashboardPage() {
         <p className="text-muted-foreground">전체 시스템 현황을 확인하세요.</p>
       </div>
 
-      {/* 이상 징후 알림 */}
-      {data.anomalies.length > 0 && (
-        <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4">
-          <div className="flex items-center gap-2">
-            <span className="text-yellow-500">⚠️</span>
-            <h3 className="font-medium text-foreground">이상 사용량 감지</h3>
+      {/* 알림 영역 */}
+      <div className="space-y-3">
+        {/* 이상 징후 알림 */}
+        {data.anomalies.length > 0 && (
+          <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4">
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-500">⚠️</span>
+              <h3 className="font-medium text-foreground">이상 사용량 감지</h3>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {data.anomalies.length}개 테넌트에서 비정상적인 사용량 증가가 감지되었습니다.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {data.anomalies.map((a) => (
+                <span
+                  key={a.tenantId}
+                  className="rounded bg-yellow-500/20 px-2 py-0.5 text-xs text-yellow-600 dark:text-yellow-400"
+                >
+                  {a.tenantName} (+{(a.increaseRatio * 100).toFixed(0)}%)
+                </span>
+              ))}
+            </div>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {data.anomalies.length}개 테넌트에서 비정상적인 사용량 증가가 감지되었습니다.
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {data.anomalies.map((a) => (
-              <span
-                key={a.tenantId}
-                className="rounded bg-yellow-500/20 px-2 py-0.5 text-xs text-yellow-600 dark:text-yellow-400"
-              >
-                {a.tenantName} (+{(a.increaseRatio * 100).toFixed(0)}%)
-              </span>
-            ))}
+        )}
+
+        {/* 저잔액 테넌트 알림 */}
+        {data.lowBalanceTenants.length > 0 && (
+          <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-4">
+            <div className="flex items-center gap-2">
+              <span className="text-red-500">🔴</span>
+              <h3 className="font-medium text-foreground">포인트 부족 테넌트</h3>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {data.lowBalanceTenants.length}개 테넌트의 포인트 잔액이 100P 이하입니다.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {data.lowBalanceTenants.map((t) => (
+                <span
+                  key={t.tenantId}
+                  className="rounded bg-red-500/20 px-2 py-0.5 text-xs text-red-600 dark:text-red-400"
+                >
+                  {t.tenantName} ({t.balance}P)
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* 주요 통계 */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -109,6 +135,49 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
+      {/* 포인트 시스템 통계 */}
+      <div className="rounded-lg border border-border bg-card p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground">💎 포인트 시스템</h2>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="rounded bg-primary/10 px-2 py-0.5 text-primary">
+              {data.pointsStats.activeTenantsWithPoints}명 보유
+            </span>
+            {data.pointsStats.lowBalanceCount > 0 && (
+              <span className="rounded bg-red-500/10 px-2 py-0.5 text-red-500">
+                {data.pointsStats.lowBalanceCount}명 저잔액
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <PointStatCard
+            title="전체 잔액"
+            value={`${data.pointsStats.totalBalance.toLocaleString()}P`}
+            subValue="모든 테넌트 합계"
+          />
+          <PointStatCard
+            title="오늘 사용"
+            value={`${data.pointsStats.todayUsage.toLocaleString()}P`}
+            subValue={`이번 달 ${data.pointsStats.monthUsage.toLocaleString()}P`}
+            highlight={data.pointsStats.todayUsage > 1000}
+          />
+          <PointStatCard
+            title="오늘 충전"
+            value={`${data.pointsStats.todayCharges.toLocaleString()}P`}
+            subValue={`이번 달 ${data.pointsStats.monthCharges.toLocaleString()}P`}
+            positive={data.pointsStats.todayCharges > 0}
+          />
+          <PointStatCard
+            title="순증감 (이번 달)"
+            value={`${(data.pointsStats.monthCharges - data.pointsStats.monthUsage).toLocaleString()}P`}
+            subValue={data.pointsStats.monthCharges >= data.pointsStats.monthUsage ? '충전 > 사용' : '사용 > 충전'}
+            positive={data.pointsStats.monthCharges >= data.pointsStats.monthUsage}
+            highlight={data.pointsStats.monthCharges < data.pointsStats.monthUsage}
+          />
+        </div>
+      </div>
+
       {/* 상세 통계 */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* 상위 테넌트 */}
@@ -130,6 +199,8 @@ export default async function AdminDashboardPage() {
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
                     <th className="pb-2 font-medium">테넌트</th>
+                    <th className="pb-2 text-center font-medium">티어</th>
+                    <th className="pb-2 text-right font-medium">포인트</th>
                     <th className="pb-2 text-right font-medium">문서</th>
                     <th className="pb-2 text-right font-medium">청크</th>
                     <th className="pb-2 text-right font-medium">상담</th>
@@ -144,6 +215,14 @@ export default async function AdminDashboardPage() {
                           <p className="font-medium text-foreground">{tenant.name}</p>
                           <p className="text-xs text-muted-foreground">{tenant.email}</p>
                         </div>
+                      </td>
+                      <td className="py-3 text-center">
+                        <TierBadge tier={tenant.tier} />
+                      </td>
+                      <td className="py-3 text-right">
+                        <span className={`tabular-nums ${tenant.balance <= 100 ? 'font-medium text-red-500' : 'text-muted-foreground'}`}>
+                          {tenant.balance.toLocaleString()}P
+                        </span>
                       </td>
                       <td className="py-3 text-right text-muted-foreground">
                         {tenant.documentCount.toLocaleString()}
@@ -273,6 +352,35 @@ function AIStatCard({ title, value, subValue, highlight, positive }: AIStatCardP
   );
 }
 
+// 포인트 통계 카드 컴포넌트
+interface PointStatCardProps {
+  title: string;
+  value: string;
+  subValue: string;
+  highlight?: boolean;
+  positive?: boolean;
+}
+
+function PointStatCard({ title, value, subValue, highlight, positive }: PointStatCardProps) {
+  return (
+    <div className="rounded-lg bg-gradient-to-br from-purple-500/5 to-primary/5 p-4">
+      <p className="text-sm font-medium text-muted-foreground">{title}</p>
+      <p
+        className={`mt-1 text-2xl font-bold tabular-nums ${
+          highlight
+            ? 'text-red-500'
+            : positive
+              ? 'text-green-500'
+              : 'text-foreground'
+        }`}
+      >
+        {value}
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{subValue}</p>
+    </div>
+  );
+}
+
 // 상태 배지
 function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { label: string; className: string }> = {
@@ -285,6 +393,23 @@ function StatusBadge({ status }: { status: string }) {
 
   return (
     <span className={`text-xs font-medium ${className}`}>
+      {label}
+    </span>
+  );
+}
+
+// 티어 배지
+function TierBadge({ tier }: { tier: string }) {
+  const config: Record<string, { label: string; className: string }> = {
+    free: { label: 'Free', className: 'bg-muted text-muted-foreground' },
+    pro: { label: 'Pro', className: 'bg-primary/10 text-primary' },
+    business: { label: 'Business', className: 'bg-purple-500/10 text-purple-500' },
+  };
+
+  const { label, className } = config[tier.toLowerCase()] || config.free;
+
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>
       {label}
     </span>
   );

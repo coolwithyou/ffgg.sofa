@@ -106,7 +106,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ? 'public, max-age=31536000, immutable'
       : 'public, max-age=86400';
 
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(new Uint8Array(fileBuffer), {
       status: 200,
       headers: {
         'Content-Type': contentType,

@@ -7,8 +7,43 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { sendWidgetMessage } from './actions';
-import type { WidgetConfig, WidgetMessage, WidgetState } from '@/lib/widget/types';
+import { sendWidgetMessage, type WidgetChatError } from './actions';
+import type { WidgetConfig, WidgetMessage } from '@/lib/widget/types';
+
+/**
+ * 위젯 채팅 에러 파싱
+ */
+interface ParsedError {
+  message: string;
+  code?: 'INSUFFICIENT_POINTS' | 'RATE_LIMIT' | 'VALIDATION_ERROR';
+}
+
+function parseError(error: unknown): ParsedError {
+  if (!(error instanceof Error)) {
+    return { message: '메시지 전송에 실패했습니다.' };
+  }
+
+  try {
+    const parsed = JSON.parse(error.message) as WidgetChatError;
+    return {
+      message: parsed.details?.message || parsed.error,
+      code: parsed.code,
+    };
+  } catch {
+    return { message: error.message };
+  }
+}
+
+/**
+ * 위젯 상태 (에러 구조화)
+ */
+interface WidgetChatState {
+  isOpen: boolean;
+  isLoading: boolean;
+  messages: WidgetMessage[];
+  sessionId: string | null;
+  error: ParsedError | null;
+}
 
 interface WidgetChatProps {
   tenantId: string;
@@ -29,7 +64,7 @@ const DEFAULT_THEME_VALUES = {
 const MAX_MESSAGE_LENGTH = 4000;
 
 export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
-  const [state, setState] = useState<WidgetState>({
+  const [state, setState] = useState<WidgetChatState>({
     isOpen: true, // iframe에서는 항상 열림
     isLoading: false,
     messages: [],
@@ -110,7 +145,7 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
       setState((prev) => ({
         ...prev,
         isLoading: false,
-        error: '메시지 전송에 실패했습니다. 다시 시도해주세요.',
+        error: parseError(error),
       }));
     }
   }, [inputValue, state.isLoading, state.sessionId, tenantId]);
@@ -154,7 +189,12 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
           {state.isLoading && <TypingIndicator primaryColor={theme.primaryColor} />}
           {state.error && (
             <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
-              {state.error}
+              {state.error.message}
+              {state.error.code === 'INSUFFICIENT_POINTS' && (
+                <p className="mt-1 text-xs opacity-80">
+                  서비스 이용이 일시적으로 제한되었습니다.
+                </p>
+              )}
             </div>
           )}
           <div ref={messagesEndRef} />

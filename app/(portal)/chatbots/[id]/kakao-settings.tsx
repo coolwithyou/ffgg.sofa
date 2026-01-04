@@ -87,7 +87,7 @@ export function KakaoSettings({
 
     // 활성화 시 봇 ID 필요
     if (!kakao.enabled && !botId) {
-      warning('입력 필요', '카카오 봇 ID를 입력해주세요.');
+      toast.warning('카카오 봇 ID를 입력해주세요.');
       return;
     }
 
@@ -107,7 +107,7 @@ export function KakaoSettings({
         onUpdate();
       } else {
         const data = await response.json();
-        showError('카카오 설정 오류', data.error || '오류가 발생했습니다.');
+        toast.error(data.error || '오류가 발생했습니다.');
       }
     } catch (err) {
       console.error('Toggle error:', err);
@@ -119,7 +119,7 @@ export function KakaoSettings({
   // 봇 ID 저장 (비활성화 상태에서도 가능)
   const handleSaveBotId = async () => {
     if (!botId.trim()) {
-      warning('입력 필요', '카카오 봇 ID를 입력해주세요.');
+      toast.warning('카카오 봇 ID를 입력해주세요.');
       return;
     }
 
@@ -133,10 +133,10 @@ export function KakaoSettings({
 
       if (response.ok) {
         await fetchKakao();
-        success('저장 완료', '카카오 봇 ID가 저장되었습니다.');
+        toast.success('카카오 봇 ID가 저장되었습니다.');
       } else {
         const data = await response.json();
-        showError('저장 오류', data.error || '오류가 발생했습니다.');
+        toast.error(data.error || '오류가 발생했습니다.');
       }
     } catch (err) {
       console.error('Save botId error:', err);
@@ -160,7 +160,7 @@ export function KakaoSettings({
 
       if (response.ok) {
         await fetchKakao();
-        success('저장 완료', '고급 설정이 저장되었습니다.');
+        toast.success('고급 설정이 저장되었습니다.');
       }
     } catch (err) {
       console.error('Save config error:', err);

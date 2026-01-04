@@ -45,6 +45,8 @@ const updateSchema = z.object({
         .optional(),
       theme: z
         .object({
+          // 배경 타입
+          backgroundType: z.enum(['solid', 'image', 'gradient']).optional(),
           // 기본 색상
           backgroundColor: z.string().optional(),
           primaryColor: z.string().optional(),
@@ -57,6 +59,22 @@ const updateSchema = z.object({
             .enum(['no-repeat', 'repeat', 'repeat-x', 'repeat-y'])
             .optional(),
           backgroundPosition: z.string().optional(),
+          // 그라데이션
+          gradientFrom: z.string().optional(),
+          gradientTo: z.string().optional(),
+          gradientDirection: z
+            .enum([
+              'to-b',
+              'to-t',
+              'to-r',
+              'to-l',
+              'to-br',
+              'to-bl',
+              'to-tr',
+              'to-tl',
+            ])
+            .optional(),
+          gradientAngle: z.number().min(0).max(360).optional(),
           // 카드 스타일
           cardBackgroundColor: z.string().optional(),
           cardShadow: z.number().optional(),

@@ -2,12 +2,20 @@
 
 /**
  * Console 구독 관리 페이지
- * 현재 구독 상태, 사용량, 결제 관리
+ * 현재 구독 상태, 포인트 현황, 사용량, 결제 관리
  */
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { AlertCircle, CreditCard, History, Sparkles } from 'lucide-react';
+import {
+  AlertCircle,
+  CreditCard,
+  History,
+  Sparkles,
+  Coins,
+  TrendingUp,
+  Plus,
+} from 'lucide-react';
 import {
   Card,
   CardHeader,
@@ -27,6 +35,7 @@ import {
   getUsageVariant,
   getUsageWarningBadge,
 } from '@/lib/constants/status-badges';
+import { LOW_POINTS_THRESHOLD } from '@/lib/points/constants';
 
 interface Plan {
   id: string;
@@ -50,7 +59,7 @@ interface Subscription {
 }
 
 interface UsageData {
-  tier: 'basic' | 'standard' | 'premium';
+  tier: 'free' | 'pro' | 'business';
   usage: {
     chatbots: { used: number; limit: number };
     datasets: { used: number; limit: number };
@@ -60,9 +69,24 @@ interface UsageData {
   };
 }
 
+interface PointsData {
+  balance: {
+    balance: number;
+    freePointsGranted: boolean;
+    monthlyPointsBase: number;
+    lastRechargedAt: string | null;
+    isLow: boolean;
+  };
+  monthlyUsage: {
+    used: number;
+    transactionCount: number;
+  };
+}
+
 export default function SubscriptionPage() {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
+  const [points, setPoints] = useState<PointsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { confirm } = useAlertDialog();
@@ -76,9 +100,10 @@ export default function SubscriptionPage() {
       setIsLoading(true);
       setError(null);
 
-      const [subRes, usageRes] = await Promise.all([
+      const [subRes, usageRes, pointsRes] = await Promise.all([
         fetch('/api/billing/subscription'),
         fetch('/api/user/usage'),
+        fetch('/api/points'),
       ]);
 
       if (subRes.ok) {
@@ -96,6 +121,11 @@ export default function SubscriptionPage() {
       if (usageRes.ok) {
         const usageData = await usageRes.json();
         setUsage(usageData);
+      }
+
+      if (pointsRes.ok) {
+        const pointsData = await pointsRes.json();
+        setPoints(pointsData);
       }
     } catch {
       setError('데이터를 불러오는데 실패했습니다');
@@ -319,6 +349,93 @@ export default function SubscriptionPage() {
             )}
         </CardFooter>
       </Card>
+
+      {/* 포인트 현황 */}
+      {points && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Coins className="h-5 w-5 text-muted-foreground" />
+                <CardTitle>포인트 현황</CardTitle>
+              </div>
+              {points.balance.isLow && (
+                <Badge variant="destructive">잔액 부족</Badge>
+              )}
+            </div>
+            <CardDescription>AI 응답에 사용되는 포인트 현황입니다</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* 포인트 잔액 */}
+            <div className="flex items-center justify-between rounded-lg bg-muted/50 p-4">
+              <div>
+                <p className="text-sm text-muted-foreground">현재 잔액</p>
+                <p className={`text-3xl font-bold ${points.balance.isLow ? 'text-destructive' : 'text-foreground'}`}>
+                  {formatNumber(points.balance.balance)}
+                  <span className="ml-1 text-lg font-normal text-muted-foreground">P</span>
+                </p>
+              </div>
+              {points.balance.monthlyPointsBase > 0 && (
+                <div className="text-right">
+                  <p className="text-sm text-muted-foreground">월간 기본 포인트</p>
+                  <p className="text-lg font-semibold text-foreground">
+                    {formatNumber(points.balance.monthlyPointsBase)} P
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* 이번 달 사용량 */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  <TrendingUp className="h-4 w-4" />
+                  이번 달 사용량
+                </span>
+                <span className="font-medium text-foreground">
+                  {formatNumber(points.monthlyUsage.used)} P 사용
+                  <span className="ml-1 text-muted-foreground">
+                    ({formatNumber(points.monthlyUsage.transactionCount)}회)
+                  </span>
+                </span>
+              </div>
+              {points.balance.monthlyPointsBase > 0 && (
+                <Progress
+                  value={Math.min(
+                    (points.monthlyUsage.used / points.balance.monthlyPointsBase) * 100,
+                    100
+                  )}
+                  variant={
+                    points.monthlyUsage.used >= points.balance.monthlyPointsBase
+                      ? 'destructive'
+                      : points.monthlyUsage.used >= points.balance.monthlyPointsBase * 0.8
+                        ? 'warning'
+                        : 'default'
+                  }
+                />
+              )}
+            </div>
+
+            {/* 포인트 부족 경고 */}
+            {points.balance.isLow && (
+              <Alert className="border-destructive/30 bg-destructive/10 text-destructive [&>svg]:text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  포인트가 {LOW_POINTS_THRESHOLD}P 이하입니다. 추가 포인트를 구매해주세요.
+                </AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+          <CardFooter>
+            <Button asChild>
+              <Link href="/console/account/subscription/points">
+                <Plus className="mr-2 h-4 w-4" />
+                포인트 충전
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
 
       {/* 사용량 현황 */}
       {usage && (
