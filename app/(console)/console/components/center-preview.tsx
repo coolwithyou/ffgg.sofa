@@ -1,6 +1,6 @@
 'use client';
 
-import { useCurrentChatbot } from '../hooks/use-console-state';
+import { useCurrentChatbot, usePageConfig } from '../hooks/use-console-state';
 import { PreviewContent } from './preview-content';
 
 /**
@@ -10,10 +10,14 @@ import { PreviewContent } from './preview-content';
  * - 사용자가 보는 화면 = 에디터에서 편집하는 화면
  * - 블록을 드래그하여 순서 변경 가능
  * - 블록 선택, 가시성 토글, 삭제 지원
- * - max-w-2xl (672px) 너비 제한
+ * - 테마의 외부 배경색을 전체 프리뷰 영역에 적용
  */
 export function CenterPreview() {
   const { currentChatbot } = useCurrentChatbot();
+  const { pageConfig } = usePageConfig();
+
+  // 테마에서 외부 배경색 가져오기 (기본값: muted 배경)
+  const backgroundColor = pageConfig?.theme?.backgroundColor;
 
   if (!currentChatbot) {
     return (
@@ -30,26 +34,23 @@ export function CenterPreview() {
     );
   }
 
+  // 외부 배경색 스타일 (테마 설정 또는 기본값)
+  const backgroundStyle = backgroundColor
+    ? { backgroundColor }
+    : undefined;
+
   return (
-    <main className="flex flex-1 flex-col bg-muted/30">
-      {/* WYSIWYG 프리뷰 영역 */}
+    <main
+      className={`flex flex-1 flex-col ${!backgroundColor ? 'bg-muted/30' : ''}`}
+      style={backgroundStyle}
+    >
+      {/* WYSIWYG 프리뷰 영역 - 전체 높이에 외부 배경색 적용 */}
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex min-h-full max-w-2xl flex-col">
-          {/*
-            프리뷰 컨테이너
-            - 양쪽 여백으로 에디터 컨텍스트 구분
-            - 그림자로 콘텐츠 영역 강조
-            - 라운드 코너
-            - flex-1로 높이 채우기 (배경색이 전체 영역에 적용되도록)
-          */}
-          <div className="mx-4 my-4 flex flex-1 flex-col overflow-hidden rounded-xl shadow-2xl">
-            {/*
-              WYSIWYG 편집 가능한 프리뷰
-              PreviewContent에서 isEditing=true로 PublicPageView 렌더링
-            */}
-            <PreviewContent />
-          </div>
-        </div>
+        {/*
+          PreviewContent가 PublicPageView를 렌더링
+          PublicPageView 내부에서 카드 컨테이너와 마진 처리
+        */}
+        <PreviewContent />
       </div>
     </main>
   );

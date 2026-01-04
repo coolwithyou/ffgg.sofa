@@ -204,12 +204,16 @@ export function PublicPageView({
   };
 
   // 배경 이미지 스타일
+  // 편집 모드에서는 배경색을 투명으로 설정 (CenterPreview에서 배경색 적용)
   const backgroundStyles: React.CSSProperties = {
     ...themeStyles,
-    backgroundColor: 'var(--pp-bg-color)',
+    // 편집 모드: 투명 배경 (부모 CenterPreview의 배경색이 보이도록)
+    // 보기 모드: 테마 배경색 적용
+    backgroundColor: isEditing ? 'transparent' : 'var(--pp-bg-color)',
     color: 'var(--pp-text-color)',
     fontFamily: 'var(--pp-font-family)',
-    ...(theme.backgroundImage && {
+    // 배경 이미지는 보기 모드에서만 적용
+    ...(!isEditing && theme.backgroundImage && {
       backgroundImage: `url(${theme.backgroundImage})`,
       backgroundSize: theme.backgroundSize ?? 'cover',
       backgroundRepeat: theme.backgroundRepeat ?? 'no-repeat',
@@ -230,9 +234,9 @@ export function PublicPageView({
     borderRadius: `${theme.cardBorderRadius ?? 16}px`,
   };
 
-  // 편집 모드: 부모 컨테이너 채우기 (min-h-full + h-full)
+  // 편집 모드: 부모 컨테이너 채우기 (min-h-full)
   // 보기 모드: 전체 화면 채우기 (min-h-screen)
-  const mainClassName = isEditing ? 'min-h-full h-full' : 'min-h-screen';
+  const mainClassName = isEditing ? 'min-h-full' : 'min-h-screen';
 
   return (
     <main
