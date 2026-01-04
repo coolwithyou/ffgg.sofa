@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ChevronsUpDown, LogOut, Settings2, User } from 'lucide-react';
 
 import {
@@ -272,7 +272,20 @@ interface UserProfile {
  * 사용자 메뉴 (SidebarFooter)
  */
 function NavUser() {
+  const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = useCallback(async () => {
+    setIsLoggingOut(true);
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      router.push('/login');
+      router.refresh();
+    } catch {
+      setIsLoggingOut(false);
+    }
+  }, [router]);
 
   useEffect(() => {
     fetch('/api/user/profile')
@@ -357,11 +370,9 @@ function NavUser() {
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/api/auth/logout">
-                <LogOut className="mr-2 size-4" />
-                로그아웃
-              </Link>
+            <DropdownMenuItem onClick={handleLogout} disabled={isLoggingOut}>
+              <LogOut className="mr-2 size-4" />
+              {isLoggingOut ? '로그아웃 중...' : '로그아웃'}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
