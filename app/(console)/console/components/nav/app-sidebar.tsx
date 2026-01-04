@@ -36,6 +36,7 @@ import { Bot, Check, Plus, Sofa } from 'lucide-react';
 import { CreateChatbotDialog } from '../create-chatbot-dialog';
 import { Separator } from '@/components/ui/separator';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { PointWidget } from './point-widget';
 
 /**
  * SidebarHeader의 ChatbotSwitcher
@@ -408,6 +409,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
 
       <SidebarFooter>
+        {/* 포인트 현황 위젯 */}
+        <PointWidget />
+        <Separator />
         <NavUser />
       </SidebarFooter>
     </Sidebar>
