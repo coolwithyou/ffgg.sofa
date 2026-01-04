@@ -8,7 +8,7 @@ import { validateSession } from '@/lib/auth';
 import { db, tenants, chatbots, datasets, documents, conversations } from '@/lib/db';
 import { eq, and, gte, sql } from 'drizzle-orm';
 import { ErrorCode, AppError, errorResponse } from '@/lib/errors';
-import { TIER_LIMITS } from '@/lib/tier/constants';
+import { TIER_LIMITS, normalizeTier } from '@/lib/tier/constants';
 
 export async function GET() {
   try {
@@ -37,7 +37,7 @@ export async function GET() {
       );
     }
 
-    const tier = (tenant.tier || 'basic') as 'basic' | 'standard' | 'premium';
+    const tier = normalizeTier(tenant.tier);
     const limits = TIER_LIMITS[tier];
 
     // 챗봇 수 조회

@@ -6,11 +6,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { TIER_LIMITS, type Tier } from '@/lib/tier/constants';
+import { TIER_LIMITS, TIER_FEATURES, type Tier } from '@/lib/tier/constants';
 
 describe('Tier Validator Logic', () => {
   describe('TIER_LIMITS Structure', () => {
-    const tiers: Tier[] = ['basic', 'standard', 'premium'];
+    const tiers: Tier[] = ['free', 'pro', 'business'];
 
     tiers.forEach((tier) => {
       it(`${tier} tier should have all required limits`, () => {
@@ -23,6 +23,9 @@ describe('Tier Validator Logic', () => {
         expect(limits.maxStorageBytes).toBeGreaterThan(0);
         expect(limits.maxChunksPerDocument).toBeGreaterThan(0);
         expect(limits.maxMonthlyConversations).toBeGreaterThan(0);
+        expect(limits.maxPublishHistory).toBeGreaterThan(0);
+        expect(typeof limits.maxDeployments).toBe('number');
+        expect(typeof limits.monthlyPoints).toBe('number');
       });
     });
   });
@@ -65,6 +68,54 @@ describe('Tier Validator Logic', () => {
     });
   });
 
+  describe('canDeploy Logic', () => {
+    const checkCanDeploy = (
+      tier: Tier,
+      currentDeployments: number
+    ) => {
+      const features = TIER_FEATURES[tier];
+      const limits = TIER_LIMITS[tier];
+
+      if (!features.canDeploy) {
+        return { allowed: false, reason: 'tier_not_allowed' };
+      }
+
+      if (currentDeployments >= limits.maxDeployments) {
+        return { allowed: false, reason: 'deployment_limit_reached' };
+      }
+
+      return { allowed: true };
+    };
+
+    it('should not allow free tier to deploy', () => {
+      const result = checkCanDeploy('free', 0);
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('tier_not_allowed');
+    });
+
+    it('should allow pro tier to deploy if under limit', () => {
+      const result = checkCanDeploy('pro', 0);
+      expect(result.allowed).toBe(true);
+    });
+
+    it('should block pro tier when deployment limit reached', () => {
+      const result = checkCanDeploy('pro', 1);
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('deployment_limit_reached');
+    });
+
+    it('should allow business tier to deploy multiple', () => {
+      const result = checkCanDeploy('business', 2);
+      expect(result.allowed).toBe(true);
+    });
+
+    it('should block business tier when limit reached', () => {
+      const result = checkCanDeploy('business', 3);
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('deployment_limit_reached');
+    });
+  });
+
   describe('canUploadFile Logic', () => {
     // canUploadFile의 핵심 로직을 단위 테스트
     const checkUploadLogic = (
@@ -100,7 +151,7 @@ describe('Tier Validator Logic', () => {
         10 * 1024 * 1024, // 10MB new file
         100 * 1024 * 1024, // 100MB max
         5, // 5 total docs
-        10, // 10 max docs
+        30, // 30 max docs (free tier)
         3, // 3 dataset docs
         10 // 10 max dataset docs
       );
@@ -113,7 +164,7 @@ describe('Tier Validator Logic', () => {
         10 * 1024 * 1024, // 10MB new (total 105MB > 100MB)
         100 * 1024 * 1024, // 100MB max
         5,
-        10,
+        30,
         3,
         10
       );
@@ -126,8 +177,8 @@ describe('Tier Validator Logic', () => {
         50 * 1024 * 1024,
         10 * 1024 * 1024,
         100 * 1024 * 1024,
-        10, // at limit
-        10,
+        30, // at limit (free tier)
+        30,
         3,
         10
       );
@@ -141,7 +192,7 @@ describe('Tier Validator Logic', () => {
         10 * 1024 * 1024,
         100 * 1024 * 1024,
         5,
-        10,
+        30,
         10, // at limit
         10
       );
@@ -155,8 +206,8 @@ describe('Tier Validator Logic', () => {
         100 * 1024 * 1024, // at storage limit
         10 * 1024 * 1024,
         100 * 1024 * 1024,
-        10, // at doc limit
-        10,
+        30, // at doc limit
+        30,
         10, // at dataset limit
         10
       );
@@ -165,29 +216,35 @@ describe('Tier Validator Logic', () => {
   });
 
   describe('Tier Limit Values', () => {
-    it('basic tier should be most restrictive', () => {
-      expect(TIER_LIMITS.basic.maxChatbots).toBe(1);
-      expect(TIER_LIMITS.basic.maxDatasets).toBe(1);
-      expect(TIER_LIMITS.basic.maxTotalDocuments).toBe(10);
-      expect(TIER_LIMITS.basic.maxStorageBytes).toBe(100 * 1024 * 1024); // 100MB
+    it('free tier should have trial restrictions', () => {
+      expect(TIER_LIMITS.free.maxChatbots).toBe(3);
+      expect(TIER_LIMITS.free.maxDatasets).toBe(3);
+      expect(TIER_LIMITS.free.maxTotalDocuments).toBe(30);
+      expect(TIER_LIMITS.free.maxStorageBytes).toBe(100 * 1024 * 1024); // 100MB
+      expect(TIER_LIMITS.free.maxDeployments).toBe(0);
+      expect(TIER_LIMITS.free.monthlyPoints).toBe(0);
     });
 
-    it('standard tier should be moderate', () => {
-      expect(TIER_LIMITS.standard.maxChatbots).toBe(3);
-      expect(TIER_LIMITS.standard.maxDatasets).toBe(5);
-      expect(TIER_LIMITS.standard.maxTotalDocuments).toBe(100);
-      expect(TIER_LIMITS.standard.maxStorageBytes).toBe(1024 * 1024 * 1024); // 1GB
+    it('pro tier should be moderate', () => {
+      expect(TIER_LIMITS.pro.maxChatbots).toBe(3);
+      expect(TIER_LIMITS.pro.maxDatasets).toBe(3);
+      expect(TIER_LIMITS.pro.maxTotalDocuments).toBe(100);
+      expect(TIER_LIMITS.pro.maxStorageBytes).toBe(1024 * 1024 * 1024); // 1GB
+      expect(TIER_LIMITS.pro.maxDeployments).toBe(1);
+      expect(TIER_LIMITS.pro.monthlyPoints).toBe(3000);
     });
 
-    it('premium tier should be most generous', () => {
-      expect(TIER_LIMITS.premium.maxChatbots).toBe(10);
-      expect(TIER_LIMITS.premium.maxDatasets).toBe(20);
-      expect(TIER_LIMITS.premium.maxTotalDocuments).toBe(500);
-      expect(TIER_LIMITS.premium.maxStorageBytes).toBe(10 * 1024 * 1024 * 1024); // 10GB
+    it('business tier should be most generous', () => {
+      expect(TIER_LIMITS.business.maxChatbots).toBe(10);
+      expect(TIER_LIMITS.business.maxDatasets).toBe(10);
+      expect(TIER_LIMITS.business.maxTotalDocuments).toBe(500);
+      expect(TIER_LIMITS.business.maxStorageBytes).toBe(10 * 1024 * 1024 * 1024); // 10GB
+      expect(TIER_LIMITS.business.maxDeployments).toBe(3);
+      expect(TIER_LIMITS.business.monthlyPoints).toBe(10000);
     });
 
-    it('limits should increase from basic to premium', () => {
-      const tiers: Tier[] = ['basic', 'standard', 'premium'];
+    it('limits should increase from free to business', () => {
+      const tiers: Tier[] = ['free', 'pro', 'business'];
       const properties = [
         'maxChatbots',
         'maxDatasets',
@@ -208,19 +265,19 @@ describe('Tier Validator Logic', () => {
 
   describe('Boundary Conditions', () => {
     it('should allow exactly max-1 items', () => {
-      const max = TIER_LIMITS.basic.maxChatbots;
+      const max = TIER_LIMITS.free.maxChatbots;
       const current = max - 1;
       expect(current < max).toBe(true);
     });
 
     it('should block at exactly max items', () => {
-      const max = TIER_LIMITS.basic.maxChatbots;
+      const max = TIER_LIMITS.free.maxChatbots;
       const current = max;
       expect(current < max).toBe(false);
     });
 
     it('should calculate storage boundary correctly', () => {
-      const maxStorage = TIER_LIMITS.basic.maxStorageBytes;
+      const maxStorage = TIER_LIMITS.free.maxStorageBytes;
       const fileSize = 1 * 1024 * 1024; // 1MB
 
       // 정확히 한도에 도달하면 OK
@@ -231,6 +288,38 @@ describe('Tier Validator Logic', () => {
       // 1바이트라도 초과하면 NG
       const overBy1 = maxStorage - fileSize + 1;
       expect(overBy1 + fileSize > maxStorage).toBe(true);
+    });
+  });
+
+  describe('Points Checking Logic', () => {
+    const checkPointsAvailable = (balance: number, required: number) => ({
+      allowed: balance >= required,
+      balance,
+      required,
+      deficit: Math.max(0, required - balance),
+    });
+
+    it('should allow when balance >= required', () => {
+      const result = checkPointsAvailable(100, 1);
+      expect(result.allowed).toBe(true);
+      expect(result.deficit).toBe(0);
+    });
+
+    it('should block when balance < required', () => {
+      const result = checkPointsAvailable(0, 1);
+      expect(result.allowed).toBe(false);
+      expect(result.deficit).toBe(1);
+    });
+
+    it('should handle exact balance', () => {
+      const result = checkPointsAvailable(1, 1);
+      expect(result.allowed).toBe(true);
+      expect(result.deficit).toBe(0);
+    });
+
+    it('should calculate deficit correctly', () => {
+      const result = checkPointsAvailable(50, 100);
+      expect(result.deficit).toBe(50);
     });
   });
 });

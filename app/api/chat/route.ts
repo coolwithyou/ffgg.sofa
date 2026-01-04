@@ -9,6 +9,12 @@ import { processChat } from '@/lib/chat';
 import { validateTenantAccessSimple, getTenantId } from '@/lib/middleware/tenant';
 import { checkRateLimitWithConfig, RATE_LIMIT_CONFIGS } from '@/lib/middleware/rate-limit';
 import { ErrorCode, AppError, ValidationError, handleApiError } from '@/lib/errors';
+import {
+  validatePointsForResponse,
+  usePoints,
+  createInsufficientPointsError,
+  createPointsLowWarningHeaders,
+} from '@/lib/points';
 
 // 요청 스키마
 const chatRequestSchema = z.object({
@@ -66,15 +72,40 @@ export async function POST(request: NextRequest) {
 
     const { message, sessionId, channel } = parseResult.data;
 
-    // 4. 채팅 처리
+    // 4. 포인트 검증
+    const pointValidation = await validatePointsForResponse(tenantId);
+    if (!pointValidation.canProceed) {
+      return NextResponse.json(
+        createInsufficientPointsError(pointValidation.currentBalance),
+        { status: 402 }
+      );
+    }
+
+    // 5. 채팅 처리
     const response = await processChat(tenantId, { message, sessionId, channel });
 
-    // 5. 응답 반환
-    return NextResponse.json(response, {
-      headers: {
-        'X-RateLimit-Remaining': String(rateLimitResult.remaining),
+    // 6. 포인트 차감 (AI 응답 성공 후)
+    await usePoints({
+      tenantId,
+      metadata: {
+        conversationId: response.sessionId,
+        channel,
       },
     });
+
+    // 7. 응답 반환 (포인트 부족 경고 시 헤더 추가)
+    const headers: Record<string, string> = {
+      'X-RateLimit-Remaining': String(rateLimitResult.remaining),
+    };
+
+    if (pointValidation.errorCode === 'POINTS_LOW_WARNING') {
+      const warningHeaders = createPointsLowWarningHeaders(
+        pointValidation.currentBalance - pointValidation.requiredPoints
+      );
+      Object.assign(headers, warningHeaders);
+    }
+
+    return NextResponse.json(response, { headers });
   } catch (error) {
     return handleApiError(error);
   }

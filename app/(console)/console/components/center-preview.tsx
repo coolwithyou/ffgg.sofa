@@ -2,6 +2,7 @@
 
 import { useCurrentChatbot, usePageConfig } from '../hooks/use-console-state';
 import { PreviewContent } from './preview-content';
+import { getBackgroundStyles } from '@/lib/public-page/background-utils';
 
 /**
  * 중앙 프리뷰 영역
@@ -10,14 +11,11 @@ import { PreviewContent } from './preview-content';
  * - 사용자가 보는 화면 = 에디터에서 편집하는 화면
  * - 블록을 드래그하여 순서 변경 가능
  * - 블록 선택, 가시성 토글, 삭제 지원
- * - 테마의 외부 배경색을 전체 프리뷰 영역에 적용
+ * - 테마의 배경 설정을 전체 프리뷰 영역에 라이브 적용
  */
 export function CenterPreview() {
   const { currentChatbot } = useCurrentChatbot();
   const { pageConfig } = usePageConfig();
-
-  // 테마에서 외부 배경색 가져오기 (기본값: muted 배경)
-  const backgroundColor = pageConfig?.theme?.backgroundColor;
 
   if (!currentChatbot) {
     return (
@@ -34,17 +32,17 @@ export function CenterPreview() {
     );
   }
 
-  // 외부 배경색 스타일 (테마 설정 또는 기본값)
-  const backgroundStyle = backgroundColor
-    ? { backgroundColor }
-    : undefined;
+  // 테마 배경 스타일 (단색/이미지/그라데이션)
+  const theme = pageConfig?.theme;
+  const backgroundStyle = theme ? getBackgroundStyles(theme) : undefined;
+  const hasBackground = theme && theme.backgroundType;
 
   return (
     <main
-      className={`flex flex-1 flex-col ${!backgroundColor ? 'bg-muted/30' : ''}`}
+      className={`flex flex-1 flex-col ${!hasBackground ? 'bg-muted/30' : ''}`}
       style={backgroundStyle}
     >
-      {/* WYSIWYG 프리뷰 영역 - 전체 높이에 외부 배경색 적용 */}
+      {/* WYSIWYG 프리뷰 영역 - 전체 높이에 배경 적용 */}
       <div className="flex-1 overflow-y-auto">
         {/*
           PreviewContent가 PublicPageView를 렌더링

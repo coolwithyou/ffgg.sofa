@@ -44,20 +44,34 @@ export interface HeaderConfig {
 }
 
 /**
+ * 배경 타입
+ */
+export type BackgroundType = 'solid' | 'image' | 'gradient';
+
+/**
+ * 그라데이션 방향 프리셋
+ */
+export type GradientDirection =
+  | 'to-b'   // 상→하
+  | 'to-t'   // 하→상
+  | 'to-r'   // 좌→우
+  | 'to-l'   // 우→좌
+  | 'to-br'  // 좌상→우하
+  | 'to-bl'  // 우상→좌하
+  | 'to-tr'  // 좌하→우상
+  | 'to-tl'; // 우하→좌상
+
+/**
  * 테마 설정
  */
 export interface ThemeConfig {
-  // === 기본 색상 ===
-  /** 외부 배경색 (hex) - 페이지 전체 배경 */
+  // === 배경 설정 ===
+  /** 배경 타입: 단색, 이미지, 그라데이션 */
+  backgroundType: BackgroundType;
+  /** 외부 배경색 (hex) - 단색 배경 또는 이미지 폴백 */
   backgroundColor: string;
-  /** 주요 강조색 (hex) */
-  primaryColor: string;
-  /** 텍스트색 (hex) */
-  textColor: string;
-  /** 폰트 패밀리 (선택) */
-  fontFamily?: string;
 
-  // === 배경 이미지 ===
+  // === 배경 이미지 (image 타입) ===
   /** 배경 이미지 URL */
   backgroundImage?: string;
   /** 배경 이미지 크기 */
@@ -66,6 +80,24 @@ export interface ThemeConfig {
   backgroundRepeat?: 'no-repeat' | 'repeat' | 'repeat-x' | 'repeat-y';
   /** 배경 이미지 위치 */
   backgroundPosition?: string;
+
+  // === 그라데이션 (gradient 타입) ===
+  /** 그라데이션 시작 색상 */
+  gradientFrom?: string;
+  /** 그라데이션 끝 색상 */
+  gradientTo?: string;
+  /** 그라데이션 방향 프리셋 */
+  gradientDirection?: GradientDirection;
+  /** 사용자 정의 각도 (0-360°, direction보다 우선) */
+  gradientAngle?: number;
+
+  // === 기본 색상 ===
+  /** 주요 강조색 (hex) */
+  primaryColor: string;
+  /** 텍스트색 (hex) */
+  textColor: string;
+  /** 폰트 패밀리 (선택) */
+  fontFamily?: string;
 
   // === 카드 스타일 ===
   /** 카드/콘텐츠 영역 배경색 (hex) */
@@ -103,14 +135,20 @@ export const DEFAULT_PUBLIC_PAGE_CONFIG: PublicPageConfig = {
     showBrandName: true,
   },
   theme: {
-    // 기본 색상
+    // 배경 설정
+    backgroundType: 'solid',
     backgroundColor: '#f9fafb',
-    primaryColor: '#3B82F6',
-    textColor: '#1f2937',
-    // 배경 이미지 (기본 없음)
+    // 배경 이미지 기본값
     backgroundSize: 'cover',
     backgroundRepeat: 'no-repeat',
     backgroundPosition: 'center',
+    // 그라데이션 기본값
+    gradientFrom: '#667eea',
+    gradientTo: '#764ba2',
+    gradientDirection: 'to-br',
+    // 기본 색상
+    primaryColor: '#3B82F6',
+    textColor: '#1f2937',
     // 카드 스타일
     cardBackgroundColor: '#ffffff',
     cardShadow: 20,
@@ -158,6 +196,26 @@ export function toPublicPageConfigJson(
 }
 
 /**
+ * 기존 데이터에서 배경 타입 추론 (하위 호환성)
+ */
+function inferBackgroundType(theme: Record<string, unknown>): BackgroundType {
+  // 명시적으로 설정된 경우 그대로 사용
+  if (theme.backgroundType) {
+    return theme.backgroundType as BackgroundType;
+  }
+  // backgroundImage가 있으면 image 타입으로 추론
+  if (theme.backgroundImage) {
+    return 'image';
+  }
+  // gradientFrom과 gradientTo가 모두 있으면 gradient 타입으로 추론
+  if (theme.gradientFrom && theme.gradientTo) {
+    return 'gradient';
+  }
+  // 기본값: 단색
+  return 'solid';
+}
+
+/**
  * JSON 객체를 PublicPageConfig로 파싱 (DB 조회 후 사용)
  */
 export function parsePublicPageConfig(
@@ -168,6 +226,7 @@ export function parsePublicPageConfig(
   }
 
   const obj = json as Record<string, unknown>;
+  const themeObj = (obj.theme as Record<string, unknown>) ?? {};
 
   return {
     header: {
@@ -176,7 +235,9 @@ export function parsePublicPageConfig(
     },
     theme: {
       ...DEFAULT_PUBLIC_PAGE_CONFIG.theme,
-      ...(obj.theme as Partial<ThemeConfig>),
+      ...themeObj,
+      // 하위 호환성: backgroundType이 없는 기존 데이터 처리
+      backgroundType: inferBackgroundType(themeObj),
     },
     seo: {
       ...DEFAULT_PUBLIC_PAGE_CONFIG.seo,

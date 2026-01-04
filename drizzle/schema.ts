@@ -26,7 +26,7 @@ export const tenants = pgTable('tenants', {
   settings: jsonb('settings').default({}),
   kakaoBotId: text('kakao_bot_id'),
   kakaoSkillUrl: text('kakao_skill_url'),
-  tier: text('tier').default('basic'), // basic, standard, premium
+  tier: text('tier').default('free'), // free, pro, business
   usageLimits: jsonb('usage_limits').default({}),
   status: text('status').default('active'), // active, inactive, suspended
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
@@ -912,21 +912,43 @@ export type NewResponseTimeThreshold = typeof responseTimeThresholds.$inferInser
 // ============================================
 // 플랜 정의 (빌링)
 // ============================================
+
+/**
+ * 플랜 limits 타입 정의
+ */
+export interface PlanLimits {
+  maxChatbots: number;
+  maxDatasets: number; // = maxChatbots (1:1 관계)
+  maxDocumentsPerDataset: number;
+  maxTotalDocuments: number;
+  maxStorageBytes: number;
+  maxPublishHistory: number;
+  maxDeployments: number; // 배포 개수 제한
+  monthlyPoints: number; // 월간 포인트 (0이면 없음)
+  maxMonthlyConversations: number;
+}
+
+/**
+ * 플랜 features 타입 정의
+ */
+export interface PlanFeatures {
+  canDeploy: boolean; // 배포 가능 여부
+  customDomain: boolean; // 커스텀 도메인 지원
+  apiAccess: boolean; // API 액세스 지원
+  prioritySupport: boolean; // 우선 지원
+  advancedAnalytics: boolean; // 고급 분석
+}
+
 export const plans = pgTable('plans', {
-  id: text('id').primaryKey(), // 'basic', 'standard', 'premium'
+  id: text('id').primaryKey(), // 'free', 'pro', 'business'
   name: text('name').notNull(),
   nameKo: text('name_ko').notNull(),
   description: text('description'),
   monthlyPrice: integer('monthly_price').notNull(), // KRW
   yearlyPrice: integer('yearly_price').notNull(), // KRW (할인 적용)
-  features: jsonb('features').$type<string[]>().default([]),
-  limits: jsonb('limits').$type<{
-    maxChatbots: number;
-    maxDatasets: number;
-    maxDocuments: number;
-    maxStorageBytes: number;
-    maxMonthlyConversations: number;
-  }>(),
+  featureList: jsonb('feature_list').$type<string[]>().default([]), // 마케팅용 기능 목록
+  limits: jsonb('limits').$type<PlanLimits>(),
+  features: jsonb('features').$type<PlanFeatures>(),
   isActive: boolean('is_active').default(true),
   sortOrder: integer('sort_order').default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
@@ -1071,3 +1093,116 @@ export type NewPayment = typeof payments.$inferInsert;
 
 export type BillingWebhookLog = typeof billingWebhookLogs.$inferSelect;
 export type NewBillingWebhookLog = typeof billingWebhookLogs.$inferInsert;
+
+// ============================================
+// 포인트 시스템 - 테넌트 포인트 잔액
+// ============================================
+export const tenantPoints = pgTable(
+  'tenant_points',
+  {
+    tenantId: uuid('tenant_id')
+      .primaryKey()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    balance: integer('balance').notNull().default(0), // 현재 잔액
+    freePointsGranted: boolean('free_points_granted').default(false), // 체험 포인트 지급 여부 (1회성)
+    monthlyPointsBase: integer('monthly_points_base').default(0), // 이번 달 시작 시 충전된 포인트
+    lastRechargedAt: timestamp('last_recharged_at', { withTimezone: true }), // 마지막 충전일
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  }
+);
+
+// ============================================
+// 포인트 시스템 - 포인트 거래 이력
+// ============================================
+export const pointTransactions = pgTable(
+  'point_transactions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(), // 'charge' | 'use' | 'refund' | 'expire' | 'monthly_recharge' | 'free_trial'
+    amount: integer('amount').notNull(), // 양수: 충전, 음수: 사용
+    balance: integer('balance').notNull(), // 트랜잭션 후 잔액
+    description: text('description'), // '월간 포인트 충전', 'AI 응답', '추가 구매' 등
+    metadata: jsonb('metadata').$type<{
+      chatbotId?: string;
+      conversationId?: string;
+      paymentId?: string;
+      packageId?: string;
+      subscriptionId?: string;
+      channel?: string;
+      reason?: string;
+    }>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_point_tx_tenant').on(table.tenantId),
+    index('idx_point_tx_tenant_created').on(table.tenantId, table.createdAt),
+    index('idx_point_tx_type').on(table.type),
+  ]
+);
+
+// ============================================
+// 포인트 시스템 - 포인트 패키지 정의
+// ============================================
+export const pointPackages = pgTable('point_packages', {
+  id: text('id').primaryKey(), // 'points_5000', 'points_10000'
+  name: text('name').notNull(), // '5,000 포인트'
+  description: text('description'), // '₩30,000 (6원/P)'
+  points: integer('points').notNull(), // 5000
+  price: integer('price').notNull(), // 30000 (원화)
+  pricePerPoint: real('price_per_point'), // 6.0
+  discountPercent: integer('discount_percent').default(0), // 17 (17% 할인)
+  isActive: boolean('is_active').default(true),
+  sortOrder: integer('sort_order').default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+});
+
+// ============================================
+// 포인트 시스템 - 포인트 구매 이력
+// ============================================
+export const pointPurchases = pgTable(
+  'point_purchases',
+  {
+    id: text('id').primaryKey(), // generatePointPurchaseId() - 'PNT_...'
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    packageId: text('package_id').notNull(), // 'points_5000', 'points_10000'
+    points: integer('points').notNull(), // 충전 포인트 양
+    amount: integer('amount').notNull(), // 결제 금액 (원화)
+    currency: text('currency').notNull().default('KRW'),
+    status: text('status').notNull().default('pending'), // 'pending' | 'completed' | 'failed' | 'cancelled'
+    portonePaymentId: text('portone_payment_id'), // PortOne 결제 ID
+    transactionId: uuid('transaction_id').references(() => pointTransactions.id), // 연결된 포인트 거래
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_point_purchase_tenant').on(table.tenantId),
+    index('idx_point_purchase_status').on(table.status),
+    index('idx_point_purchase_created').on(table.createdAt),
+  ]
+);
+
+// ============================================
+// 포인트 시스템 타입 추론용 exports
+// ============================================
+export type TenantPoint = typeof tenantPoints.$inferSelect;
+export type NewTenantPoint = typeof tenantPoints.$inferInsert;
+
+export type PointTransaction = typeof pointTransactions.$inferSelect;
+export type NewPointTransaction = typeof pointTransactions.$inferInsert;
+
+export type PointPackage = typeof pointPackages.$inferSelect;
+export type NewPointPackage = typeof pointPackages.$inferInsert;
+
+export type PointPurchase = typeof pointPurchases.$inferSelect;
+export type NewPointPurchase = typeof pointPurchases.$inferInsert;

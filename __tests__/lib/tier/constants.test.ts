@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import {
   TIER_LIMITS,
   TIER_NAMES,
+  TIER_FEATURES,
   formatBytes,
   getTierLimitsDisplay,
   type Tier,
@@ -13,12 +14,12 @@ import {
 
 describe('Tier Constants', () => {
   describe('TIER_LIMITS', () => {
-    const tiers: Tier[] = ['basic', 'standard', 'premium'];
+    const tiers: Tier[] = ['free', 'pro', 'business'];
 
     it('should have all tier definitions', () => {
-      expect(TIER_LIMITS).toHaveProperty('basic');
-      expect(TIER_LIMITS).toHaveProperty('standard');
-      expect(TIER_LIMITS).toHaveProperty('premium');
+      expect(TIER_LIMITS).toHaveProperty('free');
+      expect(TIER_LIMITS).toHaveProperty('pro');
+      expect(TIER_LIMITS).toHaveProperty('business');
     });
 
     tiers.forEach((tier) => {
@@ -36,9 +37,12 @@ describe('Tier Constants', () => {
           expect(limits).toHaveProperty('apiRequestsPerMinute');
           expect(limits).toHaveProperty('chatRequestsPerDay');
           expect(limits).toHaveProperty('uploadRequestsPerHour');
+          expect(limits).toHaveProperty('maxPublishHistory');
+          expect(limits).toHaveProperty('maxDeployments');
+          expect(limits).toHaveProperty('monthlyPoints');
         });
 
-        it('should have positive numeric values', () => {
+        it('should have positive numeric values for resource limits', () => {
           const limits = TIER_LIMITS[tier];
 
           expect(limits.maxChatbots).toBeGreaterThan(0);
@@ -52,79 +56,129 @@ describe('Tier Constants', () => {
       });
     });
 
-    it('should have increasing limits from basic to premium', () => {
-      // Chatbots
-      expect(TIER_LIMITS.basic.maxChatbots).toBeLessThanOrEqual(
-        TIER_LIMITS.standard.maxChatbots
+    it('should have increasing limits from free to business', () => {
+      // Chatbots (free와 pro는 같을 수 있음)
+      expect(TIER_LIMITS.free.maxChatbots).toBeLessThanOrEqual(
+        TIER_LIMITS.pro.maxChatbots
       );
-      expect(TIER_LIMITS.standard.maxChatbots).toBeLessThanOrEqual(
-        TIER_LIMITS.premium.maxChatbots
+      expect(TIER_LIMITS.pro.maxChatbots).toBeLessThanOrEqual(
+        TIER_LIMITS.business.maxChatbots
       );
 
       // Datasets
-      expect(TIER_LIMITS.basic.maxDatasets).toBeLessThanOrEqual(
-        TIER_LIMITS.standard.maxDatasets
+      expect(TIER_LIMITS.free.maxDatasets).toBeLessThanOrEqual(
+        TIER_LIMITS.pro.maxDatasets
       );
-      expect(TIER_LIMITS.standard.maxDatasets).toBeLessThanOrEqual(
-        TIER_LIMITS.premium.maxDatasets
+      expect(TIER_LIMITS.pro.maxDatasets).toBeLessThanOrEqual(
+        TIER_LIMITS.business.maxDatasets
       );
 
       // Documents
-      expect(TIER_LIMITS.basic.maxTotalDocuments).toBeLessThanOrEqual(
-        TIER_LIMITS.standard.maxTotalDocuments
+      expect(TIER_LIMITS.free.maxTotalDocuments).toBeLessThanOrEqual(
+        TIER_LIMITS.pro.maxTotalDocuments
       );
-      expect(TIER_LIMITS.standard.maxTotalDocuments).toBeLessThanOrEqual(
-        TIER_LIMITS.premium.maxTotalDocuments
+      expect(TIER_LIMITS.pro.maxTotalDocuments).toBeLessThanOrEqual(
+        TIER_LIMITS.business.maxTotalDocuments
       );
 
       // Storage
-      expect(TIER_LIMITS.basic.maxStorageBytes).toBeLessThanOrEqual(
-        TIER_LIMITS.standard.maxStorageBytes
+      expect(TIER_LIMITS.free.maxStorageBytes).toBeLessThanOrEqual(
+        TIER_LIMITS.pro.maxStorageBytes
       );
-      expect(TIER_LIMITS.standard.maxStorageBytes).toBeLessThanOrEqual(
-        TIER_LIMITS.premium.maxStorageBytes
+      expect(TIER_LIMITS.pro.maxStorageBytes).toBeLessThanOrEqual(
+        TIER_LIMITS.business.maxStorageBytes
       );
 
       // Conversations
-      expect(TIER_LIMITS.basic.maxMonthlyConversations).toBeLessThanOrEqual(
-        TIER_LIMITS.standard.maxMonthlyConversations
+      expect(TIER_LIMITS.free.maxMonthlyConversations).toBeLessThanOrEqual(
+        TIER_LIMITS.pro.maxMonthlyConversations
       );
-      expect(TIER_LIMITS.standard.maxMonthlyConversations).toBeLessThanOrEqual(
-        TIER_LIMITS.premium.maxMonthlyConversations
+      expect(TIER_LIMITS.pro.maxMonthlyConversations).toBeLessThanOrEqual(
+        TIER_LIMITS.business.maxMonthlyConversations
+      );
+
+      // Monthly Points
+      expect(TIER_LIMITS.free.monthlyPoints).toBeLessThanOrEqual(
+        TIER_LIMITS.pro.monthlyPoints
+      );
+      expect(TIER_LIMITS.pro.monthlyPoints).toBeLessThanOrEqual(
+        TIER_LIMITS.business.monthlyPoints
+      );
+
+      // Deployments
+      expect(TIER_LIMITS.free.maxDeployments).toBeLessThanOrEqual(
+        TIER_LIMITS.pro.maxDeployments
+      );
+      expect(TIER_LIMITS.pro.maxDeployments).toBeLessThanOrEqual(
+        TIER_LIMITS.business.maxDeployments
       );
     });
 
     describe('Specific limit values', () => {
-      it('basic tier should have minimal limits', () => {
-        expect(TIER_LIMITS.basic.maxChatbots).toBe(1);
-        expect(TIER_LIMITS.basic.maxDatasets).toBe(1);
-        expect(TIER_LIMITS.basic.maxTotalDocuments).toBe(10);
-        expect(TIER_LIMITS.basic.maxStorageBytes).toBe(100 * 1024 * 1024); // 100MB
+      it('free tier should have trial limits', () => {
+        expect(TIER_LIMITS.free.maxChatbots).toBe(3);
+        expect(TIER_LIMITS.free.maxDatasets).toBe(3);
+        expect(TIER_LIMITS.free.maxTotalDocuments).toBe(30);
+        expect(TIER_LIMITS.free.maxStorageBytes).toBe(100 * 1024 * 1024); // 100MB
+        expect(TIER_LIMITS.free.maxDeployments).toBe(0); // No deployment
+        expect(TIER_LIMITS.free.monthlyPoints).toBe(0); // No monthly points
       });
 
-      it('standard tier should have moderate limits', () => {
-        expect(TIER_LIMITS.standard.maxChatbots).toBe(3);
-        expect(TIER_LIMITS.standard.maxDatasets).toBe(5);
-        expect(TIER_LIMITS.standard.maxTotalDocuments).toBe(100);
-        expect(TIER_LIMITS.standard.maxStorageBytes).toBe(1024 * 1024 * 1024); // 1GB
+      it('pro tier should have moderate limits', () => {
+        expect(TIER_LIMITS.pro.maxChatbots).toBe(3);
+        expect(TIER_LIMITS.pro.maxDatasets).toBe(3);
+        expect(TIER_LIMITS.pro.maxTotalDocuments).toBe(100);
+        expect(TIER_LIMITS.pro.maxStorageBytes).toBe(1024 * 1024 * 1024); // 1GB
+        expect(TIER_LIMITS.pro.maxDeployments).toBe(1);
+        expect(TIER_LIMITS.pro.monthlyPoints).toBe(3000);
       });
 
-      it('premium tier should have high limits', () => {
-        expect(TIER_LIMITS.premium.maxChatbots).toBe(10);
-        expect(TIER_LIMITS.premium.maxDatasets).toBe(20);
-        expect(TIER_LIMITS.premium.maxTotalDocuments).toBe(500);
-        expect(TIER_LIMITS.premium.maxStorageBytes).toBe(
+      it('business tier should have high limits', () => {
+        expect(TIER_LIMITS.business.maxChatbots).toBe(10);
+        expect(TIER_LIMITS.business.maxDatasets).toBe(10);
+        expect(TIER_LIMITS.business.maxTotalDocuments).toBe(500);
+        expect(TIER_LIMITS.business.maxStorageBytes).toBe(
           10 * 1024 * 1024 * 1024
         ); // 10GB
+        expect(TIER_LIMITS.business.maxDeployments).toBe(3);
+        expect(TIER_LIMITS.business.monthlyPoints).toBe(10000);
       });
     });
   });
 
+  describe('TIER_FEATURES', () => {
+    it('should have feature flags for all tiers', () => {
+      expect(TIER_FEATURES).toHaveProperty('free');
+      expect(TIER_FEATURES).toHaveProperty('pro');
+      expect(TIER_FEATURES).toHaveProperty('business');
+    });
+
+    it('free tier should not be able to deploy', () => {
+      expect(TIER_FEATURES.free.canDeploy).toBe(false);
+      expect(TIER_FEATURES.free.customDomain).toBe(false);
+      expect(TIER_FEATURES.free.apiAccess).toBe(false);
+    });
+
+    it('pro tier should be able to deploy', () => {
+      expect(TIER_FEATURES.pro.canDeploy).toBe(true);
+      expect(TIER_FEATURES.pro.customDomain).toBe(false);
+      expect(TIER_FEATURES.pro.apiAccess).toBe(false);
+    });
+
+    it('business tier should have all features', () => {
+      expect(TIER_FEATURES.business.canDeploy).toBe(true);
+      expect(TIER_FEATURES.business.customDomain).toBe(true);
+      expect(TIER_FEATURES.business.apiAccess).toBe(true);
+      expect(TIER_FEATURES.business.prioritySupport).toBe(true);
+      expect(TIER_FEATURES.business.advancedAnalytics).toBe(true);
+    });
+  });
+
   describe('TIER_NAMES', () => {
-    it('should have Korean names for all tiers', () => {
-      expect(TIER_NAMES.basic).toBe('베이직');
-      expect(TIER_NAMES.standard).toBe('스탠다드');
-      expect(TIER_NAMES.premium).toBe('프리미엄');
+    it('should have names for all tiers', () => {
+      expect(TIER_NAMES.free).toBe('Free');
+      expect(TIER_NAMES.pro).toBe('Pro');
+      expect(TIER_NAMES.business).toBe('Business');
     });
 
     it('should have same keys as TIER_LIMITS', () => {
@@ -170,7 +224,7 @@ describe('Tier Constants', () => {
   });
 
   describe('getTierLimitsDisplay', () => {
-    const tiers: Tier[] = ['basic', 'standard', 'premium'];
+    const tiers: Tier[] = ['free', 'pro', 'business'];
 
     tiers.forEach((tier) => {
       it(`should return display info for ${tier} tier`, () => {
@@ -187,33 +241,33 @@ describe('Tier Constants', () => {
     });
 
     it('should format chatbots with "최대 X개"', () => {
-      const display = getTierLimitsDisplay('basic');
-      expect(display.chatbots).toBe('최대 1개');
+      const display = getTierLimitsDisplay('free');
+      expect(display.chatbots).toBe('최대 3개');
     });
 
     it('should format datasets with "최대 X개"', () => {
-      const display = getTierLimitsDisplay('standard');
-      expect(display.datasets).toBe('최대 5개');
+      const display = getTierLimitsDisplay('pro');
+      expect(display.datasets).toBe('최대 3개');
     });
 
     it('should format documents with "최대 X개"', () => {
-      const display = getTierLimitsDisplay('premium');
+      const display = getTierLimitsDisplay('business');
       expect(display.documents).toBe('최대 500개');
     });
 
     it('should format storage with human-readable bytes', () => {
-      expect(getTierLimitsDisplay('basic').storage).toBe('100 MB');
-      expect(getTierLimitsDisplay('standard').storage).toBe('1 GB');
-      expect(getTierLimitsDisplay('premium').storage).toBe('10 GB');
+      expect(getTierLimitsDisplay('free').storage).toBe('100 MB');
+      expect(getTierLimitsDisplay('pro').storage).toBe('1 GB');
+      expect(getTierLimitsDisplay('business').storage).toBe('10 GB');
     });
 
     it('should format conversations with "월 X회"', () => {
-      const display = getTierLimitsDisplay('basic');
+      const display = getTierLimitsDisplay('free');
       expect(display.conversations).toBe('월 1,000회');
     });
 
     it('should format large conversation numbers with locale string', () => {
-      const display = getTierLimitsDisplay('premium');
+      const display = getTierLimitsDisplay('business');
       expect(display.conversations).toBe('월 100,000회');
     });
   });

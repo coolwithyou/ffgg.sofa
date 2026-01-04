@@ -22,6 +22,7 @@ import type {
   CarouselImageItem,
 } from '@/lib/public-page/block-types';
 import type { BlockSettingsProps } from './index';
+import { ImageUploadField } from './image-upload-field';
 
 export function ImageCarouselBlockSettings({
   block,
@@ -124,18 +125,15 @@ export function ImageCarouselBlockSettings({
 
                 {expandedIndex === index && (
                   <div className="space-y-3 border-t border-border p-3">
-                    <div className="space-y-2">
-                      <Label htmlFor={`image-src-${index}`}>이미지 URL</Label>
-                      <Input
-                        id={`image-src-${index}`}
-                        type="url"
-                        placeholder="https://example.com/image.jpg"
-                        value={image.src}
-                        onChange={(e) =>
-                          updateImage(index, { src: e.target.value })
-                        }
-                      />
-                    </div>
+                    {/* 이미지 업로드/URL */}
+                    <ImageUploadField
+                      id={`image-src-${index}`}
+                      label="이미지"
+                      value={image.src}
+                      onChange={(url) => updateImage(index, { src: url })}
+                      placeholder="https://example.com/image.jpg"
+                      previewHeight={80}
+                    />
 
                     <div className="space-y-2">
                       <Label htmlFor={`image-alt-${index}`}>대체 텍스트</Label>

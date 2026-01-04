@@ -22,6 +22,8 @@ import { generateRecurringPaymentId } from '@/lib/billing/order-id';
 import { billingEnv } from '@/lib/config/billing-env';
 import { logger } from '@/lib/logger';
 import { addMonths, addYears } from 'date-fns';
+import { chargePoints } from '@/lib/points';
+import { POINT_TRANSACTION_TYPES } from '@/lib/points/constants';
 
 /**
  * 정기 결제 처리 함수
@@ -434,9 +436,11 @@ export const handleSubscriptionExpired = inngestClient.createFunction(
 );
 
 /**
- * 결제 완료 후처리 함수 (선택적)
+ * 결제 완료 후처리 함수
  *
- * billing/payment.completed 이벤트를 받아 후처리 (알림 등)
+ * billing/payment.completed 이벤트를 받아 후처리:
+ * 1. 월간 포인트 충전
+ * 2. 알림 발송 (선택적)
  */
 export const handlePaymentCompleted = inngestClient.createFunction(
   {
@@ -455,12 +459,70 @@ export const handlePaymentCompleted = inngestClient.createFunction(
       amount,
     });
 
+    // Step 1: 구독 정보 조회하여 월간 포인트 확인
+    const pointsResult = await step.run('charge-monthly-points', async () => {
+      // 구독의 플랜 정보 조회
+      const [subscription] = await db
+        .select({
+          planId: subscriptions.planId,
+          plan: plans,
+        })
+        .from(subscriptions)
+        .innerJoin(plans, eq(subscriptions.planId, plans.id))
+        .where(eq(subscriptions.id, subscriptionId))
+        .limit(1);
+
+      if (!subscription) {
+        logger.warn('Subscription not found for point charge', { subscriptionId });
+        return { charged: false, reason: 'Subscription not found' };
+      }
+
+      // 플랜의 월간 포인트 (limits.monthlyPoints)
+      const planLimits = subscription.plan.limits as { monthlyPoints?: number } | null;
+      const monthlyPoints = planLimits?.monthlyPoints ?? 0;
+
+      if (monthlyPoints <= 0) {
+        logger.info('No monthly points to charge for this plan', {
+          subscriptionId,
+          planId: subscription.planId,
+        });
+        return { charged: false, reason: 'No monthly points for plan', planId: subscription.planId };
+      }
+
+      // 포인트 충전
+      const result = await chargePoints({
+        tenantId,
+        amount: monthlyPoints,
+        type: POINT_TRANSACTION_TYPES.SUBSCRIPTION_CHARGE,
+        description: `${subscription.plan.nameKo} 월간 포인트 충전`,
+        metadata: {
+          paymentId,
+          subscriptionId,
+        },
+      });
+
+      logger.info('Monthly points charged', {
+        tenantId,
+        points: monthlyPoints,
+        newBalance: result.newBalance,
+        transactionId: result.transactionId,
+      });
+
+      return {
+        charged: true,
+        points: monthlyPoints,
+        newBalance: result.newBalance,
+        transactionId: result.transactionId,
+      };
+    });
+
     // 필요시 추가 후처리 (영수증 이메일 발송 등)
-    // 현재는 로깅만 수행
 
     return {
       success: true,
       paymentId,
+      pointsCharged: pointsResult.charged,
+      pointsAmount: pointsResult.charged ? (pointsResult as { points: number }).points : 0,
     };
   }
 );

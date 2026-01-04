@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import type { HeaderBlock } from '@/lib/public-page/block-types';
 import type { BlockSettingsProps } from './index';
+import { ImageUploadField } from './image-upload-field';
 
 export function HeaderBlockSettings({
   block,
@@ -60,30 +61,16 @@ export function HeaderBlockSettings({
         />
       </div>
 
-      {/* 로고 URL */}
-      <div className="space-y-2">
-        <Label htmlFor="header-logo">로고 이미지 URL</Label>
-        <Input
-          id="header-logo"
-          type="url"
-          placeholder="https://example.com/logo.png"
-          value={config.logoUrl || ''}
-          onChange={(e) => updateConfig({ logoUrl: e.target.value })}
-        />
-        {config.logoUrl && (
-          <div className="mt-2 flex items-center gap-2">
-            <img
-              src={config.logoUrl}
-              alt="로고 미리보기"
-              className="h-10 w-10 rounded-lg object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-            <span className="text-xs text-muted-foreground">미리보기</span>
-          </div>
-        )}
-      </div>
+      {/* 로고 이미지 */}
+      <ImageUploadField
+        id="header-logo"
+        label="로고 이미지"
+        value={config.logoUrl || ''}
+        onChange={(url) => updateConfig({ logoUrl: url || undefined })}
+        placeholder="https://example.com/logo.png"
+        maxSize={400}
+        previewHeight={64}
+      />
 
       {/* 브랜드명 표시 */}
       <div className="flex items-center justify-between">

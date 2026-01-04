@@ -25,7 +25,7 @@ import {
   parseWidgetConfig,
   type WidgetConfig,
 } from '@/lib/widget/types';
-import { type Tier } from '@/lib/tier/constants';
+import { type Tier, normalizeTier } from '@/lib/tier/constants';
 import {
   type TenantSettings,
   DEFAULT_TENANT_SETTINGS,
@@ -60,7 +60,7 @@ export function ConsoleProvider({
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
 
   // 테넌트 설정 상태
-  const [tier, setTier] = useState<Tier>('basic');
+  const [tier, setTier] = useState<Tier>('free');
   const [tenantSettings, setTenantSettings] = useState<TenantSettings>(
     DEFAULT_TENANT_SETTINGS
   );
@@ -155,7 +155,7 @@ export function ConsoleProvider({
       const res = await fetch('/api/tenants/settings');
       if (!res.ok) throw new Error('Failed to fetch tenant settings');
       const data = await res.json();
-      setTier(data.tier || 'basic');
+      setTier(normalizeTier(data.tier));
       setTenantSettings(data.settings || DEFAULT_TENANT_SETTINGS);
     } catch (error) {
       console.error('Failed to load tenant settings:', error);

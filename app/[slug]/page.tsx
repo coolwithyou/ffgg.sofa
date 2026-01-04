@@ -14,7 +14,7 @@ import { db, chatbots, tenants, chatbotConfigVersions } from '@/lib/db';
 import { eq, and } from 'drizzle-orm';
 import { isReservedSlug } from '@/lib/public-page/reserved-slugs';
 import { parsePublicPageConfig } from '@/lib/public-page/types';
-import { PublicPageView } from './public-page-view';
+import { PreviewPageWrapper } from './preview-page-wrapper';
 
 interface PublicPageProps {
   params: Promise<{ slug: string }>;
@@ -101,11 +101,11 @@ export default async function PublicPage({ params }: PublicPageProps) {
         </div>
       }
     >
-      <PublicPageView
+      <PreviewPageWrapper
         chatbotId={chatbot.id}
         chatbotName={chatbot.name}
         tenantId={chatbot.tenantId}
-        config={config}
+        publishedConfig={config}
         widgetConfig={chatbot.widgetConfig as Record<string, unknown> | null}
       />
     </Suspense>

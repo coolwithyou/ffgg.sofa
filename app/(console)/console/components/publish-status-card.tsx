@@ -1,13 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import Link from 'next/link';
-import { useCurrentChatbot } from '../hooks/use-console-state';
+import { useCurrentChatbot, usePageConfig } from '../hooks/use-console-state';
 import { useAutoSaveContext } from '../hooks/use-auto-save';
 import { useVersions } from '../hooks/use-versions';
 import { VersionManagementDialog } from './version-management-dialog';
+import { savePreviewData } from '@/lib/public-page/preview-storage';
 import { Button } from '@/components/ui/button';
 import {
+  Eye,
   ExternalLink,
   Rocket,
   Check,
@@ -33,6 +35,7 @@ interface PublishStatusCardProps {
  */
 export function PublishStatusCard({ mode = 'public-page' }: PublishStatusCardProps) {
   const { currentChatbot } = useCurrentChatbot();
+  const { pageConfig } = usePageConfig();
   const { saveStatus } = useAutoSaveContext();
   const { versions, hasChanges, isPublishing } = useVersions();
 
@@ -43,15 +46,38 @@ export function PublishStatusCard({ mode = 'public-page' }: PublishStatusCardPro
   const publishedVersion = versions?.published;
   const isWidgetMode = mode === 'widget';
 
-  // 미리보기 URL
-  const previewUrl = isWidgetMode
-    ? `/widgets/${currentChatbot.id}/preview`
-    : `/${currentChatbot.slug}`;
-
   // 미리보기 가능 여부
   const canPreview = isWidgetMode
     ? currentChatbot.widgetEnabled
     : currentChatbot.publicPageEnabled && currentChatbot.slug;
+
+  // 미리보기 URL (localStorage에 데이터 저장 후 이동)
+  const previewUrl = isWidgetMode
+    ? `/widgets/${currentChatbot.id}/preview`
+    : `/${currentChatbot.slug}?preview=true`;
+
+  // 발행 페이지 URL (실제 발행된 버전)
+  const publishedUrl = isWidgetMode
+    ? `/widgets/${currentChatbot.id}/preview`
+    : `/${currentChatbot.slug}`;
+
+  /**
+   * 미리보기 클릭 핸들러
+   * localStorage에 현재 편집 중인 설정을 저장하고 새 탭에서 열기
+   */
+  const handlePreviewClick = useCallback(() => {
+    if (isWidgetMode) {
+      // 위젯 모드는 기존 방식 유지
+      window.open(previewUrl, '_blank');
+      return;
+    }
+
+    // 공개 페이지 모드: localStorage에 현재 설정 저장
+    if (pageConfig && currentChatbot) {
+      savePreviewData(currentChatbot.id, pageConfig, currentChatbot.name);
+    }
+    window.open(previewUrl, '_blank');
+  }, [isWidgetMode, previewUrl, pageConfig, currentChatbot]);
 
   return (
     <>
@@ -84,21 +110,37 @@ export function PublishStatusCard({ mode = 'public-page' }: PublishStatusCardPro
         </div>
 
         {/* 버튼 그룹 */}
-        <div className="flex gap-2">
-          {/* 미리보기 버튼 */}
+        <div className="flex flex-col gap-2">
+          {/* 미리보기 + 발행 페이지 보기 */}
           {canPreview && (
-            <Button variant="outline" size="sm" className="flex-1" asChild>
-              <Link href={previewUrl} target="_blank">
-                <ExternalLink className="mr-1.5 h-4 w-4" />
+            <div className="flex gap-2">
+              {/* 미리보기 버튼 (편집 중인 상태) */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={handlePreviewClick}
+              >
+                <Eye className="mr-1.5 h-4 w-4" />
                 미리보기
-              </Link>
-            </Button>
+              </Button>
+
+              {/* 발행 페이지 보기 버튼 (발행된 버전) */}
+              {publishedVersion && (
+                <Button variant="outline" size="sm" className="flex-1" asChild>
+                  <Link href={publishedUrl} target="_blank">
+                    <ExternalLink className="mr-1.5 h-4 w-4" />
+                    발행 페이지
+                  </Link>
+                </Button>
+              )}
+            </div>
           )}
 
           {/* 발행 버튼 */}
           <Button
             size="sm"
-            className="flex-1"
+            className="w-full"
             onClick={() => setShowVersionDialog(true)}
             disabled={saveStatus === 'saving' || isPublishing}
           >

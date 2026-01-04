@@ -16,6 +16,7 @@ import { eq } from 'drizzle-orm';
 import { createSession } from '@/lib/auth';
 import { v4 as uuidv4 } from 'uuid';
 import { logLoginSuccess } from '@/lib/audit/logger';
+import { grantFreeTrialPoints } from '@/lib/points';
 
 interface GoogleTokenResponse {
   access_token: string;
@@ -221,6 +222,9 @@ export async function GET(request: NextRequest) {
         description: '문서를 업로드하면 자동으로 이 데이터셋에 저장됩니다.',
         isDefault: true,
       });
+
+      // 체험 포인트 지급 (500P, 1회성)
+      await grantFreeTrialPoints(tenantId);
     }
 
     // 4. 세션 생성

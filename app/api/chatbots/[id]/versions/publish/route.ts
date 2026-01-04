@@ -10,7 +10,7 @@ import { eq, and, asc, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { chatbots, chatbotConfigVersions, tenants } from '@/drizzle/schema';
 import { validateSession } from '@/lib/auth/session';
-import { TIER_LIMITS, Tier } from '@/lib/tier/constants';
+import { TIER_LIMITS, normalizeTier } from '@/lib/tier/constants';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -59,10 +59,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // 티어별 발행 이력 제한
-    const rawTier = chatbotWithTenant.tier?.toLowerCase() || 'basic';
-    const tier: Tier = (rawTier === 'basic' || rawTier === 'standard' || rawTier === 'premium')
-      ? rawTier
-      : 'basic';
+    const tier = normalizeTier(chatbotWithTenant.tier);
     const maxHistory = TIER_LIMITS[tier].maxPublishHistory;
 
     // draft 버전 조회

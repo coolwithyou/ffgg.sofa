@@ -4,7 +4,7 @@
  * 이미지 블록 설정 컴포넌트
  *
  * ImageBlock의 설정을 편집합니다:
- * - 이미지 URL: 표시할 이미지 주소
+ * - 이미지: URL 입력 또는 파일 업로드
  * - 대체 텍스트: 접근성을 위한 alt 텍스트
  * - 캡션: 이미지 아래 표시할 설명
  * - 종횡비: 1:1, 4:3, 16:9, auto
@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import type { ImageBlock, ImageBlockAspectRatio } from '@/lib/public-page/block-types';
 import type { BlockSettingsProps } from './index';
+import { ImageUploadField } from './image-upload-field';
 
 const ASPECT_RATIO_OPTIONS: { value: ImageBlockAspectRatio; label: string }[] = [
   { value: '1:1', label: '정사각형 (1:1)' },
@@ -48,17 +49,14 @@ export function ImageBlockSettings({
 
   return (
     <div className="space-y-4">
-      {/* 이미지 URL */}
-      <div className="space-y-2">
-        <Label htmlFor="image-src">이미지 URL</Label>
-        <Input
-          id="image-src"
-          type="url"
-          placeholder="https://example.com/image.jpg"
-          value={config.src}
-          onChange={(e) => updateConfig({ src: e.target.value })}
-        />
-      </div>
+      {/* 이미지 */}
+      <ImageUploadField
+        id="image-src"
+        label="이미지"
+        value={config.src}
+        onChange={(url) => updateConfig({ src: url })}
+        placeholder="https://example.com/image.jpg"
+      />
 
       {/* 대체 텍스트 */}
       <div className="space-y-2">

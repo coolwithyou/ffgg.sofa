@@ -14,7 +14,7 @@ import {
   chunks,
   usageLogs,
 } from '@/drizzle/schema';
-import { TIER_LIMITS, type Tier } from './constants';
+import { TIER_LIMITS, TIER_FEATURES, normalizeTier, type Tier } from './constants';
 
 export interface LimitCheckResult {
   allowed: boolean;
@@ -25,6 +25,7 @@ export interface LimitCheckResult {
 
 /**
  * 테넌트의 티어 조회
+ * 레거시 티어명(basic/standard/premium)도 자동 변환
  */
 export async function getTenantTier(tenantId: string): Promise<Tier> {
   const result = await db
@@ -33,8 +34,7 @@ export async function getTenantTier(tenantId: string): Promise<Tier> {
     .where(eq(tenants.id, tenantId))
     .limit(1);
 
-  const tier = result[0]?.tier as Tier | undefined;
-  return tier || 'basic';
+  return normalizeTier(result[0]?.tier);
 }
 
 /**
@@ -355,4 +355,149 @@ export async function getUsageSummary(
     storage: storageLimit,
     monthlyConversations: conversationsLimit,
   };
+}
+
+// ============================================
+// 배포 제한 검증
+// ============================================
+
+export interface DeploymentCheckResult {
+  allowed: boolean;
+  reason?: string;
+  current: number;
+  max: number;
+  remaining: number;
+}
+
+/**
+ * 현재 배포(활성화)된 챗봇 수 조회
+ * publicPageEnabled 또는 widgetEnabled가 true인 챗봇 수
+ */
+export async function countActiveDeployments(tenantId: string): Promise<number> {
+  const result = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(chatbots)
+    .where(
+      and(
+        eq(chatbots.tenantId, tenantId),
+        sql`(${chatbots.publicPageEnabled} = true OR ${chatbots.widgetEnabled} = true)`
+      )
+    );
+
+  return result[0]?.count || 0;
+}
+
+/**
+ * 배포 가능 여부 확인
+ *
+ * Free 플랜: 배포 불가 (미리보기만)
+ * Pro 플랜: 1개 배포
+ * Business 플랜: 3개 배포
+ */
+export async function canDeploy(
+  tenantId: string,
+  tier?: Tier
+): Promise<DeploymentCheckResult> {
+  const actualTier = tier || (await getTenantTier(tenantId));
+  const features = TIER_FEATURES[actualTier];
+  const limits = TIER_LIMITS[actualTier];
+
+  // Free 플랜은 배포 불가
+  if (!features.canDeploy) {
+    return {
+      allowed: false,
+      reason: 'Free 플랜에서는 배포할 수 없습니다. Pro 플랜으로 업그레이드해주세요.',
+      current: 0,
+      max: 0,
+      remaining: 0,
+    };
+  }
+
+  const current = await countActiveDeployments(tenantId);
+  const max = limits.maxDeployments;
+
+  // 배포 한도 체크
+  if (current >= max) {
+    return {
+      allowed: false,
+      reason: `배포 한도(${max}개)에 도달했습니다. ${
+        actualTier === 'pro' ? 'Business 플랜으로 업그레이드하면 더 많이 배포할 수 있습니다.' : ''
+      }`,
+      current,
+      max,
+      remaining: 0,
+    };
+  }
+
+  return {
+    allowed: true,
+    current,
+    max,
+    remaining: max - current,
+  };
+}
+
+/**
+ * 특정 챗봇이 이미 배포되어 있는지 확인
+ * (이미 배포된 챗봇은 재배포 시 한도에서 제외)
+ */
+export async function isChatbotDeployed(chatbotId: string): Promise<boolean> {
+  const result = await db
+    .select({
+      publicPageEnabled: chatbots.publicPageEnabled,
+      widgetEnabled: chatbots.widgetEnabled,
+    })
+    .from(chatbots)
+    .where(eq(chatbots.id, chatbotId))
+    .limit(1);
+
+  if (!result[0]) return false;
+
+  return Boolean(result[0].publicPageEnabled) || Boolean(result[0].widgetEnabled);
+}
+
+/**
+ * 챗봇 배포 가능 여부 확인 (특정 챗봇)
+ *
+ * 이미 배포된 챗봇은 항상 재배포 가능 (설정 변경)
+ * 새로 배포하는 경우에만 한도 체크
+ */
+export async function canDeployChatbot(
+  tenantId: string,
+  chatbotId: string,
+  tier?: Tier
+): Promise<DeploymentCheckResult> {
+  // 이미 배포된 챗봇인지 확인
+  const alreadyDeployed = await isChatbotDeployed(chatbotId);
+
+  // 이미 배포된 경우 항상 허용 (설정 변경이므로)
+  if (alreadyDeployed) {
+    const actualTier = tier || (await getTenantTier(tenantId));
+    const limits = TIER_LIMITS[actualTier];
+    const current = await countActiveDeployments(tenantId);
+
+    return {
+      allowed: true,
+      current,
+      max: limits.maxDeployments,
+      remaining: Math.max(0, limits.maxDeployments - current),
+    };
+  }
+
+  // 새 배포인 경우 한도 체크
+  return canDeploy(tenantId, tier);
+}
+
+/**
+ * 커스텀 도메인 사용 가능 여부
+ */
+export function canUseCustomDomain(tier: Tier): boolean {
+  return TIER_FEATURES[tier].customDomain;
+}
+
+/**
+ * API 액세스 가능 여부
+ */
+export function canUseApiAccess(tier: Tier): boolean {
+  return TIER_FEATURES[tier].apiAccess;
 }

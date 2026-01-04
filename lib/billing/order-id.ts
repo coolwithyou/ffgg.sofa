@@ -60,6 +60,18 @@ export function generateRefundId(): string {
 }
 
 /**
+ * 포인트 구매 결제 ID 생성
+ *
+ * @returns 포인트 구매 결제 ID
+ *
+ * @example
+ * generatePointPurchaseId() // "PNT_M1A2B3C4_ABCD1234EFGH"
+ */
+export function generatePointPurchaseId(): string {
+  return generatePaymentId('PNT');
+}
+
+/**
  * 정기결제 ID 생성 (구독 결제용)
  *
  * @param subscriptionId 구독 ID (UUID의 처음 8자)

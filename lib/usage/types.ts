@@ -88,7 +88,7 @@ export interface Forecast {
 
 export interface BudgetStatus {
   tenantId: string;
-  tier: 'basic' | 'standard' | 'premium';
+  tier: 'free' | 'pro' | 'business';
   monthlyBudgetUsd: number;
   currentUsageUsd: number;
   usagePercentage: number;

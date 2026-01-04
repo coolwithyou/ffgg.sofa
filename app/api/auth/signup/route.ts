@@ -11,6 +11,7 @@ import { hashPassword, passwordSchema } from '@/lib/auth';
 import { withRateLimit } from '@/lib/middleware';
 import { ErrorCode, AppError, errorResponse } from '@/lib/errors';
 import { v4 as uuidv4 } from 'uuid';
+import { grantFreeTrialPoints } from '@/lib/points';
 
 const signupSchema = z.object({
   email: z.string().email('유효한 이메일 주소를 입력하세요.'),
@@ -117,7 +118,10 @@ export async function POST(request: NextRequest) {
       isDefault: true,
     });
 
-    // 7. 이메일 인증 - Delayed Verification 전략
+    // 7. 체험 포인트 지급 (500P, 1회성)
+    await grantFreeTrialPoints(tenantId);
+
+    // 8. 이메일 인증 - Delayed Verification 전략
     // 가입 시점에는 이메일을 발송하지 않고, 핵심 기능(발행 등) 사용 시 요청
     // 인증 토큰은 미리 생성해두어 나중에 재발송 시 사용
 

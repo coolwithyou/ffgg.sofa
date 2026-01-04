@@ -23,6 +23,7 @@ import {
   createHeaderBlock,
   createChatbotBlock,
 } from '@/lib/public-page/block-types';
+import { getBackgroundStyles } from '@/lib/public-page/background-utils';
 import { BlockRenderer } from './components/block-renderer';
 import { EditableBlockWrapper } from './components/editable-block-wrapper';
 import { DropIndicator } from './components/drop-indicator';
@@ -61,6 +62,8 @@ interface PublicPageViewProps {
   onMoveBlockUp?: (id: string) => void;
   /** 블록 아래로 이동 콜백 */
   onMoveBlockDown?: (id: string) => void;
+  /** min-h-screen 비활성화 (외부에서 높이 관리 시) */
+  disableMinHeight?: boolean;
 }
 
 export function PublicPageView({
@@ -77,6 +80,7 @@ export function PublicPageView({
   onReorderBlocks,
   onMoveBlockUp,
   onMoveBlockDown,
+  disableMinHeight = false,
 }: PublicPageViewProps) {
   const { header, theme, chatbot } = config;
 
@@ -203,22 +207,17 @@ export function PublicPageView({
     );
   };
 
-  // 배경 이미지 스타일
-  // 편집 모드에서는 배경색을 투명으로 설정 (CenterPreview에서 배경색 적용)
+  // 배경 스타일
+  // 편집 모드: 투명 배경 (부모 CenterPreview에서 배경 적용)
+  // 보기 모드: backgroundType에 따른 배경 스타일 적용
   const backgroundStyles: React.CSSProperties = {
     ...themeStyles,
-    // 편집 모드: 투명 배경 (부모 CenterPreview의 배경색이 보이도록)
-    // 보기 모드: 테마 배경색 적용
-    backgroundColor: isEditing ? 'transparent' : 'var(--pp-bg-color)',
     color: 'var(--pp-text-color)',
     fontFamily: 'var(--pp-font-family)',
-    // 배경 이미지는 보기 모드에서만 적용
-    ...(!isEditing && theme.backgroundImage && {
-      backgroundImage: `url(${theme.backgroundImage})`,
-      backgroundSize: theme.backgroundSize ?? 'cover',
-      backgroundRepeat: theme.backgroundRepeat ?? 'no-repeat',
-      backgroundPosition: theme.backgroundPosition ?? 'center',
-    }),
+    // 편집 모드: 투명 배경, 보기 모드: 테마 배경
+    ...(isEditing
+      ? { backgroundColor: 'transparent' }
+      : getBackgroundStyles(theme)),
   };
 
   // 카드 컨테이너 스타일
@@ -236,7 +235,12 @@ export function PublicPageView({
 
   // 편집 모드: 부모 컨테이너 채우기 (min-h-full)
   // 보기 모드: 전체 화면 채우기 (min-h-screen)
-  const mainClassName = isEditing ? 'min-h-full' : 'min-h-screen';
+  // disableMinHeight: 외부 래퍼가 높이를 관리할 때 (미리보기 모드 등)
+  const mainClassName = isEditing
+    ? 'min-h-full'
+    : disableMinHeight
+      ? 'flex-1'
+      : 'min-h-screen';
 
   return (
     <main

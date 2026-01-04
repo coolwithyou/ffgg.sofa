@@ -33,9 +33,10 @@ export interface TenantInfo {
 
 /**
  * 고급 모드 활성화 가능 여부 확인
+ * business 티어만 활성화 가능
  */
 export function canEnableAdvancedMode(tier: Tier): boolean {
-  return tier === 'premium';
+  return tier === 'business';
 }
 
 /**

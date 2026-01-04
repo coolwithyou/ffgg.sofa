@@ -292,11 +292,13 @@ export async function uploadFile(
       size: file.length,
     });
 
-    // Public URL 생성 (CDN이 있으면 CDN URL 사용)
+    // Public URL 생성
+    // 우선순위: CDN_URL > 프록시 API
+    // CDN이 없으면 프록시 API를 통해 파일 제공 (R2 인증 문제 해결)
     const cdnUrl = process.env.CDN_URL;
     const url = cdnUrl
       ? `${cdnUrl}/${key}`
-      : `${process.env.S3_ENDPOINT}/${bucket}/${key}`;
+      : `/api/files/${key}`;
 
     return {
       success: true,

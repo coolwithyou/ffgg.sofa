@@ -7,9 +7,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { eq, desc, and, sql } from 'drizzle-orm';
+import { eq, desc, and, sql, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { chatbots, chatbotDatasets, datasets, conversations } from '@/drizzle/schema';
+import {
+  chatbots,
+  chatbotDatasets,
+  chatbotConfigVersions,
+  datasets,
+  conversations,
+} from '@/drizzle/schema';
 import { validateSession } from '@/lib/auth/session';
 import { canCreateChatbot } from '@/lib/tier/validator';
 
@@ -134,6 +140,9 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET /api/chatbots - 챗봇 목록 조회
+ *
+ * Console에서 사용할 때는 draft 설정을 포함하여 반환합니다.
+ * draft가 없으면 chatbots 테이블의 현재 설정을 사용합니다.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -162,10 +171,43 @@ export async function GET(request: NextRequest) {
       .where(and(...conditions))
       .orderBy(desc(chatbots.isDefault), desc(chatbots.createdAt));
 
+    // 각 챗봇의 draft 버전 조회
+    const chatbotIds = chatbotList.map((c) => c.id);
+    const draftVersions =
+      chatbotIds.length > 0
+        ? await db
+            .select({
+              chatbotId: chatbotConfigVersions.chatbotId,
+              publicPageConfig: chatbotConfigVersions.publicPageConfig,
+              widgetConfig: chatbotConfigVersions.widgetConfig,
+            })
+            .from(chatbotConfigVersions)
+            .where(
+              and(
+                inArray(chatbotConfigVersions.chatbotId, chatbotIds),
+                eq(chatbotConfigVersions.versionType, 'draft')
+              )
+            )
+        : [];
+
+    // draft 버전을 chatbotId 기준으로 맵핑
+    const draftMap = new Map(draftVersions.map((d) => [d.chatbotId, d]));
+
+    // 챗봇 목록에 draft 설정 병합
+    const chatbotsWithDraft = chatbotList.map((chatbot) => {
+      const draft = draftMap.get(chatbot.id);
+      return {
+        ...chatbot,
+        // draft가 있으면 draft 설정 사용, 없으면 chatbots 테이블의 원본 사용
+        publicPageConfig: draft?.publicPageConfig ?? chatbot.publicPageConfig,
+        widgetConfig: draft?.widgetConfig ?? chatbot.widgetConfig,
+      };
+    });
+
     // 통계 포함 옵션
     if (includeStats) {
       const chatbotsWithStats = await Promise.all(
-        chatbotList.map(async (chatbot) => {
+        chatbotsWithDraft.map(async (chatbot) => {
           // 연결된 데이터셋 수
           const [datasetCount] = await db
             .select({ count: sql<number>`count(*)::int` })
@@ -191,7 +233,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ chatbots: chatbotsWithStats });
     }
 
-    return NextResponse.json({ chatbots: chatbotList });
+    return NextResponse.json({ chatbots: chatbotsWithDraft });
   } catch (error) {
     console.error('Chatbot list error:', error);
     return NextResponse.json(

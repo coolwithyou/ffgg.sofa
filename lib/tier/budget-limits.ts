@@ -11,19 +11,8 @@ import {
 } from '@/drizzle/schema';
 import { eq, sql } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
-import { TIER_BUDGET_LIMITS, type Tier } from './constants';
+import { TIER_BUDGET_LIMITS, normalizeTier, type Tier } from './constants';
 import type { BudgetStatus } from '@/lib/usage/types';
-
-/**
- * 유효한 티어인지 확인하고, 유효하지 않으면 'basic' 반환
- */
-function getValidTier(tier: unknown): Tier {
-  if (tier === 'basic' || tier === 'standard' || tier === 'premium') {
-    return tier;
-  }
-  logger.warn('Invalid tier detected, falling back to basic', { tier });
-  return 'basic';
-}
 
 export interface BudgetLimit {
   tier: Tier;
@@ -51,8 +40,8 @@ export async function getTenantBudgetLimit(tenantId: string): Promise<BudgetLimi
     throw new Error(`Tenant not found: ${tenantId}`);
   }
 
-  // 유효한 티어인지 확인 (null, 빈 문자열, 정의되지 않은 티어 처리)
-  const tier = getValidTier(tenant.tier);
+  // 티어 정규화 (레거시 티어명도 지원)
+  const tier = normalizeTier(tenant.tier);
 
   // override 설정 확인
   const [budgetStatus] = await db

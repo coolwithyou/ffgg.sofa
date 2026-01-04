@@ -106,7 +106,7 @@ export function RightSettings() {
 
       {/* 탭: 블록 / 설정 */}
       <Tabs defaultValue="blocks" className="flex flex-1 flex-col overflow-hidden">
-        <div className="border-b border-border px-4 pt-2">
+        <div className="border-b border-border px-4 py-3">
           <TabsList className="w-full">
             <TabsTrigger value="blocks" className="flex-1 gap-2">
               <LayoutGrid className="h-4 w-4" />
