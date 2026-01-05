@@ -46,7 +46,7 @@ interface Plan {
     maxDocuments: number;
     maxStorageBytes: number;
     maxMonthlyConversations: number;
-  };
+  } | null;
 }
 
 interface CurrentSubscription {
@@ -438,10 +438,12 @@ export default function PlansPage() {
                 <TableRow key={row.key}>
                   <TableCell className="font-medium">{row.label}</TableCell>
                   {plans.map((plan) => {
-                    const value = plan.limits[row.key as keyof typeof plan.limits];
+                    const value = plan.limits?.[row.key as keyof typeof plan.limits];
                     let displayValue = '';
 
-                    if (row.isBytes) {
+                    if (value === null || value === undefined) {
+                      displayValue = '무제한';
+                    } else if (row.isBytes) {
                       displayValue = formatBytes(value as number);
                     } else {
                       displayValue = (value as number).toLocaleString() + (row.suffix || '');

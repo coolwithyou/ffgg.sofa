@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
         description: plans.description,
         monthlyPrice: plans.monthlyPrice,
         yearlyPrice: plans.yearlyPrice,
+        featureList: plans.featureList,
         features: plans.features,
         limits: plans.limits,
         sortOrder: plans.sortOrder,
@@ -31,7 +32,14 @@ export async function GET(request: NextRequest) {
       .where(eq(plans.isActive, true))
       .orderBy(asc(plans.sortOrder));
 
-    return NextResponse.json({ plans: planList });
+    // 프론트엔드 호환성을 위해 featureList를 features로 매핑
+    const formattedPlans = planList.map((plan) => ({
+      ...plan,
+      features: plan.featureList || [], // UI에서 사용하는 string[] 형태
+      featureFlags: plan.features, // 기능 플래그 객체 (필요시 사용)
+    }));
+
+    return NextResponse.json({ plans: formattedPlans });
   } catch (error) {
     console.error('Plans fetch error:', error);
     return NextResponse.json(
