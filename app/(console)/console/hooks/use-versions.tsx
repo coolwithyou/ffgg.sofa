@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from 'react';
 import { useConsole } from './use-console-state';
+import { parsePublicPageConfig } from '@/lib/public-page/types';
+import { parseWidgetConfig } from '@/lib/widget/types';
 
 /**
  * 발행된 버전 정보
@@ -57,8 +59,10 @@ interface UseVersionsReturn {
   isLoading: boolean;
   isPublishing: boolean;
   isReverting: boolean;
+  isResetting: boolean;
   publish: (note?: string) => Promise<void>;
   revert: () => Promise<void>;
+  reset: () => Promise<void>;
   rollback: (versionId: string) => Promise<void>;
   refreshVersions: () => Promise<void>;
 }
@@ -69,13 +73,22 @@ interface UseVersionsReturn {
  * Draft/Published 버전을 관리하고 발행, 되돌리기, 롤백 기능을 제공합니다.
  */
 export function useVersionsCore(): UseVersionsReturn {
-  const { currentChatbot } = useConsole();
+  const {
+    currentChatbot,
+    updatePageConfig,
+    setOriginalPageConfig,
+    setSaveStatus,
+    updateWidgetConfig,
+    setOriginalWidgetConfig,
+    setWidgetSaveStatus,
+  } = useConsole();
 
   const [versions, setVersions] = useState<VersionsData | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isReverting, setIsReverting] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   /**
    * 버전 목록 조회
@@ -144,6 +157,8 @@ export function useVersionsCore(): UseVersionsReturn {
 
   /**
    * 되돌리기 (published → draft 복원)
+   *
+   * API 호출 후 Console의 pageConfig/widgetConfig 상태도 동기화합니다.
    */
   const revert = useCallback(async () => {
     if (!currentChatbot?.id) {
@@ -167,13 +182,121 @@ export function useVersionsCore(): UseVersionsReturn {
 
       // 버전 목록 새로고침
       await refreshVersions();
+
+      // Console 상태 동기화: 새 draft 데이터로 UI 업데이트
+      // published 버전의 config를 가져와서 Console 상태에 반영
+      const versionsResponse = await fetch(
+        `/api/chatbots/${currentChatbot.id}/versions`
+      );
+      if (versionsResponse.ok) {
+        const versionsData = await versionsResponse.json();
+        const newDraft = versionsData.versions?.draft;
+
+        if (newDraft) {
+          // Page 설정 동기화
+          const newPageConfig = parsePublicPageConfig(newDraft.publicPageConfig);
+          updatePageConfig(newPageConfig);
+          setOriginalPageConfig(newPageConfig);
+          setSaveStatus('saved');
+
+          // Widget 설정 동기화
+          const newWidgetConfig = parseWidgetConfig(
+            newDraft.widgetConfig,
+            currentChatbot.tenantId
+          );
+          updateWidgetConfig(newWidgetConfig);
+          setOriginalWidgetConfig(newWidgetConfig);
+          setWidgetSaveStatus('saved');
+        }
+      }
     } finally {
       setIsReverting(false);
     }
-  }, [currentChatbot?.id, refreshVersions]);
+  }, [
+    currentChatbot?.id,
+    currentChatbot?.tenantId,
+    refreshVersions,
+    updatePageConfig,
+    setOriginalPageConfig,
+    setSaveStatus,
+    updateWidgetConfig,
+    setOriginalWidgetConfig,
+    setWidgetSaveStatus,
+  ]);
+
+  /**
+   * 완전 초기화 (DEFAULT_CONFIG로 복원)
+   *
+   * Free 플랜처럼 발행 이력이 없는 경우에도 사용 가능합니다.
+   * API 호출 후 Console의 pageConfig/widgetConfig 상태도 동기화합니다.
+   */
+  const reset = useCallback(async () => {
+    if (!currentChatbot?.id) {
+      throw new Error('챗봇이 선택되지 않았습니다');
+    }
+
+    try {
+      setIsResetting(true);
+      const response = await fetch(
+        `/api/chatbots/${currentChatbot.id}/versions/reset`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || '초기화 중 오류가 발생했습니다');
+      }
+
+      // 버전 목록 새로고침
+      await refreshVersions();
+
+      // Console 상태 동기화: 새 draft 데이터로 UI 업데이트
+      const versionsResponse = await fetch(
+        `/api/chatbots/${currentChatbot.id}/versions`
+      );
+      if (versionsResponse.ok) {
+        const versionsData = await versionsResponse.json();
+        const newDraft = versionsData.versions?.draft;
+
+        if (newDraft) {
+          // Page 설정 동기화
+          const newPageConfig = parsePublicPageConfig(newDraft.publicPageConfig);
+          updatePageConfig(newPageConfig);
+          setOriginalPageConfig(newPageConfig);
+          setSaveStatus('saved');
+
+          // Widget 설정 동기화
+          const newWidgetConfig = parseWidgetConfig(
+            newDraft.widgetConfig,
+            currentChatbot.tenantId
+          );
+          updateWidgetConfig(newWidgetConfig);
+          setOriginalWidgetConfig(newWidgetConfig);
+          setWidgetSaveStatus('saved');
+        }
+      }
+    } finally {
+      setIsResetting(false);
+    }
+  }, [
+    currentChatbot?.id,
+    currentChatbot?.tenantId,
+    refreshVersions,
+    updatePageConfig,
+    setOriginalPageConfig,
+    setSaveStatus,
+    updateWidgetConfig,
+    setOriginalWidgetConfig,
+    setWidgetSaveStatus,
+  ]);
 
   /**
    * 롤백 (history → draft 복원)
+   *
+   * API 호출 후 Console의 pageConfig/widgetConfig 상태도 동기화합니다.
    */
   const rollback = useCallback(
     async (versionId: string) => {
@@ -198,11 +321,47 @@ export function useVersionsCore(): UseVersionsReturn {
 
         // 버전 목록 새로고침
         await refreshVersions();
+
+        // Console 상태 동기화: 새 draft 데이터로 UI 업데이트
+        const versionsResponse = await fetch(
+          `/api/chatbots/${currentChatbot.id}/versions`
+        );
+        if (versionsResponse.ok) {
+          const versionsData = await versionsResponse.json();
+          const newDraft = versionsData.versions?.draft;
+
+          if (newDraft) {
+            // Page 설정 동기화
+            const newPageConfig = parsePublicPageConfig(newDraft.publicPageConfig);
+            updatePageConfig(newPageConfig);
+            setOriginalPageConfig(newPageConfig);
+            setSaveStatus('saved');
+
+            // Widget 설정 동기화
+            const newWidgetConfig = parseWidgetConfig(
+              newDraft.widgetConfig,
+              currentChatbot.tenantId
+            );
+            updateWidgetConfig(newWidgetConfig);
+            setOriginalWidgetConfig(newWidgetConfig);
+            setWidgetSaveStatus('saved');
+          }
+        }
       } finally {
         setIsReverting(false);
       }
     },
-    [currentChatbot?.id, refreshVersions]
+    [
+      currentChatbot?.id,
+      currentChatbot?.tenantId,
+      refreshVersions,
+      updatePageConfig,
+      setOriginalPageConfig,
+      setSaveStatus,
+      updateWidgetConfig,
+      setOriginalWidgetConfig,
+      setWidgetSaveStatus,
+    ]
   );
 
   return {
@@ -211,8 +370,10 @@ export function useVersionsCore(): UseVersionsReturn {
     isLoading,
     isPublishing,
     isReverting,
+    isResetting,
     publish,
     revert,
+    reset,
     rollback,
     refreshVersions,
   };

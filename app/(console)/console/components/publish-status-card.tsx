@@ -8,7 +8,9 @@ import { useVersions } from '../hooks/use-versions';
 import { VersionManagementDialog } from './version-management-dialog';
 import { savePreviewData } from '@/lib/public-page/preview-storage';
 import { Button } from '@/components/ui/button';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
 import { TIER_FEATURES } from '@/lib/tier/constants';
+import { toast } from 'sonner';
 import {
   Eye,
   ExternalLink,
@@ -19,6 +21,7 @@ import {
   CheckCircle2,
   Sparkles,
   Lock,
+  RotateCcw,
 } from 'lucide-react';
 
 interface PublishStatusCardProps {
@@ -40,10 +43,69 @@ export function PublishStatusCard({ mode = 'public-page' }: PublishStatusCardPro
   const { currentChatbot } = useCurrentChatbot();
   const { pageConfig } = usePageConfig();
   const { saveStatus } = useAutoSaveContext();
-  const { versions, hasChanges, isPublishing } = useVersions();
+  const { versions, hasChanges, isPublishing, isReverting, isResetting, revert, reset } = useVersions();
   const { tier } = useTenantSettings();
+  const { confirm } = useAlertDialog();
 
   const [showVersionDialog, setShowVersionDialog] = useState(false);
+
+  /**
+   * 변경사항 초기화 핸들러 (발행 버전으로 되돌리기)
+   * 현재 편집 중인 내용을 폐기하고 마지막 발행 버전으로 되돌립니다.
+   */
+  const handleRevert = useCallback(async () => {
+    const confirmed = await confirm({
+      title: '변경사항 초기화',
+      message:
+        '현재 편집 중인 내용을 폐기하고 최신 발행 버전으로 되돌립니다. 이 작업은 되돌릴 수 없습니다.',
+      confirmText: '초기화',
+      cancelText: '취소',
+      variant: 'destructive',
+    });
+
+    if (!confirmed) return;
+
+    try {
+      await revert();
+      toast.success('초기화 완료', {
+        description: '최신 발행 버전으로 복원되었습니다.',
+      });
+    } catch (error) {
+      toast.error('초기화 실패', {
+        description:
+          error instanceof Error ? error.message : '잠시 후 다시 시도해주세요.',
+      });
+    }
+  }, [confirm, revert]);
+
+  /**
+   * 완전 초기화 핸들러 (기본 설정으로 복원)
+   * Free 플랜 등 발행 이력이 없는 경우에도 사용 가능합니다.
+   */
+  const handleFullReset = useCallback(async () => {
+    const confirmed = await confirm({
+      title: '모든 설정 초기화',
+      message:
+        '모든 설정을 기본값으로 초기화합니다. 현재 편집 중인 모든 내용이 삭제되며, 이 작업은 되돌릴 수 없습니다.',
+      confirmText: '초기화',
+      cancelText: '취소',
+      variant: 'destructive',
+    });
+
+    if (!confirmed) return;
+
+    try {
+      await reset();
+      toast.success('초기화 완료', {
+        description: '모든 설정이 기본값으로 초기화되었습니다.',
+      });
+    } catch (error) {
+      toast.error('초기화 실패', {
+        description:
+          error instanceof Error ? error.message : '잠시 후 다시 시도해주세요.',
+      });
+    }
+  }, [confirm, reset]);
 
   if (!currentChatbot) return null;
 
@@ -108,8 +170,29 @@ export function PublishStatusCard({ mode = 'public-page' }: PublishStatusCardPro
             )}
           </div>
 
-          {/* 수정 상태 */}
-          {hasChanges && (
+          {/* 수정 상태 + 초기화 버튼 */}
+          {hasChanges && publishedVersion && (
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-600 dark:text-yellow-400">
+                수정됨
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={handleRevert}
+                disabled={isReverting}
+                title="최신 발행 버전으로 초기화"
+              >
+                {isReverting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-3 w-3" />
+                )}
+              </Button>
+            </div>
+          )}
+          {hasChanges && !publishedVersion && (
             <span className="rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-600 dark:text-yellow-400">
               수정됨
             </span>
@@ -170,7 +253,7 @@ export function PublishStatusCard({ mode = 'public-page' }: PublishStatusCardPro
               )}
             </Button>
           ) : (
-            /* Free 플랜: 발행 불가 - 업그레이드 유도 */
+            /* Free 플랜: 발행 불가 - 업그레이드 유도 + 초기화 버튼 */
             <div className="space-y-2">
               <div className="flex items-center gap-2 rounded-md bg-muted p-2.5 text-xs text-muted-foreground">
                 <Lock className="h-3.5 w-3.5 shrink-0" />
@@ -181,6 +264,26 @@ export function PublishStatusCard({ mode = 'public-page' }: PublishStatusCardPro
                   <Sparkles className="mr-1.5 h-4 w-4" />
                   Pro로 업그레이드
                 </Link>
+              </Button>
+              {/* Free 플랜용 초기화 버튼 */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-muted-foreground hover:text-destructive hover:border-destructive"
+                onClick={handleFullReset}
+                disabled={isResetting}
+              >
+                {isResetting ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    초기화 중...
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="mr-1.5 h-4 w-4" />
+                    설정 초기화
+                  </>
+                )}
               </Button>
             </div>
           )}
