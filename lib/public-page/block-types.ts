@@ -6,6 +6,13 @@
  */
 
 import type { LucideIcon } from 'lucide-react';
+import type {
+  HeaderTemplateType,
+  ProfileThemeType,
+  NavLink,
+  CtaButton,
+} from './header-templates';
+import { HeaderTemplate, ProfileTheme } from './header-templates';
 
 /**
  * 블록 타입 상수
@@ -67,6 +74,7 @@ export interface BaseBlock {
 /**
  * 헤더 블록
  * - 로고, 제목, 설명을 표시
+ * - 다양한 템플릿 스타일 지원
  * - 페이지당 1개만 허용
  */
 export interface HeaderBlock extends BaseBlock {
@@ -80,6 +88,27 @@ export interface HeaderBlock extends BaseBlock {
     logoUrl?: string;
     /** 브랜드명 표시 여부 */
     showBrandName: boolean;
+    /** 헤더 템플릿 (기본값: 'profile') */
+    template?: HeaderTemplateType;
+    /** 네비게이션 링크 (웹사이트 스타일 템플릿용) */
+    navLinks?: NavLink[];
+    /** CTA 버튼 설정 */
+    ctaButton?: CtaButton;
+
+    // ============================================
+    // 프로필 테마 설정 (template: 'profile' 전용)
+    // ============================================
+
+    /** 프로필 테마 (기본값: 'classic') */
+    profileTheme?: ProfileThemeType;
+
+    // Hero Image 테마 전용 옵션
+    /** 배경 이미지 URL (히어로 이미지 테마용) */
+    heroImageUrl?: string;
+    /** 오버레이 투명도 (0-100, 기본값: 40) */
+    heroOverlayOpacity?: number;
+    /** 최소 높이 (예: '300px', '50vh') */
+    heroMinHeight?: string;
   };
 }
 
@@ -773,6 +802,14 @@ export function createHeaderBlock(id: string, order: number): HeaderBlock {
       description: '',
       logoUrl: '',
       showBrandName: true,
+      template: HeaderTemplate.PROFILE,
+      navLinks: [],
+      ctaButton: undefined,
+      // 프로필 테마 기본값
+      profileTheme: ProfileTheme.CLASSIC,
+      heroImageUrl: undefined,
+      heroOverlayOpacity: 40,
+      heroMinHeight: '300px',
     },
   };
 }
