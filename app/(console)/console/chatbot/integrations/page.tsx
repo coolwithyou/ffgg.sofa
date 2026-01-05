@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useCurrentChatbot } from '../../hooks/use-console-state';
+import { NoChatbotState } from '../../components/no-chatbot-state';
 import { Loader2 } from 'lucide-react';
 import { KakaoSettingsCard, type KakaoData } from './components/kakao-settings-card';
 
@@ -48,6 +49,11 @@ export default function ChatbotIntegrationsPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // 챗봇 없음 상태
+  if (!currentChatbot) {
+    return <NoChatbotState />;
+  }
 
   // 로딩 상태
   if (isLoading) {

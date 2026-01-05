@@ -2,6 +2,7 @@
 
 import { WidgetPreview } from '../components/widget-preview';
 import { WidgetSettings } from '../components/widget-settings';
+import { NoChatbotState } from '../components/no-chatbot-state';
 import { useConsole } from '../hooks/use-console-state';
 import { useWidgetAutoSave } from '../hooks/use-widget-auto-save';
 
@@ -28,11 +29,7 @@ export default function WidgetPage() {
   }
 
   if (!currentChatbot) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-muted-foreground">챗봇을 선택해주세요</p>
-      </div>
-    );
+    return <NoChatbotState />;
   }
 
   return (

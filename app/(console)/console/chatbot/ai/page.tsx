@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useCurrentChatbot } from '../../hooks/use-console-state';
+import { NoChatbotState } from '../../components/no-chatbot-state';
 import {
   Card,
   CardHeader,
@@ -312,6 +313,11 @@ export default function AISettingsPage() {
       setIsGenerating(false);
     }
   };
+
+  // 챗봇 없음 상태
+  if (!currentChatbot) {
+    return <NoChatbotState />;
+  }
 
   if (isLoading) {
     return (

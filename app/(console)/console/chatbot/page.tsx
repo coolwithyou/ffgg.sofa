@@ -14,6 +14,7 @@ import { LibraryDocumentList } from './_components/library-document-list';
 import { UploadGuide } from './_components/upload-guide';
 import { TemplateDownload } from './_components/template-download';
 import { useCurrentChatbot } from '../hooks/use-console-state';
+import { NoChatbotState } from '../components/no-chatbot-state';
 import {
   getDocuments,
   getLibraryDocuments,
@@ -29,6 +30,11 @@ export default function KnowledgePage() {
   const { currentChatbot } = useCurrentChatbot();
   const [activeTab, setActiveTab] = useState<TabType>('documents');
   const [isLoading, setIsLoading] = useState(true);
+
+  // 챗봇 없음 상태 (로딩 전 조기 체크)
+  if (!currentChatbot) {
+    return <NoChatbotState />;
+  }
 
   // Documents tab data
   const [documentsData, setDocumentsData] = useState<GetDocumentsResult | null>(null);

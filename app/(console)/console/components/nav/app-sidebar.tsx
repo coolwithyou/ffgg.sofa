@@ -31,7 +31,11 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 import { navItems, type NavItem } from './nav-config';
-import { useCurrentChatbot, useTenantSettings } from '../../hooks/use-console-state';
+import {
+  useCurrentChatbot,
+  useTenantSettings,
+  useCreateChatbotDialog,
+} from '../../hooks/use-console-state';
 import { Bot, Check, Plus, Sofa } from 'lucide-react';
 import { CreateChatbotDialog } from '../create-chatbot-dialog';
 import { Separator } from '@/components/ui/separator';
@@ -46,7 +50,8 @@ import { PointWidget } from './point-widget';
 function SidebarChatbotSwitcher() {
   const { chatbots, currentChatbot, currentChatbotIndex, selectChatbot } =
     useCurrentChatbot();
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const { isOpen: isCreateDialogOpen, open: openCreateDialog, close: closeCreateDialog } =
+    useCreateChatbotDialog();
 
   const handleSelect = (index: number) => {
     selectChatbot(index);
@@ -99,31 +104,37 @@ function SidebarChatbotSwitcher() {
               챗봇 목록
             </DropdownMenuLabel>
 
-            {chatbots.map((bot, index) => {
-              const isSelected = currentChatbotIndex === index;
-              return (
-                <DropdownMenuItem
-                  key={bot.id}
-                  onClick={() => handleSelect(index)}
-                  className="gap-2 p-2"
-                >
-                  <div className="flex size-6 items-center justify-center rounded-sm border">
-                    <Bot className="size-4 shrink-0" />
-                  </div>
-                  <span className="flex-1 truncate">{bot.name}</span>
-                  {bot.publicPageEnabled && (
-                    <span className="size-2 rounded-full bg-green-500" />
-                  )}
-                  {isSelected && <Check className="size-4" />}
-                </DropdownMenuItem>
-              );
-            })}
+            {chatbots.length === 0 ? (
+              <div className="px-2 py-3 text-center text-sm text-muted-foreground">
+                등록된 챗봇이 없습니다
+              </div>
+            ) : (
+              chatbots.map((bot, index) => {
+                const isSelected = currentChatbotIndex === index;
+                return (
+                  <DropdownMenuItem
+                    key={bot.id}
+                    onClick={() => handleSelect(index)}
+                    className="gap-2 p-2"
+                  >
+                    <div className="flex size-6 items-center justify-center rounded-sm border">
+                      <Bot className="size-4 shrink-0" />
+                    </div>
+                    <span className="flex-1 truncate">{bot.name}</span>
+                    {bot.publicPageEnabled && (
+                      <span className="size-2 rounded-full bg-green-500" />
+                    )}
+                    {isSelected && <Check className="size-4" />}
+                  </DropdownMenuItem>
+                );
+              })
+            )}
 
             <DropdownMenuSeparator />
 
             <DropdownMenuItem
               className="gap-2 p-2"
-              onClick={() => setIsCreateDialogOpen(true)}
+              onClick={openCreateDialog}
             >
               <div className="flex size-6 items-center justify-center rounded-md border bg-background">
                 <Plus className="size-4" />
@@ -136,7 +147,7 @@ function SidebarChatbotSwitcher() {
     </SidebarMenu>
     <CreateChatbotDialog
       isOpen={isCreateDialogOpen}
-      onClose={() => setIsCreateDialogOpen(false)}
+      onClose={closeCreateDialog}
     />
     </>
   );

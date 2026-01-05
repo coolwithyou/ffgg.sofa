@@ -14,6 +14,7 @@ import { ChunkDetailDialog } from './chunk-detail-dialog';
 import type { ChunkReviewItem, ChunkReviewItemWithMetrics, ChunkStatus } from '@/lib/review/types';
 import { toast } from 'sonner';
 import { useCurrentChatbot } from '../../../hooks/use-console-state';
+import { NoChatbotState } from '../../../components/no-chatbot-state';
 // 메트릭 포함 여부에 따른 응답 타입
 type ChunkItem = ChunkReviewItem | ChunkReviewItemWithMetrics;
 
@@ -273,6 +274,11 @@ export function ReviewContent({ initialFilters }: ReviewContentProps) {
   };
 
   const totalPages = Math.ceil(total / limit);
+
+  // 챗봇 없음 상태
+  if (!currentChatbot) {
+    return <NoChatbotState />;
+  }
 
   return (
     <div className="space-y-4">

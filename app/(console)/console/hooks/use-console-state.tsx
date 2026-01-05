@@ -59,6 +59,9 @@ export function ConsoleProvider({
   // 블록 에디터 상태
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
 
+  // 챗봇 생성 다이얼로그 상태
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+
   // 테넌트 설정 상태
   const [tier, setTier] = useState<Tier>('free');
   const [tenantSettings, setTenantSettings] = useState<TenantSettings>(
@@ -324,6 +327,15 @@ export function ConsoleProvider({
     setSelectedBlockId(id);
   }, []);
 
+  // 챗봇 생성 다이얼로그 열기/닫기
+  const openCreateDialog = useCallback(() => {
+    setIsCreateDialogOpen(true);
+  }, []);
+
+  const closeCreateDialog = useCallback(() => {
+    setIsCreateDialogOpen(false);
+  }, []);
+
   // Context 값
   const value: ConsoleContextValue = useMemo(
     () => ({
@@ -346,6 +358,8 @@ export function ConsoleProvider({
       widgetSaveStatus,
       // 블록 에디터 상태
       selectedBlockId,
+      // 챗봇 생성 다이얼로그 상태
+      isCreateDialogOpen,
       // 액션
       setMode,
       selectChatbot,
@@ -370,6 +384,9 @@ export function ConsoleProvider({
       setOriginalWidgetConfig,
       // 블록 에디터 액션
       selectBlock,
+      // 챗봇 생성 다이얼로그 액션
+      openCreateDialog,
+      closeCreateDialog,
       // 공통 액션
       reloadChatbots,
     }),
@@ -389,6 +406,7 @@ export function ConsoleProvider({
       originalWidgetConfig,
       widgetSaveStatus,
       selectedBlockId,
+      isCreateDialogOpen,
       selectChatbot,
       selectChatbotById,
       navigateChatbot,
@@ -403,6 +421,8 @@ export function ConsoleProvider({
       updateWidgetConfig,
       updateWidgetTheme,
       selectBlock,
+      openCreateDialog,
+      closeCreateDialog,
       reloadChatbots,
     ]
   );
@@ -507,5 +527,15 @@ export function useTenantSettings() {
     isAdvancedModeEnabled,
     canEnableAdvancedMode,
     setAdvancedMode,
+  };
+}
+
+export function useCreateChatbotDialog() {
+  const { isCreateDialogOpen, openCreateDialog, closeCreateDialog } =
+    useConsole();
+  return {
+    isOpen: isCreateDialogOpen,
+    open: openCreateDialog,
+    close: closeCreateDialog,
   };
 }

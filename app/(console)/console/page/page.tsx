@@ -5,6 +5,7 @@ import { type DragEndEvent } from '@dnd-kit/core';
 import { CenterPreview } from '../components/center-preview';
 import { RightSettings } from '../components/right-settings';
 import { useConsole } from '../hooks/use-console-state';
+import { NoChatbotState } from '../components/no-chatbot-state';
 import { useBlocks } from '../hooks/use-blocks';
 import {
   BlockEditorProvider,
@@ -30,8 +31,13 @@ import {
  * 팔레트 → 캔버스 간 드래그앤드롭을 지원합니다.
  */
 export default function PageDesignPage() {
-  const { isLoading } = useConsole();
+  const { isLoading, currentChatbot } = useConsole();
   const { blocks, addBlock, reorderBlocks } = useBlocks();
+
+  // 챗봇 없음 상태
+  if (!currentChatbot) {
+    return <NoChatbotState />;
+  }
 
   /**
    * 드래그 종료 핸들러

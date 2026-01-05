@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useCurrentChatbot, useTenantSettings } from '../../hooks/use-console-state';
+import { NoChatbotState } from '../../components/no-chatbot-state';
 import {
   Card,
   CardHeader,
@@ -43,6 +44,10 @@ export default function SettingsPage() {
 
   const isPremium = canEnableAdvancedMode();
   const advancedModeActive = isAdvancedModeEnabled();
+
+  if (!currentChatbot) {
+    return <NoChatbotState />;
+  }
 
   return (
     <div className="p-6">

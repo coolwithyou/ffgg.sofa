@@ -16,6 +16,7 @@ import { FAQPreview } from './faq-preview';
 import { ExportModal } from './export-modal';
 import { toast } from 'sonner';
 import { useCurrentChatbot, useTenantSettings } from '../../hooks/use-console-state';
+import { NoChatbotState } from '../../components/no-chatbot-state';
 // 데이터셋 타입
 interface Dataset {
   id: string;
@@ -382,6 +383,11 @@ export function FAQEditor() {
   const filteredQAPairs = selectedCategoryId
     ? qaPairs.filter((qa) => qa.categoryId === selectedCategoryId)
     : qaPairs;
+
+  // 챗봇 없음 상태
+  if (!currentChatbot) {
+    return <NoChatbotState />;
+  }
 
   return (
     <div className="flex h-full flex-col">
