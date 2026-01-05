@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { db, users, tenants, datasets } from '@/lib/db';
 import { eq } from 'drizzle-orm';
 import { hashPassword, passwordSchema } from '@/lib/auth';
+import { createSession } from '@/lib/auth/session';
 import { withRateLimit } from '@/lib/middleware';
 import { ErrorCode, AppError, errorResponse } from '@/lib/errors';
 import { v4 as uuidv4 } from 'uuid';
@@ -121,7 +122,15 @@ export async function POST(request: NextRequest) {
     // 7. 체험 포인트 지급 (500P, 1회성)
     await grantFreeTrialPoints(tenantId);
 
-    // 8. 이메일 인증 - Delayed Verification 전략
+    // 8. 세션 생성 (자동 로그인)
+    await createSession({
+      userId,
+      email,
+      tenantId,
+      role: 'admin', // 테넌트 생성자는 admin
+    });
+
+    // 9. 이메일 인증 - Delayed Verification 전략
     // 가입 시점에는 이메일을 발송하지 않고, 핵심 기능(발행 등) 사용 시 요청
     // 인증 토큰은 미리 생성해두어 나중에 재발송 시 사용
 
