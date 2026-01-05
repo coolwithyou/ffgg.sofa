@@ -6,6 +6,13 @@
  */
 
 import type { Block } from './block-types';
+import type {
+  HeaderTemplateType,
+  ProfileThemeType,
+  NavLink,
+  CtaButton,
+} from './header-templates';
+import { HeaderTemplate, ProfileTheme } from './header-templates';
 
 /**
  * 공개 페이지 전체 설정
@@ -41,6 +48,24 @@ export interface HeaderConfig {
   logoUrl?: string;
   /** 브랜드명 표시 여부 */
   showBrandName: boolean;
+
+  // === 템플릿 관련 필드 ===
+  /** 헤더 템플릿 타입 (profile, floating-glass, minimal-sticky, pill-nav) */
+  template?: HeaderTemplateType;
+  /** 네비게이션 링크 (웹사이트 스타일 템플릿용) */
+  navLinks?: NavLink[];
+  /** CTA 버튼 (웹사이트 스타일 템플릿용) */
+  ctaButton?: CtaButton;
+
+  // === 프로필 테마 관련 필드 ===
+  /** 프로필 테마 타입 (classic, solid-color, hero-image) */
+  profileTheme?: ProfileThemeType;
+  /** 히어로 이미지 URL (hero-image 테마용) */
+  heroImageUrl?: string;
+  /** 히어로 오버레이 투명도 (0-100, hero-image 테마용) */
+  heroOverlayOpacity?: number;
+  /** 히어로 최소 높이 (예: '300px', '50vh') */
+  heroMinHeight?: string;
 }
 
 /**
@@ -133,6 +158,15 @@ export const DEFAULT_PUBLIC_PAGE_CONFIG: PublicPageConfig = {
     description: '',
     logoUrl: '',
     showBrandName: true,
+    // 템플릿 기본값
+    template: HeaderTemplate.PROFILE,
+    navLinks: [],
+    ctaButton: undefined,
+    // 프로필 테마 기본값
+    profileTheme: ProfileTheme.CLASSIC,
+    heroImageUrl: undefined,
+    heroOverlayOpacity: 40,
+    heroMinHeight: '300px',
   },
   theme: {
     // 배경 설정
@@ -227,11 +261,16 @@ export function parsePublicPageConfig(
 
   const obj = json as Record<string, unknown>;
   const themeObj = (obj.theme as Record<string, unknown>) ?? {};
+  const headerObj = (obj.header as Record<string, unknown>) ?? {};
 
   return {
     header: {
       ...DEFAULT_PUBLIC_PAGE_CONFIG.header,
-      ...(obj.header as Partial<HeaderConfig>),
+      ...(headerObj as Partial<HeaderConfig>),
+      // 하위 호환성: template이 없는 기존 데이터는 'profile'로 설정
+      template: (headerObj.template as HeaderTemplateType) || HeaderTemplate.PROFILE,
+      // 하위 호환성: profileTheme이 없는 기존 데이터는 'classic'으로 설정
+      profileTheme: (headerObj.profileTheme as ProfileThemeType) || ProfileTheme.CLASSIC,
     },
     theme: {
       ...DEFAULT_PUBLIC_PAGE_CONFIG.theme,
