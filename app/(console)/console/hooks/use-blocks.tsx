@@ -64,11 +64,18 @@ export function useBlocks(): UseBlocksReturn {
 
   /**
    * 블록 목록 업데이트 (자동 정규화)
+   *
+   * 함수형 업데이터를 지원하여 stale closure 문제를 방지합니다.
+   * 항상 최신 pageConfig.blocks를 기반으로 업데이트합니다.
    */
   const setBlocks = useCallback(
-    (newBlocks: Block[]) => {
-      const normalized = normalizeBlockOrder(newBlocks);
-      updatePageConfig({ blocks: normalized });
+    (updater: Block[] | ((prevBlocks: Block[]) => Block[])) => {
+      updatePageConfig((prev) => {
+        const prevBlocks = prev.blocks ?? [];
+        const newBlocks = typeof updater === 'function' ? updater(prevBlocks) : updater;
+        const normalized = normalizeBlockOrder(newBlocks);
+        return { ...prev, blocks: normalized };
+      });
     },
     [updatePageConfig]
   );
@@ -77,31 +84,34 @@ export function useBlocks(): UseBlocksReturn {
    * 블록 추가
    * @param type 블록 타입
    * @param insertBeforeId 이 블록 앞에 삽입 (없으면 끝에 추가)
+   *
+   * 함수형 업데이터를 사용하여 항상 최신 blocks 상태를 기반으로 추가합니다.
    */
   const addBlock = useCallback(
     (type: BlockTypeValue, insertBeforeId?: string) => {
       const id = nanoid();
 
-      if (insertBeforeId) {
-        // 특정 블록 앞에 삽입
-        const insertIndex = blocks.findIndex((b) => b.id === insertBeforeId);
-        if (insertIndex !== -1) {
-          const newBlock = createBlock(type, id, insertIndex);
-          const newBlocks = [...blocks];
-          newBlocks.splice(insertIndex, 0, newBlock);
-          setBlocks(newBlocks);
-          selectBlock(id);
-          return;
+      setBlocks((prevBlocks) => {
+        if (insertBeforeId) {
+          // 특정 블록 앞에 삽입
+          const insertIndex = prevBlocks.findIndex((b) => b.id === insertBeforeId);
+          if (insertIndex !== -1) {
+            const newBlock = createBlock(type, id, insertIndex);
+            const newBlocks = [...prevBlocks];
+            newBlocks.splice(insertIndex, 0, newBlock);
+            return newBlocks;
+          }
         }
-      }
 
-      // 끝에 추가
-      const order = blocks.length;
-      const newBlock = createBlock(type, id, order);
-      setBlocks([...blocks, newBlock]);
+        // 끝에 추가
+        const order = prevBlocks.length;
+        const newBlock = createBlock(type, id, order);
+        return [...prevBlocks, newBlock];
+      });
+
       selectBlock(id);
     },
-    [blocks, setBlocks, selectBlock]
+    [setBlocks, selectBlock]
   );
 
   /**
@@ -109,15 +119,14 @@ export function useBlocks(): UseBlocksReturn {
    */
   const removeBlock = useCallback(
     (id: string) => {
-      const filtered = blocks.filter((block) => block.id !== id);
-      setBlocks(filtered);
+      setBlocks((prevBlocks) => prevBlocks.filter((block) => block.id !== id));
 
       // 선택된 블록이 삭제되면 선택 해제
       if (selectedBlockId === id) {
         selectBlock(null);
       }
     },
-    [blocks, selectedBlockId, setBlocks, selectBlock]
+    [selectedBlockId, setBlocks, selectBlock]
   );
 
   /**
@@ -129,18 +138,20 @@ export function useBlocks(): UseBlocksReturn {
    */
   const updateBlock = useCallback(
     (id: string, updates: BlockUpdater) => {
-      const updated = blocks.map((block): Block => {
-        if (block.id === id) {
-          // 함수형 업데이트인 경우 현재 블록을 전달하여 최신 상태 사용
-          const resolvedUpdates = typeof updates === 'function' ? updates(block) : updates;
-          // 타입 보존을 위해 명시적 타입 단언
-          return { ...block, ...resolvedUpdates } as Block;
-        }
-        return block;
-      });
-      setBlocks(updated);
+      setBlocks((prevBlocks) =>
+        prevBlocks.map((block): Block => {
+          if (block.id === id) {
+            // 함수형 업데이트인 경우 현재 블록을 전달하여 최신 상태 사용
+            const resolvedUpdates =
+              typeof updates === 'function' ? updates(block) : updates;
+            // 타입 보존을 위해 명시적 타입 단언
+            return { ...block, ...resolvedUpdates } as Block;
+          }
+          return block;
+        })
+      );
     },
-    [blocks, setBlocks]
+    [setBlocks]
   );
 
   /**
@@ -148,15 +159,16 @@ export function useBlocks(): UseBlocksReturn {
    */
   const toggleBlockVisibility = useCallback(
     (id: string) => {
-      const updated = blocks.map((block): Block => {
-        if (block.id === id) {
-          return { ...block, visible: !block.visible } as Block;
-        }
-        return block;
-      });
-      setBlocks(updated);
+      setBlocks((prevBlocks) =>
+        prevBlocks.map((block): Block => {
+          if (block.id === id) {
+            return { ...block, visible: !block.visible } as Block;
+          }
+          return block;
+        })
+      );
     },
-    [blocks, setBlocks]
+    [setBlocks]
   );
 
   /**
@@ -166,19 +178,21 @@ export function useBlocks(): UseBlocksReturn {
     (activeId: string, overId: string) => {
       if (activeId === overId) return;
 
-      const activeIndex = blocks.findIndex((b) => b.id === activeId);
-      const overIndex = blocks.findIndex((b) => b.id === overId);
+      setBlocks((prevBlocks) => {
+        const activeIndex = prevBlocks.findIndex((b) => b.id === activeId);
+        const overIndex = prevBlocks.findIndex((b) => b.id === overId);
 
-      if (activeIndex === -1 || overIndex === -1) return;
+        if (activeIndex === -1 || overIndex === -1) return prevBlocks;
 
-      // 배열 재정렬
-      const newBlocks = [...blocks];
-      const [removed] = newBlocks.splice(activeIndex, 1);
-      newBlocks.splice(overIndex, 0, removed);
+        // 배열 재정렬
+        const newBlocks = [...prevBlocks];
+        const [removed] = newBlocks.splice(activeIndex, 1);
+        newBlocks.splice(overIndex, 0, removed);
 
-      setBlocks(newBlocks);
+        return newBlocks;
+      });
     },
-    [blocks, setBlocks]
+    [setBlocks]
   );
 
   /**
@@ -186,16 +200,18 @@ export function useBlocks(): UseBlocksReturn {
    */
   const moveBlockUp = useCallback(
     (id: string) => {
-      const index = blocks.findIndex((b) => b.id === id);
-      if (index <= 0) return; // 이미 맨 위이거나 찾을 수 없음
+      setBlocks((prevBlocks) => {
+        const index = prevBlocks.findIndex((b) => b.id === id);
+        if (index <= 0) return prevBlocks; // 이미 맨 위이거나 찾을 수 없음
 
-      const newBlocks = [...blocks];
-      const [removed] = newBlocks.splice(index, 1);
-      newBlocks.splice(index - 1, 0, removed);
+        const newBlocks = [...prevBlocks];
+        const [removed] = newBlocks.splice(index, 1);
+        newBlocks.splice(index - 1, 0, removed);
 
-      setBlocks(newBlocks);
+        return newBlocks;
+      });
     },
-    [blocks, setBlocks]
+    [setBlocks]
   );
 
   /**
@@ -203,16 +219,18 @@ export function useBlocks(): UseBlocksReturn {
    */
   const moveBlockDown = useCallback(
     (id: string) => {
-      const index = blocks.findIndex((b) => b.id === id);
-      if (index === -1 || index >= blocks.length - 1) return; // 이미 맨 아래이거나 찾을 수 없음
+      setBlocks((prevBlocks) => {
+        const index = prevBlocks.findIndex((b) => b.id === id);
+        if (index === -1 || index >= prevBlocks.length - 1) return prevBlocks; // 이미 맨 아래이거나 찾을 수 없음
 
-      const newBlocks = [...blocks];
-      const [removed] = newBlocks.splice(index, 1);
-      newBlocks.splice(index + 1, 0, removed);
+        const newBlocks = [...prevBlocks];
+        const [removed] = newBlocks.splice(index, 1);
+        newBlocks.splice(index + 1, 0, removed);
 
-      setBlocks(newBlocks);
+        return newBlocks;
+      });
     },
-    [blocks, setBlocks]
+    [setBlocks]
   );
 
   return {

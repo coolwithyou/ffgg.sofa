@@ -34,11 +34,6 @@ export default function PageDesignPage() {
   const { isLoading, currentChatbot } = useConsole();
   const { blocks, addBlock, reorderBlocks } = useBlocks();
 
-  // 챗봇 없음 상태
-  if (!currentChatbot) {
-    return <NoChatbotState />;
-  }
-
   /**
    * 드래그 종료 핸들러
    */
@@ -97,6 +92,11 @@ export default function PageDesignPage() {
 
     return null;
   }, []);
+
+  // 챗봇 없음 상태
+  if (!currentChatbot) {
+    return <NoChatbotState />;
+  }
 
   if (isLoading) {
     return (

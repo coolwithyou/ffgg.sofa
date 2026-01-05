@@ -250,9 +250,20 @@ export function ConsoleProvider({
   );
 
   // Page 설정 업데이트
+  // 함수형 업데이터 또는 객체를 받아 처리합니다.
   const updatePageConfig = useCallback(
-    (partial: Partial<PublicPageConfig>) => {
-      setPageConfig((prev) => ({ ...prev, ...partial }));
+    (
+      partialOrUpdater:
+        | Partial<PublicPageConfig>
+        | ((prev: PublicPageConfig) => Partial<PublicPageConfig>)
+    ) => {
+      setPageConfig((prev) => {
+        const partial =
+          typeof partialOrUpdater === 'function'
+            ? partialOrUpdater(prev)
+            : partialOrUpdater;
+        return { ...prev, ...partial };
+      });
       setSaveStatus('unsaved');
     },
     []

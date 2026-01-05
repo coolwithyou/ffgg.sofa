@@ -61,6 +61,9 @@ export interface ConsoleState {
 
   // 블록 에디터 상태
   selectedBlockId: string | null;
+
+  // 챗봇 생성 다이얼로그 상태
+  isCreateDialogOpen: boolean;
 }
 
 // Context 액션 타입
@@ -74,7 +77,11 @@ export interface ConsoleActions {
   canEnableAdvancedMode: () => boolean;
   setAdvancedMode: (enabled: boolean) => Promise<void>;
   // Page 설정 액션
-  updatePageConfig: (partial: Partial<PublicPageConfig>) => void;
+  updatePageConfig: (
+    partialOrUpdater:
+      | Partial<PublicPageConfig>
+      | ((prev: PublicPageConfig) => Partial<PublicPageConfig>)
+  ) => void;
   updateHeaderConfig: (partial: Partial<PublicPageConfig['header']>) => void;
   updateThemeConfig: (partial: Partial<PublicPageConfig['theme']>) => void;
   updateSeoConfig: (partial: Partial<PublicPageConfig['seo']>) => void;
@@ -88,6 +95,9 @@ export interface ConsoleActions {
   setOriginalWidgetConfig: (config: WidgetConfig) => void;
   // 블록 에디터 액션
   selectBlock: (id: string | null) => void;
+  // 챗봇 생성 다이얼로그 액션
+  openCreateDialog: () => void;
+  closeCreateDialog: () => void;
   // 공통 액션
   reloadChatbots: () => Promise<void>;
 }
