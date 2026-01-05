@@ -49,10 +49,15 @@ export function HeaderBlockSettings({
 
   /**
    * config 내 특정 필드 업데이트
+   *
+   * 상위 컴포넌트(right-settings.tsx)에서 functional update를 사용하여
+   * 최신 블록 상태와 병합하므로, 여기서는 updates만 전달합니다.
+   * 이 방식으로 비동기 작업(이미지 업로드 등) 후에도 stale closure 문제 없이
+   * 올바르게 config가 업데이트됩니다.
    */
   const updateConfig = (updates: Partial<HeaderBlock['config']>) => {
     onUpdate({
-      config: { ...config, ...updates },
+      config: updates,
     } as Partial<HeaderBlock>);
   };
 

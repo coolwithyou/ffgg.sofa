@@ -126,7 +126,23 @@ export function RightSettings() {
             <>
               <BlockSettingsPanel
                 selectedBlock={selectedBlock}
-                onUpdate={(updates: Partial<Block>) => updateBlock(selectedBlock.id, updates)}
+                onUpdate={(updates: Partial<Block>) => {
+                  // Functional update를 사용하여 stale closure 문제 방지
+                  // 비동기 작업(이미지 업로드 등) 후에도 최신 블록 상태를 기반으로 업데이트
+                  updateBlock(selectedBlock.id, (currentBlock) => {
+                    // config가 있는 블록(HeaderBlock 등)의 경우 config를 병합
+                    if ('config' in updates && 'config' in currentBlock) {
+                      return {
+                        ...updates,
+                        config: {
+                          ...(currentBlock as { config: Record<string, unknown> }).config,
+                          ...(updates as { config: Record<string, unknown> }).config,
+                        },
+                      } as Partial<Block>;
+                    }
+                    return updates;
+                  });
+                }}
                 onClose={() => selectBlock(null)}
               />
               <Separator className="my-4" />

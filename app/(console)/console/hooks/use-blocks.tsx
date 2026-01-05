@@ -21,6 +21,13 @@ import {
 } from '@/lib/public-page/block-types';
 
 /**
+ * 블록 업데이트 함수 타입
+ * - Partial<Block> 직접 전달: 단순 병합
+ * - 함수 전달: 현재 블록 상태를 기반으로 업데이트 (stale closure 방지)
+ */
+type BlockUpdater = Partial<Block> | ((currentBlock: Block) => Partial<Block>);
+
+/**
  * 블록 조작 훅 반환 타입
  */
 interface UseBlocksReturn {
@@ -32,8 +39,8 @@ interface UseBlocksReturn {
   addBlock: (type: BlockTypeValue, insertBeforeId?: string) => void;
   /** 블록 삭제 */
   removeBlock: (id: string) => void;
-  /** 블록 업데이트 */
-  updateBlock: (id: string, updates: Partial<Block>) => void;
+  /** 블록 업데이트 (함수형 업데이트 지원) */
+  updateBlock: (id: string, updates: BlockUpdater) => void;
   /** 블록 가시성 토글 */
   toggleBlockVisibility: (id: string) => void;
   /** 블록 순서 변경 */
@@ -115,13 +122,19 @@ export function useBlocks(): UseBlocksReturn {
 
   /**
    * 블록 업데이트
+   *
+   * 함수형 업데이트를 지원하여 stale closure 문제를 방지합니다.
+   * - Partial<Block> 전달: 단순 병합
+   * - (currentBlock) => Partial<Block> 함수 전달: 현재 상태 기반 업데이트
    */
   const updateBlock = useCallback(
-    (id: string, updates: Partial<Block>) => {
+    (id: string, updates: BlockUpdater) => {
       const updated = blocks.map((block): Block => {
         if (block.id === id) {
+          // 함수형 업데이트인 경우 현재 블록을 전달하여 최신 상태 사용
+          const resolvedUpdates = typeof updates === 'function' ? updates(block) : updates;
           // 타입 보존을 위해 명시적 타입 단언
-          return { ...block, ...updates } as Block;
+          return { ...block, ...resolvedUpdates } as Block;
         }
         return block;
       });
