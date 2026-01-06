@@ -247,7 +247,9 @@ export function PublicPageView({
     paddingTop: '0',
     paddingBottom: '0',
     borderRadius: `${cardBorderRadius}px`,
-    overflow: 'hidden', // 프로필 카드가 border-radius를 따르도록
+    // 편집 모드: overflow visible로 설정해야 블록 툴바(-top-10)가 보임
+    // 보기 모드: overflow hidden으로 프로필 카드가 border-radius를 따르도록
+    overflow: isEditing ? 'visible' : 'hidden',
   };
 
   // 콘텐츠 영역 패딩 (프로필 카드 제외한 나머지 블록들)
