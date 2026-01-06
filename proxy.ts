@@ -38,6 +38,11 @@ const PUBLIC_API_PATHS = [
   '/api/auth/forgot-password',
   '/api/auth/reset-password',
   '/api/auth/verify-email',
+  // OAuth 라우트 (로그인/회원가입 시 사용, 콜백은 외부 서버에서 호출)
+  '/api/auth/google',
+  '/api/auth/google/callback',
+  '/api/auth/kakao',
+  '/api/auth/kakao/callback',
   '/api/health',
   '/api/inngest', // Inngest 웹훅 엔드포인트 (서버 간 통신)
   '/api/admin/documents', // 관리자 문서 API (개발용)

@@ -145,8 +145,16 @@ export async function GET(request: NextRequest) {
     if (existingUser) {
       // 기존 사용자 로그인
       userId = existingUser.id;
-      tenantId = existingUser.tenantId || '';
       userRole = (existingUser.role || 'user') as typeof userRole;
+
+      // tenantId 유효성 검사
+      if (!existingUser.tenantId) {
+        console.error('[GOOGLE_CALLBACK] 사용자에게 tenantId가 없습니다:', existingUser.email);
+        return NextResponse.redirect(
+          new URL('/login?error=invalid_account', appUrl)
+        );
+      }
+      tenantId = existingUser.tenantId;
 
       // Google 정보 업데이트 (선택적)
       await db
@@ -160,13 +168,7 @@ export async function GET(request: NextRequest) {
         .where(eq(users.id, userId));
     } else {
       // 신규 사용자 생성
-      if (mode === 'login') {
-        // 로그인 모드인데 사용자가 없는 경우
-        return NextResponse.redirect(
-          new URL('/login?error=no_account', appUrl)
-        );
-      }
-
+      // 로그인 모드에서도 계정이 없으면 자동으로 회원가입 처리 (OAuth UX 개선)
       tenantId = uuidv4();
       userId = uuidv4();
 
