@@ -19,9 +19,8 @@ import {
 } from '@dnd-kit/sortable';
 import type { PublicPageConfig } from '@/lib/public-page/types';
 import {
-  type Block,
-  createHeaderBlock,
-  createChatbotBlock,
+  type HeaderBlock as HeaderBlockType,
+  BlockType,
 } from '@/lib/public-page/block-types';
 import { getBackgroundStyles } from '@/lib/public-page/background-utils';
 import { BlockRenderer } from './components/block-renderer';
@@ -62,6 +61,8 @@ interface PublicPageViewProps {
   onMoveBlockUp?: (id: string) => void;
   /** 블록 아래로 이동 콜백 */
   onMoveBlockDown?: (id: string) => void;
+  /** 블록 설정 다이얼로그 열기 콜백 */
+  onOpenBlockSettings?: (id: string) => void;
   /** min-h-screen 비활성화 (외부에서 높이 관리 시) */
   disableMinHeight?: boolean;
 }
@@ -80,6 +81,7 @@ export function PublicPageView({
   onReorderBlocks,
   onMoveBlockUp,
   onMoveBlockDown,
+  onOpenBlockSettings,
   disableMinHeight = false,
 }: PublicPageViewProps) {
   const { header, theme, chatbot } = config;
@@ -103,22 +105,30 @@ export function PublicPageView({
     (widgetConfig?.placeholder as string) || '메시지를 입력하세요...';
 
   /**
-   * 블록 배열 생성
-   * - config.blocks가 있으면 사용
-   * - 없으면 기존 header/chatbot 설정에서 기본 블록 생성 (하위 호환성)
+   * 블록 배열 생성 및 헤더 블록 분리
+   * - config.blocks를 order 기준으로 정렬
+   * - 헤더 블록은 별도로 추출하여 고정 요소로 렌더링
+   *
+   * NOTE: 기본 블록 생성은 useBlocks 훅에서 처리합니다.
+   * 이 컴포넌트는 전달받은 blocks를 렌더링만 담당합니다.
    */
-  const blocks = useMemo<Block[]>(() => {
-    if (config.blocks && config.blocks.length > 0) {
-      return [...config.blocks].sort((a, b) => a.order - b.order);
-    }
+  const { headerBlock, contentBlocks } = useMemo(() => {
+    // blocks 정렬 (기본 블록 생성은 useBlocks에서 처리)
+    const allBlocks = [...(config.blocks ?? [])].sort((a, b) => a.order - b.order);
 
-    // 하위 호환성: blocks 배열이 없으면 기본 블록 생성
-    const defaultBlocks: Block[] = [
-      createHeaderBlock('default-header', 0),
-      createChatbotBlock('default-chatbot', 1),
-    ];
-    return defaultBlocks;
+    // 헤더 블록 추출 (고정 요소로 분리)
+    const header = allBlocks.find(
+      (block) => block.type === BlockType.HEADER
+    ) as HeaderBlockType | undefined;
+
+    // 나머지 블록 (헤더 제외)
+    const content = allBlocks.filter((block) => block.type !== BlockType.HEADER);
+
+    return { headerBlock: header, contentBlocks: content };
   }, [config.blocks]);
+
+  // 기존 blocks 참조 유지 (편집 모드용)
+  const blocks = contentBlocks;
 
   // 배경 클릭 시 선택 해제
   const handleBackgroundClick = () => {
@@ -191,6 +201,7 @@ export function PublicPageView({
                   onDelete={() => onDeleteBlock?.(block.id)}
                   onMoveUp={() => onMoveBlockUp?.(block.id)}
                   onMoveDown={() => onMoveBlockDown?.(block.id)}
+                  onOpenSettings={() => onOpenBlockSettings?.(block.id)}
                 >
                   <BlockRenderer block={block} {...blockRendererProps} />
                 </EditableBlockWrapper>
@@ -220,18 +231,27 @@ export function PublicPageView({
       : getBackgroundStyles(theme)),
   };
 
+  // 카드 border-radius
+  const cardBorderRadius = theme.cardBorderRadius ?? 16;
+
   // 카드 컨테이너 스타일
+  // - 프로필 카드가 카드 상단에 꽉 차도록 상단/좌우 패딩 0
+  // - 콘텐츠 영역에서 별도로 패딩 적용
   const cardContainerStyles: React.CSSProperties = {
     backgroundColor: theme.cardBackgroundColor ?? '#ffffff',
     boxShadow: getCardShadow(theme.cardShadow ?? 20),
     marginTop: `${theme.cardMarginY ?? 32}px`,
     marginBottom: `${theme.cardMarginY ?? 32}px`,
-    paddingLeft: `${theme.cardPaddingX ?? 16}px`,
-    paddingRight: `${theme.cardPaddingX ?? 16}px`,
-    paddingTop: '32px',
-    paddingBottom: '32px',
-    borderRadius: `${theme.cardBorderRadius ?? 16}px`,
+    paddingLeft: '0',
+    paddingRight: '0',
+    paddingTop: '0',
+    paddingBottom: '0',
+    borderRadius: `${cardBorderRadius}px`,
+    overflow: 'hidden', // 프로필 카드가 border-radius를 따르도록
   };
+
+  // 콘텐츠 영역 패딩 (프로필 카드 제외한 나머지 블록들)
+  const contentPaddingX = theme.cardPaddingX ?? 16;
 
   // 편집 모드: 부모 컨테이너 채우기 (min-h-full)
   // 보기 모드: 전체 화면 채우기 (min-h-screen)
@@ -251,17 +271,54 @@ export function PublicPageView({
       <div className="mx-auto max-w-2xl px-4">
         {/* 카드 컨테이너 */}
         <div style={cardContainerStyles}>
-          {/* 편집 모드에서는 상단 여백 확보 (툴바 표시용) */}
-          <div className={isEditing ? 'pt-12' : ''}>
-            {renderBlocks()}
-          </div>
-
-          {/* 푸터 (브랜드 표시) */}
-          {header.showBrandName && (
-            <footer className="pt-8 text-center">
-              <p className="text-sm opacity-50">Powered by SOFA</p>
-            </footer>
+          {/* 프로필 카드 - 고정 요소로 카드 최상단에 렌더링 */}
+          {headerBlock && (
+            isEditing ? (
+              // 편집 모드: EditableBlockWrapper로 감싸서 설정 버튼 제공
+              // 단, 헤더 블록은 고정 위치이므로 이동/삭제 비활성화
+              <EditableBlockWrapper
+                block={headerBlock}
+                isSelected={selectedBlockId === headerBlock.id}
+                isFirst={true}
+                isLast={true} // 이동 버튼 비활성화
+                onSelect={() => onSelectBlock?.(headerBlock.id)}
+                onToggleVisibility={() => onToggleVisibility?.(headerBlock.id)}
+                // onDelete 미전달로 삭제 버튼 비활성화
+                // onMoveUp, onMoveDown 미전달로 이동 버튼 비활성화
+                onOpenSettings={() => onOpenBlockSettings?.(headerBlock.id)}
+              >
+                <BlockRenderer
+                  block={headerBlock}
+                  {...blockRendererProps}
+                />
+              </EditableBlockWrapper>
+            ) : (
+              // 보기 모드: 순수 렌더링
+              <BlockRenderer
+                block={headerBlock}
+                {...blockRendererProps}
+              />
+            )
           )}
+
+          {/* 콘텐츠 블록들 - 프로필 카드와 달리 좌우 패딩 적용 */}
+          <div
+            className={isEditing ? 'pt-12' : 'pt-6'}
+            style={{
+              paddingLeft: `${contentPaddingX}px`,
+              paddingRight: `${contentPaddingX}px`,
+              paddingBottom: '32px',
+            }}
+          >
+            {renderBlocks()}
+
+            {/* 푸터 (브랜드 표시) */}
+            {header.showBrandName && (
+              <footer className="pt-8 text-center">
+                <p className="text-sm opacity-50">Powered by SOFA</p>
+              </footer>
+            )}
+          </div>
         </div>
       </div>
     </main>

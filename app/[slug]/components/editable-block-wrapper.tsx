@@ -15,7 +15,7 @@
 import { type ReactNode, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Eye, EyeOff, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
+import { GripVertical, Eye, EyeOff, Trash2, ChevronUp, ChevronDown, Settings2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BLOCK_METAS, type Block } from '@/lib/public-page/block-types';
 
@@ -40,6 +40,8 @@ interface EditableBlockWrapperProps {
   onMoveUp?: () => void;
   /** 아래로 이동 콜백 */
   onMoveDown?: () => void;
+  /** 설정 다이얼로그 열기 콜백 */
+  onOpenSettings?: () => void;
 }
 
 export function EditableBlockWrapper({
@@ -53,6 +55,7 @@ export function EditableBlockWrapper({
   onDelete,
   onMoveUp,
   onMoveDown,
+  onOpenSettings,
 }: EditableBlockWrapperProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -98,6 +101,10 @@ export function EditableBlockWrapper({
         e.stopPropagation();
         onSelect?.();
       }}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        onOpenSettings?.();
+      }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -111,52 +118,60 @@ export function EditableBlockWrapper({
           isSelected && 'opacity-100'
         )}
       >
-        {/* 좌측: 순서 컨트롤 */}
+        {/* 좌측: 순서 컨트롤 (이동 기능이 있는 경우에만 표시) */}
         <div className="pointer-events-auto flex items-center gap-0.5 rounded-lg bg-card border border-border shadow-sm p-0.5">
-          {/* 위로 이동 버튼 */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onMoveUp?.();
-            }}
-            disabled={isFirst}
-            className={cn(
-              'flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors',
-              isFirst && 'opacity-30 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground'
-            )}
-            title="위로 이동"
-          >
-            <ChevronUp className="h-4 w-4" />
-          </button>
+          {/* 위로 이동 버튼 (onMoveUp이 있을 때만 표시) */}
+          {onMoveUp && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveUp();
+              }}
+              disabled={isFirst}
+              className={cn(
+                'flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors',
+                isFirst && 'opacity-30 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground'
+              )}
+              title="위로 이동"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </button>
+          )}
 
-          {/* 드래그 핸들 */}
-          <button
-            {...attributes}
-            {...listeners}
-            className="flex h-7 w-7 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing transition-colors"
-            title="드래그하여 순서 변경"
-          >
-            <GripVertical className="h-4 w-4" />
-          </button>
+          {/* 드래그 핸들 (이동 기능이 있을 때만 표시) */}
+          {(onMoveUp || onMoveDown) && (
+            <button
+              {...attributes}
+              {...listeners}
+              className="flex h-7 w-7 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing transition-colors"
+              title="드래그하여 순서 변경"
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+          )}
 
-          {/* 아래로 이동 버튼 */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onMoveDown?.();
-            }}
-            disabled={isLast}
-            className={cn(
-              'flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors',
-              isLast && 'opacity-30 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground'
-            )}
-            title="아래로 이동"
-          >
-            <ChevronDown className="h-4 w-4" />
-          </button>
+          {/* 아래로 이동 버튼 (onMoveDown이 있을 때만 표시) */}
+          {onMoveDown && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveDown();
+              }}
+              disabled={isLast}
+              className={cn(
+                'flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors',
+                isLast && 'opacity-30 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground'
+              )}
+              title="아래로 이동"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+          )}
 
-          {/* 구분선 */}
-          <div className="h-5 w-px bg-border mx-1" />
+          {/* 구분선 (이동 버튼이 있을 때만 표시) */}
+          {(onMoveUp || onMoveDown) && (
+            <div className="h-5 w-px bg-border mx-1" />
+          )}
 
           {/* 블록 타입 라벨 */}
           <span className="px-2 text-xs font-medium text-muted-foreground">
@@ -166,6 +181,18 @@ export function EditableBlockWrapper({
 
         {/* 우측: 액션 버튼 */}
         <div className="pointer-events-auto flex items-center gap-0.5 rounded-lg bg-card border border-border shadow-sm p-0.5">
+          {/* 설정 버튼 */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenSettings?.();
+            }}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            title="설정"
+          >
+            <Settings2 className="h-4 w-4" />
+          </button>
+
           {/* 가시성 토글 */}
           <button
             onClick={(e) => {
@@ -185,17 +212,19 @@ export function EditableBlockWrapper({
             )}
           </button>
 
-          {/* 삭제 버튼 */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete?.();
-            }}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-            title="삭제"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {/* 삭제 버튼 (onDelete가 있을 때만 표시) */}
+          {onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+              title="삭제"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 

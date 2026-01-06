@@ -10,11 +10,13 @@
  * 여러 컴포넌트 간 상태 공유가 가능합니다.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { nanoid } from 'nanoid';
 import { useConsole } from './use-console-state';
 import {
   createBlock,
+  createHeaderBlock,
+  createChatbotBlock,
   normalizeBlockOrder,
   type Block,
   type BlockTypeValue,
@@ -59,8 +61,49 @@ interface UseBlocksReturn {
 export function useBlocks(): UseBlocksReturn {
   const { pageConfig, updatePageConfig, selectedBlockId, selectBlock } = useConsole();
 
+  // 기본 블록 생성 중 여부 추적 (무한 루프 방지)
+  const isCreatingDefaultBlocksRef = useRef(false);
+
   // 현재 블록 목록
   const blocks = pageConfig.blocks ?? [];
+
+  /**
+   * 기본 블록 초기화
+   *
+   * pageConfig.blocks가 비어있으면 헤더와 챗봇 블록을 자동 생성합니다.
+   * - 첫 페이지 로드 시 서버에서 blocks가 빈 배열로 올 수 있음
+   * - 설정 초기화(reset) 시에도 blocks가 빈 배열로 변경됨
+   * - isCreatingDefaultBlocksRef로 생성 중 상태를 추적하여 무한 루프 방지
+   *
+   * 동작 흐름:
+   * 1. blocks가 비어있고, 현재 생성 중이 아니면 기본 블록 생성 시작
+   * 2. isCreatingDefaultBlocksRef = true로 설정
+   * 3. updatePageConfig로 기본 블록 추가
+   * 4. useEffect 재실행 시 blocks.length > 0이므로 isCreatingDefaultBlocksRef = false로 리셋
+   */
+  useEffect(() => {
+    const currentBlocks = pageConfig.blocks ?? [];
+
+    if (currentBlocks.length === 0) {
+      // 이미 생성 중이면 스킵 (무한 루프 방지)
+      if (isCreatingDefaultBlocksRef.current) return;
+
+      isCreatingDefaultBlocksRef.current = true;
+
+      const defaultBlocks: Block[] = [
+        createHeaderBlock(nanoid(), 0),
+        createChatbotBlock(nanoid(), 1),
+      ];
+
+      updatePageConfig((prev) => ({
+        ...prev,
+        blocks: normalizeBlockOrder(defaultBlocks),
+      }));
+    } else {
+      // blocks가 있으면 생성 플래그 리셋 (다음 reset 대비)
+      isCreatingDefaultBlocksRef.current = false;
+    }
+  }, [pageConfig.blocks, updatePageConfig]);
 
   /**
    * 블록 목록 업데이트 (자동 정규화)
