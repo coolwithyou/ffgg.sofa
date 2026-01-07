@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useMemo, Suspense } from 'react';
-import { Dialog } from '@/components/ui/dialog';
+import { FloatingPanel } from '@/components/ui/floating-panel';
 import { useBlocks } from '../../../hooks/use-blocks';
 import { BLOCK_METAS, type Block } from '@/lib/public-page/block-types';
 import { BLOCK_SETTINGS_COMPONENTS } from './settings';
@@ -123,30 +123,25 @@ export function BlockSettingsDialog({
   }
 
   // 헤더 블록은 설정 항목이 많아 더 넓은 너비 사용
-  // 또한 하단 위치 + 제한된 높이로 프로필 헤더를 보면서 편집 가능
   const isHeaderBlock = block.type === 'header';
-  const dialogMaxWidth = isHeaderBlock ? '3xl' : 'lg';
+  const panelWidth = isHeaderBlock ? 480 : 400;
 
   return (
-    <Dialog
+    <FloatingPanel
       isOpen={isOpen}
       onClose={onClose}
       title={`${meta?.name ?? '블록'} 설정`}
-      maxWidth={dialogMaxWidth}
-      // 헤더 블록: 하단 위치 + 55vh 높이로 상단 헤더 미리보기 가능
-      // 일반 블록: 중앙 위치 + 고정 높이 없음
-      position={isHeaderBlock ? 'bottom' : 'center'}
-      maxHeight={isHeaderBlock ? '55vh' : undefined}
+      width={panelWidth}
+      maxHeight="70vh"
+      storageKey="block-settings-panel"
     >
-      <div className={isHeaderBlock ? '' : 'max-h-[70vh] overflow-y-auto'}>
-        {SettingsComponent ? (
-          <Suspense fallback={<SettingsLoadingFallback />}>
-            <SettingsComponent block={block} onUpdate={handleUpdate} />
-          </Suspense>
-        ) : (
-          <NoSettingsAvailable blockType={block.type} />
-        )}
-      </div>
-    </Dialog>
+      {SettingsComponent ? (
+        <Suspense fallback={<SettingsLoadingFallback />}>
+          <SettingsComponent block={block} onUpdate={handleUpdate} />
+        </Suspense>
+      ) : (
+        <NoSettingsAvailable blockType={block.type} />
+      )}
+    </FloatingPanel>
   );
 }
