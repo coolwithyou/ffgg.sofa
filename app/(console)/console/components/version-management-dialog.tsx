@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
-import { useEmailVerification } from '@/components/email-verification-modal';
 import {
   Rocket,
   RotateCcw,
@@ -56,7 +55,6 @@ export function VersionManagementDialog({
   } = useVersions();
   const { saveStatus, saveNow } = useAutoSaveContext();
   const { confirm } = useAlertDialog();
-  const { requireEmailVerification } = useEmailVerification();
 
   const [publishNote, setPublishNote] = useState('');
   const [selectedVersion, setSelectedVersion] = useState<SelectedVersion>({
@@ -78,10 +76,6 @@ export function VersionManagementDialog({
 
   // 발행 핸들러
   const handlePublish = async () => {
-    // 이메일 인증 확인 (Delayed Verification)
-    const verified = await requireEmailVerification();
-    if (!verified) return; // 인증 취소 시 발행 중단
-
     // 저장되지 않은 변경사항이 있으면 먼저 저장
     if (saveStatus === 'unsaved') {
       await saveNow();
