@@ -47,6 +47,7 @@ const PUBLIC_API_PATHS = [
   '/api/inngest', // Inngest 웹훅 엔드포인트 (서버 간 통신)
   '/api/admin/documents', // 관리자 문서 API (개발용)
   '/api/widget', // 위젯 API (외부 사이트에서 호출)
+  '/api/files', // 파일 프록시 API (public-page 이미지 등, 권한 검증은 API 내부에서 수행)
 ];
 
 // 정적 파일 및 Next.js 내부 경로
