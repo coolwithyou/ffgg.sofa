@@ -16,6 +16,7 @@ import {
   ProfileTitle,
   ProfileDescription,
   BrandBadge,
+  ProfileGradientZone,
 } from './shared';
 
 export function SolidColorProfile({ config, theme }: HeaderProps) {
@@ -28,7 +29,7 @@ export function SolidColorProfile({ config, theme }: HeaderProps) {
 
   return (
     <header
-      className="mb-8 flex flex-col items-center rounded-2xl p-8 text-center text-white"
+      className="relative mb-8 flex flex-col items-center rounded-t-2xl p-8 text-center text-white"
       style={{ backgroundColor }}
     >
       <ProfileLogo
@@ -47,6 +48,9 @@ export function SolidColorProfile({ config, theme }: HeaderProps) {
         className="text-white/80"
       />
       {showBrandName && <BrandBadge variant="light" />}
+
+      {/* 헤더 하단 그라데이션 존 */}
+      <ProfileGradientZone />
     </header>
   );
 }

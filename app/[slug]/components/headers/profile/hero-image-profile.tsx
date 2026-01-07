@@ -17,6 +17,7 @@ import {
   ProfileTitle,
   ProfileDescription,
   BrandBadge,
+  ProfileGradientZone,
 } from './shared';
 
 export function HeroImageProfile({ config, theme }: HeaderProps) {
@@ -87,6 +88,9 @@ export function HeroImageProfile({ config, theme }: HeaderProps) {
         />
         {showBrandName && <BrandBadge variant="light" />}
       </div>
+
+      {/* 헤더 하단 그라데이션 존 */}
+      <ProfileGradientZone />
     </header>
   );
 }
