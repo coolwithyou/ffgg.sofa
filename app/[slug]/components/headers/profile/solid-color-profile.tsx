@@ -29,7 +29,7 @@ export function SolidColorProfile({ config, theme }: HeaderProps) {
 
   return (
     <header
-      className="relative mb-8 flex flex-col items-center rounded-t-2xl p-8 text-center text-white"
+      className="relative mb-4 flex flex-col items-center p-8 text-center text-white"
       style={{ backgroundColor }}
     >
       <ProfileLogo

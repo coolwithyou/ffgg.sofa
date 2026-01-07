@@ -274,34 +274,44 @@ export function PublicPageView({
         {/* 카드 컨테이너 */}
         <div style={cardContainerStyles}>
           {/* 프로필 카드 - 고정 요소로 카드 최상단에 렌더링 */}
+          {/* 헤더 영역 wrapper: overflow:hidden + 상단 border-radius로 모서리 처리 */}
+          {/* 편집 모드에서도 카드의 border-radius가 적용되도록 별도 wrapper 사용 */}
           {headerBlock && (
-            isEditing ? (
-              // 편집 모드: EditableBlockWrapper로 감싸서 설정 버튼 제공
-              // 단, 헤더 블록은 고정 위치이므로 이동/삭제 비활성화
-              <EditableBlockWrapper
-                block={headerBlock}
-                isSelected={selectedBlockId === headerBlock.id}
-                isFirst={true}
-                isLast={true} // 이동 버튼 비활성화
-                onSelect={() => onSelectBlock?.(headerBlock.id)}
-                onToggleVisibility={() => onToggleVisibility?.(headerBlock.id)}
-                // onDelete 미전달로 삭제 버튼 비활성화
-                // onMoveUp, onMoveDown 미전달로 이동 버튼 비활성화
-                onOpenSettings={() => onOpenBlockSettings?.(headerBlock.id)}
-                toolbarPosition="bottom-inside"
-              >
+            <div
+              style={{
+                overflow: 'hidden',
+                borderTopLeftRadius: `${cardBorderRadius}px`,
+                borderTopRightRadius: `${cardBorderRadius}px`,
+              }}
+            >
+              {isEditing ? (
+                // 편집 모드: EditableBlockWrapper로 감싸서 설정 버튼 제공
+                // 단, 헤더 블록은 고정 위치이므로 이동/삭제 비활성화
+                <EditableBlockWrapper
+                  block={headerBlock}
+                  isSelected={selectedBlockId === headerBlock.id}
+                  isFirst={true}
+                  isLast={true} // 이동 버튼 비활성화
+                  onSelect={() => onSelectBlock?.(headerBlock.id)}
+                  onToggleVisibility={() => onToggleVisibility?.(headerBlock.id)}
+                  // onDelete 미전달로 삭제 버튼 비활성화
+                  // onMoveUp, onMoveDown 미전달로 이동 버튼 비활성화
+                  onOpenSettings={() => onOpenBlockSettings?.(headerBlock.id)}
+                  toolbarPosition="bottom-inside"
+                >
+                  <BlockRenderer
+                    block={headerBlock}
+                    {...blockRendererProps}
+                  />
+                </EditableBlockWrapper>
+              ) : (
+                // 보기 모드: 순수 렌더링
                 <BlockRenderer
                   block={headerBlock}
                   {...blockRendererProps}
                 />
-              </EditableBlockWrapper>
-            ) : (
-              // 보기 모드: 순수 렌더링
-              <BlockRenderer
-                block={headerBlock}
-                {...blockRendererProps}
-              />
-            )
+              )}
+            </div>
           )}
 
           {/* 콘텐츠 블록들 - 프로필 카드와 달리 좌우 패딩 적용 */}
