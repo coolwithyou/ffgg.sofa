@@ -5,6 +5,7 @@ import { useCurrentChatbot, usePageConfig } from '../hooks/use-console-state';
 import { useBlocks } from '../hooks/use-blocks';
 import { PublicPageView } from '@/app/[slug]/public-page-view';
 import { BlockSettingsDialog } from '../page/components/block-editor/block-settings-dialog';
+import { createPortal } from 'react-dom';
 
 /**
  * 프리뷰 콘텐츠
@@ -14,6 +15,9 @@ import { BlockSettingsDialog } from '../page/components/block-editor/block-setti
  * - 편집 컨트롤(드래그, 삭제, 가시성 토글) 활성화
  * - 블록 선택 및 순서 변경 지원
  * - 블록 설정 다이얼로그 (더블클릭 또는 설정 버튼으로 열기)
+ *
+ * 참고: BlockSettingsDialog는 Portal을 통해 document.body에 렌더링되어
+ * ThemeIsolatedPreview의 테마 격리 영향을 받지 않고 시스템 테마를 따릅니다.
  */
 export function PreviewContent() {
   const { currentChatbot } = useCurrentChatbot();
@@ -83,12 +87,16 @@ export function PreviewContent() {
         onOpenBlockSettings={openBlockSettings}
       />
 
-      {/* 블록 설정 다이얼로그 */}
-      <BlockSettingsDialog
-        blockId={settingsDialogBlockId}
-        isOpen={!!settingsDialogBlockId}
-        onClose={closeBlockSettings}
-      />
+      {/* 블록 설정 다이얼로그 - Portal로 body에 렌더링하여 테마 격리 영역 밖으로 이동 */}
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <BlockSettingsDialog
+            blockId={settingsDialogBlockId}
+            isOpen={!!settingsDialogBlockId}
+            onClose={closeBlockSettings}
+          />,
+          document.body
+        )}
     </>
   );
 }

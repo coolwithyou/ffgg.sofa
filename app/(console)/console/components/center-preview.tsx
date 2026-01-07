@@ -2,6 +2,7 @@
 
 import { useCurrentChatbot, usePageConfig } from '../hooks/use-console-state';
 import { PreviewContent } from './preview-content';
+import { ThemeIsolatedPreview } from './theme-isolated-preview';
 import { getBackgroundStyles } from '@/lib/public-page/background-utils';
 
 /**
@@ -12,6 +13,10 @@ import { getBackgroundStyles } from '@/lib/public-page/background-utils';
  * - 블록을 드래그하여 순서 변경 가능
  * - 블록 선택, 가시성 토글, 삭제 지원
  * - 테마의 배경 설정을 전체 프리뷰 영역에 라이브 적용
+ *
+ * 테마 격리:
+ * - ThemeIsolatedPreview로 감싸서 시스템 다크/라이트 모드와 무관하게
+ *   퍼블릭 페이지가 실제로 보이는 그대로 미리보기
  */
 export function CenterPreview() {
   const { currentChatbot } = useCurrentChatbot();
@@ -38,18 +43,20 @@ export function CenterPreview() {
   const hasBackground = theme && theme.backgroundType;
 
   return (
-    <main
-      className={`flex flex-1 flex-col ${!hasBackground ? 'bg-muted/30' : ''}`}
-      style={backgroundStyle}
-    >
-      {/* WYSIWYG 프리뷰 영역 - 전체 높이에 배경 적용 */}
-      <div className="flex-1 overflow-y-auto">
-        {/*
-          PreviewContent가 PublicPageView를 렌더링
-          PublicPageView 내부에서 카드 컨테이너와 마진 처리
-        */}
-        <PreviewContent />
-      </div>
-    </main>
+    <ThemeIsolatedPreview className={`flex flex-1 flex-col ${!hasBackground ? 'bg-muted/30' : ''}`}>
+      <main
+        className="flex flex-1 flex-col"
+        style={backgroundStyle}
+      >
+        {/* WYSIWYG 프리뷰 영역 - 전체 높이에 배경 적용 */}
+        <div className="flex-1 overflow-y-auto">
+          {/*
+            PreviewContent가 PublicPageView를 렌더링
+            PublicPageView 내부에서 카드 컨테이너와 마진 처리
+          */}
+          <PreviewContent />
+        </div>
+      </main>
+    </ThemeIsolatedPreview>
   );
 }
