@@ -532,7 +532,7 @@ export async function seedReservedSlugs() {
 /**
  * 통계 조회
  */
-export async function getReservedSlugStats() {
+export function getReservedSlugStats() {
   const total = reservedSlugsSeed.length;
   const byCategory: Record<string, number> = {};
 
