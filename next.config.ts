@@ -61,11 +61,12 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // Next.js 필요
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' http://t1.daumcdn.net https://t1.daumcdn.net http://dapi.kakao.com https://dapi.kakao.com", // Next.js + Kakao SDK
               "style-src 'self' 'unsafe-inline'", // Tailwind 필요
-              "img-src 'self' data: blob: https:",
+              "img-src 'self' data: blob: https: http://t1.daumcdn.net", // Kakao SDK 이미지
               "font-src 'self' data:",
-              "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech",
+              "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech http://dapi.kakao.com https://dapi.kakao.com", // Kakao Geocoder API
+              "frame-src http://postcode.map.daum.net https://postcode.map.daum.net", // Daum 우편번호 iframe
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
@@ -94,11 +95,11 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://t1.daumcdn.net https://dapi.kakao.com",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
-              "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech",
+              "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech https://dapi.kakao.com",
               "frame-ancestors *", // iframe 허용
               "base-uri 'self'",
               "form-action 'self'",
@@ -132,11 +133,11 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://t1.daumcdn.net https://dapi.kakao.com",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
-              "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech",
+              "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech https://dapi.kakao.com",
               "frame-ancestors 'none'", // iframe 완전 차단
               "base-uri 'self'",
               "form-action 'self'",

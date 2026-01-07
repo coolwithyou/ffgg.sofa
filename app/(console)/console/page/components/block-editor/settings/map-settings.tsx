@@ -138,10 +138,11 @@ export function MapBlockSettings({
         <div className="flex gap-2">
           <Input
             id="map-address"
-            placeholder="서울시 강남구 테헤란로 123"
+            placeholder="주소찾기 버튼을 클릭하세요"
             value={config.address}
-            onChange={(e) => updateConfig({ address: e.target.value })}
-            className="flex-1"
+            readOnly
+            className="flex-1 cursor-pointer bg-muted/50"
+            onClick={handleOpenPostcode}
           />
           <Button
             type="button"
@@ -160,6 +161,9 @@ export function MapBlockSettings({
             )}
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          주소찾기를 클릭하여 주소를 검색하세요. 좌표가 자동으로 입력됩니다.
+        </p>
 
         {/* 인라인 주소검색 영역 */}
         {showPostcode && (

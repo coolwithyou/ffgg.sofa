@@ -53,7 +53,7 @@ export interface AddressResult {
  */
 export interface UseDaumPostcodeReturn {
   /** 주소 검색창이 렌더링될 컨테이너 ref */
-  containerRef: React.RefObject<HTMLDivElement>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
   /** 주소 검색창 열기 */
   openPostcode: (onComplete: (result: AddressResult) => void) => Promise<void>;
   /** 로딩 상태 */
@@ -73,7 +73,7 @@ export function useDaumPostcode(): UseDaumPostcodeReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [isSDKReady, setIsSDKReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   /**
    * SDK 로드 및 주소 검색창 열기
@@ -99,25 +99,45 @@ export function useDaumPostcode(): UseDaumPostcodeReturn {
             // 도로명 주소 우선, 없으면 지번 주소
             const address = data.roadAddress || data.jibunAddress;
 
+            // 디버깅: Daum Postcode 반환 데이터 확인
+            console.log('[Daum Postcode] 주소 선택:', {
+              address,
+              roadAddress: data.roadAddress,
+              jibunAddress: data.jibunAddress,
+              zonecode: data.zonecode,
+            });
+
             // Kakao Geocoder로 좌표 변환
             const geocoder = new window.kakao.maps.services.Geocoder();
 
+            console.log('[Kakao Geocoder] 좌표 변환 시작:', address);
+
             geocoder.addressSearch(address, (result, status) => {
+              // 디버깅: Geocoder 응답 확인
+              console.log('[Kakao Geocoder] 응답:', { status, result });
+
               if (
                 status === window.kakao.maps.services.Status.OK &&
                 result[0]
               ) {
                 // 좌표 변환 성공
+                const lat = parseFloat(result[0].y);
+                const lng = parseFloat(result[0].x);
+
+                console.log('[Kakao Geocoder] 좌표 변환 성공:', { lat, lng });
+
                 onComplete({
                   address,
                   roadAddress: data.roadAddress,
                   jibunAddress: data.jibunAddress,
                   zonecode: data.zonecode,
-                  lat: parseFloat(result[0].y),
-                  lng: parseFloat(result[0].x),
+                  lat,
+                  lng,
                 });
               } else {
                 // 좌표 변환 실패해도 주소는 입력 (graceful degradation)
+                console.warn('[Kakao Geocoder] 좌표 변환 실패:', status);
+
                 onComplete({
                   address,
                   roadAddress: data.roadAddress,
