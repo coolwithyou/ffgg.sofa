@@ -141,6 +141,8 @@ export default function AISettingsPage() {
 
   const hasDatasets = datasets.length > 0;
   const totalChunks = datasets.reduce((sum, d) => sum + d.chunkCount, 0);
+  // 청크가 1개 이상 있어야 페르소나/RAG 인덱스 재생성 가능
+  const hasContent = totalChunks > 0;
 
   // 챗봇 데이터 로드 함수 (재사용 가능하도록 useCallback으로 래핑)
   const fetchChatbot = useCallback(async (showLoader = true) => {
@@ -381,7 +383,7 @@ export default function AISettingsPage() {
                   size="sm"
                   className="mt-3"
                   onClick={handleGeneratePersona}
-                  disabled={isGenerating}
+                  disabled={isGenerating || !hasContent}
                 >
                   {isGenerating ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -439,7 +441,7 @@ export default function AISettingsPage() {
                   variant="outline"
                   size="sm"
                   onClick={handleGeneratePersona}
-                  disabled={isGenerating || !hasDatasets}
+                  disabled={isGenerating || !hasContent}
                 >
                   {isGenerating ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
