@@ -1206,3 +1206,32 @@ export type NewPointPackage = typeof pointPackages.$inferInsert;
 
 export type PointPurchase = typeof pointPurchases.$inferSelect;
 export type NewPointPurchase = typeof pointPurchases.$inferInsert;
+
+// ============================================
+// 예약 슬러그 (관리자 관리)
+// ============================================
+/**
+ * 공개 페이지 슬러그 블랙리스트
+ * - 외설어, 욕설, 브랜드명, 가치 키워드 등
+ * - 관리자가 어드민에서 추가/삭제 가능
+ */
+export const reservedSlugs = pgTable(
+  'reserved_slugs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    slug: text('slug').notNull().unique(),
+    category: text('category').notNull(), // 'profanity' | 'brand' | 'premium' | 'system' | 'other'
+    reason: text('reason'), // 예약 사유 (관리자 메모)
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_reserved_slugs_slug').on(table.slug),
+    index('idx_reserved_slugs_category').on(table.category),
+  ]
+);
+
+export type ReservedSlug = typeof reservedSlugs.$inferSelect;
+export type NewReservedSlug = typeof reservedSlugs.$inferInsert;

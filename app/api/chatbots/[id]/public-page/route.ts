@@ -12,7 +12,7 @@ import { eq, and, ne } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { chatbots, chatbotConfigVersions } from '@/drizzle/schema';
 import { validateSession } from '@/lib/auth/session';
-import { validateSlug } from '@/lib/public-page/reserved-slugs';
+import { validateSlugAsync } from '@/lib/public-page/reserved-slugs';
 import {
   parsePublicPageConfig,
   toPublicPageConfigJson,
@@ -237,8 +237,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      // 슬러그 유효성 검사
-      const validation = validateSlug(targetSlug);
+      // 슬러그 유효성 검사 (DB 예약어 포함)
+      const validation = await validateSlugAsync(targetSlug);
       if (!validation.valid) {
         return NextResponse.json({ error: validation.error }, { status: 400 });
       }
@@ -333,8 +333,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     // 슬러그 업데이트 검사
     if (slug !== undefined && slug !== null && slug !== chatbot.slug) {
-      // 슬러그 유효성 검사
-      const validation = validateSlug(slug);
+      // 슬러그 유효성 검사 (DB 예약어 포함)
+      const validation = await validateSlugAsync(slug);
       if (!validation.valid) {
         return NextResponse.json({ error: validation.error }, { status: 400 });
       }

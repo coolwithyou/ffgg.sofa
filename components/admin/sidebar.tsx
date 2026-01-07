@@ -71,6 +71,12 @@ const navItems: NavItem[] = [
     icon: OperatorsIcon,
     minRole: 'ADMIN', // ADMIN 이상만 접근 가능
   },
+  {
+    name: '예약 슬러그',
+    href: '/admin/reserved-slugs',
+    icon: ReservedSlugsIcon,
+    minRole: 'SUPPORT', // SUPPORT 이상 접근 가능
+  },
 ];
 
 export function AdminSidebar({ operatorEmail, adminRole }: AdminSidebarProps) {
@@ -220,6 +226,19 @@ function OperatorsIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
+      />
+    </svg>
+  );
+}
+
+function ReservedSlugsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
       />
     </svg>
   );
