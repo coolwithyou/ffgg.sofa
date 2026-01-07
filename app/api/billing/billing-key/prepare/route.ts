@@ -12,7 +12,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { tenants, users } from '@/drizzle/schema';
 import { validateSession } from '@/lib/auth/session';
-import { billingEnv } from '@/lib/config/billing-env';
+import { billingEnv, isDevTestMode } from '@/lib/config/billing-env';
 import { generateBillingKeyRequestId } from '@/lib/billing/order-id';
 
 export async function POST(request: NextRequest) {
@@ -54,6 +54,9 @@ export async function POST(request: NextRequest) {
 
     // 5. PortOne 설정 정보 반환
     return NextResponse.json({
+      // 테스트 모드 여부 (PORTONE_STORE_ID=test일 때 true)
+      isTestMode: isDevTestMode(),
+
       // PortOne 연동에 필요한 설정
       storeId: billingEnv.portone.storeId,
       channelKey: billingEnv.portone.channelKey,

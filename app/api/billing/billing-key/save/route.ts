@@ -16,6 +16,7 @@ import { plans, subscriptions, tenants } from '@/drizzle/schema';
 import { validateSession } from '@/lib/auth/session';
 import { getBillingKeyInfo } from '@/lib/portone/client';
 import { encryptBillingKey, maskBillingKey } from '@/lib/billing/encryption';
+import { isDevTestMode } from '@/lib/config/billing-env';
 import { addMonths, addYears } from 'date-fns';
 import { logger } from '@/lib/logger';
 import { inngest } from '@/inngest/client';
@@ -51,21 +52,30 @@ export async function POST(request: NextRequest) {
     const { billingKey, planId, billingCycle } = parseResult.data;
 
     // 3. PortOne에서 빌링키 유효성 확인
-    try {
-      await getBillingKeyInfo(billingKey);
-    } catch (verifyError) {
-      logger.error(
-        'Billing key verification failed',
-        verifyError instanceof Error ? verifyError : undefined,
-        {
-          tenantId,
-          billingKey: maskBillingKey(billingKey),
-        }
-      );
-      return NextResponse.json(
-        { error: '유효하지 않은 빌링키입니다' },
-        { status: 400 }
-      );
+    if (isDevTestMode()) {
+      // 테스트 모드: 포트원 검증 건너뛰기
+      logger.info('[DEV TEST MODE] 빌링키 검증 건너뜀', {
+        tenantId,
+        billingKey: maskBillingKey(billingKey),
+      });
+    } else {
+      // 프로덕션: 포트원에서 빌링키 유효성 확인
+      try {
+        await getBillingKeyInfo(billingKey);
+      } catch (verifyError) {
+        logger.error(
+          'Billing key verification failed',
+          verifyError instanceof Error ? verifyError : undefined,
+          {
+            tenantId,
+            billingKey: maskBillingKey(billingKey),
+          }
+        );
+        return NextResponse.json(
+          { error: '유효하지 않은 빌링키입니다' },
+          { status: 400 }
+        );
+      }
     }
 
     // 4. 플랜 조회

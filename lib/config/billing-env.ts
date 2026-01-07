@@ -3,6 +3,16 @@
  * [Billing System] PortOne V2 연동을 위한 환경변수 관리
  */
 
+/**
+ * 개발자 테스트 모드 여부 확인
+ * PORTONE_STORE_ID가 'test'일 때 활성화
+ * - 포트원 SDK/API 호출 없이 가상 결제 처리
+ * - 실제 결제가 발생하지 않음
+ */
+export function isDevTestMode(): boolean {
+  return process.env.PORTONE_STORE_ID === 'test';
+}
+
 interface BillingEnvConfig {
   name: string;
   required: boolean;

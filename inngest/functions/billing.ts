@@ -19,7 +19,7 @@ import { eq, and } from 'drizzle-orm';
 import { requestBillingKeyPayment } from '@/lib/portone/client';
 import { decryptBillingKey, maskBillingKey } from '@/lib/billing/encryption';
 import { generateRecurringPaymentId } from '@/lib/billing/order-id';
-import { billingEnv } from '@/lib/config/billing-env';
+import { billingEnv, isDevTestMode } from '@/lib/config/billing-env';
 import { logger } from '@/lib/logger';
 import { addMonths, addYears } from 'date-fns';
 import { chargePoints } from '@/lib/points';
@@ -150,11 +150,6 @@ export const processRecurringPayment = inngestClient.createFunction(
         subscriptionData.subscription.billingCycle === 'yearly' ? '연간' : '월간'
       } 구독`;
 
-      // 빌링키 복호화
-      const decryptedBillingKey = decryptBillingKey(
-        subscriptionData.subscription.billingKey!
-      );
-
       // 결제 레코드 생성 (pending 상태)
       await db.insert(payments).values({
         tenantId,
@@ -169,6 +164,54 @@ export const processRecurringPayment = inngestClient.createFunction(
           billingCycle: subscriptionData.subscription.billingCycle,
         },
       });
+
+      // 테스트 모드: 가상 결제 성공 처리
+      if (isDevTestMode()) {
+        const testTransactionId = `test_txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+        logger.info('[DEV TEST MODE] 가상 결제 처리', {
+          subscriptionId,
+          paymentId,
+          testTransactionId,
+          amount: paymentAmount,
+        });
+
+        // 결제 성공 상태 업데이트
+        await db
+          .update(payments)
+          .set({
+            status: 'PAID',
+            paidAt: new Date(),
+            payMethod: 'CARD',
+            metadata: {
+              attempt,
+              planId: subscriptionData.plan.id,
+              billingCycle: subscriptionData.subscription.billingCycle,
+              testMode: true,
+              testTransactionId,
+              cardInfo: {
+                publisher: '테스트카드',
+                number: '****-****-****-0000',
+                installmentPlanMonths: 0,
+              },
+            },
+            updatedAt: new Date(),
+          })
+          .where(eq(payments.paymentId, paymentId));
+
+        return {
+          success: true as const,
+          paymentId,
+          transactionId: testTransactionId,
+          testMode: true,
+        };
+      }
+
+      // 프로덕션: 포트원 빌링키 결제 요청
+      // 빌링키 복호화
+      const decryptedBillingKey = decryptBillingKey(
+        subscriptionData.subscription.billingKey!
+      );
 
       try {
         // PortOne 빌링키 결제 요청
