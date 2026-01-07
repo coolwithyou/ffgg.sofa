@@ -4,7 +4,8 @@
  * 헤더 블록 설정 컴포넌트
  *
  * HeaderBlock의 설정을 편집합니다:
- * - 템플릿 선택: 프로필, 플로팅 글래스, 미니멀, 필 네비게이션
+ * - 템플릿 선택: 프로필, 플로팅 글래스, 미니멀, 필 네비게이션 (컴팩트 드롭다운)
+ * - 프로필 배경: 배경색/이미지 탭으로 통합 (테마 자동 결정)
  * - 제목: 페이지 상단에 표시될 제목
  * - 설명: 페이지 소개 문구
  * - 로고 URL: 커스텀 로고 이미지
@@ -18,24 +19,26 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { HeaderBlock } from '@/lib/public-page/block-types';
 import {
   HeaderTemplate,
   HEADER_TEMPLATE_META,
-  ProfileTheme,
-  PROFILE_THEME_META,
   type HeaderTemplateType,
-  type ProfileThemeType,
   type NavLink,
   type CtaButton,
 } from '@/lib/public-page/header-templates';
 import type { BlockSettingsProps } from './index';
 import { ImageUploadField } from './image-upload-field';
-import { TemplateCard } from './template-card';
 import { NavLinksEditor } from './nav-links-editor';
 import { CtaButtonEditor } from './cta-button-editor';
-import { ProfileThemeCard } from './profile-theme-card';
-import { HeroImageSettings } from './hero-image-settings';
+import { ProfileBackgroundTabs } from './profile-background-tabs';
 
 export function HeaderBlockSettings({
   block,
@@ -45,7 +48,6 @@ export function HeaderBlockSettings({
   const currentTemplate = config.template || HeaderTemplate.PROFILE;
   const isWebsiteStyle = currentTemplate !== HeaderTemplate.PROFILE;
   const isProfileTemplate = currentTemplate === HeaderTemplate.PROFILE;
-  const currentProfileTheme = config.profileTheme || ProfileTheme.CLASSIC;
 
   /**
    * config 내 특정 필드 업데이트
@@ -63,50 +65,36 @@ export function HeaderBlockSettings({
 
   return (
     <div className="space-y-6">
-      {/* 템플릿 선택 섹션 */}
-      <div className="space-y-3">
-        <Label>템플릿 선택</Label>
-        <div className="grid grid-cols-2 gap-2">
-          {Object.entries(HEADER_TEMPLATE_META).map(([key, meta]) => (
-            <TemplateCard
-              key={key}
-              templateKey={key}
-              meta={meta}
-              selected={currentTemplate === key}
-              onSelect={() =>
-                updateConfig({ template: key as HeaderTemplateType })
-              }
-            />
-          ))}
-        </div>
+      {/* 템플릿 선택 섹션 - 컴팩트 드롭다운 */}
+      <div className="space-y-2">
+        <Label htmlFor="header-template">템플릿</Label>
+        <Select
+          value={currentTemplate}
+          onValueChange={(value) =>
+            updateConfig({ template: value as HeaderTemplateType })
+          }
+        >
+          <SelectTrigger id="header-template" className="w-full">
+            <SelectValue placeholder="템플릿 선택" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(HEADER_TEMPLATE_META).map(([key, meta]) => (
+              <SelectItem key={key} value={key}>
+                {meta.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          {HEADER_TEMPLATE_META[currentTemplate]?.description}
+        </p>
       </div>
 
-      {/* 프로필 테마 선택 (프로필 템플릿일 때만 표시) */}
+      {/* 프로필 배경 설정 (프로필 템플릿일 때만 표시) */}
       {isProfileTemplate && (
         <>
           <Separator />
-
-          <div className="space-y-4">
-            <Label className="text-base font-medium">프로필 테마</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {Object.entries(PROFILE_THEME_META).map(([key, meta]) => (
-                <ProfileThemeCard
-                  key={key}
-                  themeKey={key}
-                  meta={meta}
-                  selected={currentProfileTheme === key}
-                  onSelect={() =>
-                    updateConfig({ profileTheme: key as ProfileThemeType })
-                  }
-                />
-              ))}
-            </div>
-
-            {/* 히어로 이미지 테마 전용 설정 */}
-            {currentProfileTheme === ProfileTheme.HERO_IMAGE && (
-              <HeroImageSettings config={config} onUpdate={updateConfig} />
-            )}
-          </div>
+          <ProfileBackgroundTabs config={config} onUpdate={updateConfig} />
         </>
       )}
 

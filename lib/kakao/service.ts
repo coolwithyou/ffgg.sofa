@@ -8,6 +8,7 @@ import { chatbots } from '@/drizzle/schema';
 import { eq, sql, and } from 'drizzle-orm';
 import { processChat } from '@/lib/chat';
 import { logger } from '@/lib/logger';
+import { validatePointsForResponse, usePoints } from '@/lib/points';
 import type { KakaoSkillRequest, TenantKakaoSettings } from './types';
 
 // 카카오 5초 제한 대비 4초 타임아웃
@@ -112,7 +113,7 @@ export async function processKakaoSkill(
   success: boolean;
   message: string;
   sources?: Array<{ title: string; documentId: string }>;
-  errorType?: 'timeout' | 'not_found' | 'invalid_request' | 'internal_error';
+  errorType?: 'timeout' | 'not_found' | 'invalid_request' | 'internal_error' | 'insufficient_points';
 }> {
   const startTime = Date.now();
 
@@ -138,6 +139,17 @@ export async function processKakaoSkill(
       return { success: false, message: '', errorType: 'not_found' };
     }
 
+    // 포인트 검증
+    const pointValidation = await validatePointsForResponse(tenant.id);
+    if (!pointValidation.canProceed) {
+      logger.warn('Kakao skill: insufficient points', {
+        botId,
+        tenantId: tenant.id,
+        currentBalance: pointValidation.currentBalance,
+      });
+      return { success: false, message: '', errorType: 'insufficient_points' };
+    }
+
     // 사용자 ID (카카오 봇 유저키)
     const userId = request.userRequest.user.id;
 
@@ -151,6 +163,16 @@ export async function processKakaoSkill(
       }),
       KAKAO_TIMEOUT_MS
     );
+
+    // 포인트 차감 (AI 응답 성공 후)
+    await usePoints({
+      tenantId: tenant.id,
+      metadata: {
+        chatbotId: tenant.chatbotId,
+        conversationId: response.sessionId,
+        channel: 'kakao',
+      },
+    });
 
     const duration = Date.now() - startTime;
     logger.info('Kakao skill processed', {

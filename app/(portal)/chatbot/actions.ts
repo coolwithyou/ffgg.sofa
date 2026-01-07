@@ -3,6 +3,10 @@
 /**
  * 챗봇 테스트 서버 액션
  * [Week 9] 테넌트용 챗봇 테스트
+ *
+ * 실시간 포인트 업데이트 지원:
+ * - 포인트 검증 및 차감 추가
+ * - 응답에 새 잔액(pointsBalance) 포함
  */
 
 import { validateSession } from '@/lib/auth';
@@ -10,6 +14,7 @@ import { processChat } from '@/lib/chat';
 import { logger } from '@/lib/logger';
 import { db, chatbots } from '@/lib/db';
 import { eq, desc, sql } from 'drizzle-orm';
+import { validatePointsForResponse, usePoints } from '@/lib/points';
 
 export interface ChatMessage {
   id: string;
@@ -83,6 +88,11 @@ export async function getTestableChatbots(): Promise<{
 
 /**
  * 테스트 메시지 전송
+ *
+ * 포인트 시스템 연동:
+ * - AI 응답 전 포인트 잔액 검증
+ * - 응답 성공 시 포인트 차감
+ * - 새 잔액을 응답에 포함하여 실시간 업데이트 지원
  */
 export async function sendTestMessage(
   message: string,
@@ -92,6 +102,8 @@ export async function sendTestMessage(
   success: boolean;
   message?: ChatMessage;
   error?: string;
+  errorCode?: 'INSUFFICIENT_POINTS' | 'POINTS_LOW_WARNING';
+  pointsBalance?: number;
 }> {
   const session = await validateSession();
 
@@ -108,11 +120,34 @@ export async function sendTestMessage(
   }
 
   try {
+    // 포인트 검증
+    const pointValidation = await validatePointsForResponse(session.tenantId);
+
+    if (!pointValidation.canProceed) {
+      return {
+        success: false,
+        error: `포인트가 부족합니다. 현재 잔액: ${pointValidation.currentBalance}P`,
+        errorCode: 'INSUFFICIENT_POINTS',
+        pointsBalance: pointValidation.currentBalance,
+      };
+    }
+
+    // AI 응답 생성
     const response = await processChat(session.tenantId, {
       message: message.trim(),
       sessionId: `portal-test-${chatbotId}-${sessionId}`,
       channel: 'web',
       chatbotId,
+    });
+
+    // 포인트 차감
+    const { newBalance } = await usePoints({
+      tenantId: session.tenantId,
+      metadata: {
+        chatbotId,
+        conversationId: response.sessionId,
+        channel: 'console_test',
+      },
     });
 
     const chatMessage: ChatMessage = {
@@ -129,9 +164,18 @@ export async function sendTestMessage(
       messageLength: message.length,
       responseLength: response.message.length,
       sourcesCount: response.sources?.length || 0,
+      pointsBalance: newBalance,
     });
 
-    return { success: true, message: chatMessage };
+    return {
+      success: true,
+      message: chatMessage,
+      pointsBalance: newBalance,
+      // 포인트 부족 경고 (100P 이하)
+      ...(pointValidation.errorCode === 'POINTS_LOW_WARNING' && {
+        errorCode: 'POINTS_LOW_WARNING',
+      }),
+    };
   } catch (error) {
     logger.error('Portal chat test failed', error as Error, {
       tenantId: session.tenantId,

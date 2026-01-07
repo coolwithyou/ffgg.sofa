@@ -1,16 +1,12 @@
 'use client';
 
-import { useMemo } from 'react';
 import { useConsoleMode, useCurrentChatbot } from '../hooks/use-console-state';
 import { useBlocks } from '../hooks/use-blocks';
-import { type Block } from '@/lib/public-page/block-types';
-import { HeaderSettings } from './settings/header-settings';
 import { ThemeSettings } from './settings/theme-settings';
 import { SeoSettings } from './settings/seo-settings';
 import { ChatbotSettings } from './settings/chatbot-settings';
 import { PublishStatusCard } from './publish-status-card';
 import { BlockPalette } from '../page/components/block-editor/block-palette';
-import { BlockSettingsPanel } from '../page/components/block-editor/block-settings-panel';
 import {
   Accordion,
   AccordionContent,
@@ -18,28 +14,29 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
 import {
-  FileText,
   Palette,
   Search,
   MessageSquare,
   LayoutGrid,
   Settings,
+  MousePointerClick,
 } from 'lucide-react';
 
 /**
  * 우측 설정 패널
  *
  * 아코디언 UI로 섹션별 설정을 관리합니다:
- * - 헤더 설정: 제목, 설명, 로고, 브랜드명 표시
  * - 챗봇 설정: 채팅 영역 최소/최대 높이
  * - 테마 설정: 배경색, 주요색, 텍스트색, 폰트
  * - SEO 설정: 페이지 타이틀, 메타 설명, OG 이미지
  *
+ * NOTE: 프로필 헤더 설정은 블록 다이얼로그에서 관리합니다.
+ * 미리보기에서 프로필 카드를 더블클릭하여 설정할 수 있습니다.
+ *
  * 기본 상태:
- * - 헤더, 테마: 펼쳐진 상태 (자주 사용)
- * - 챗봇, SEO: 접힌 상태 (덜 자주 사용)
+ * - 챗봇, 테마: 펼쳐진 상태 (자주 사용)
+ * - SEO: 접힌 상태 (덜 자주 사용)
  */
 export function RightSettings() {
   const { mode } = useConsoleMode();
@@ -81,13 +78,7 @@ export function RightSettings() {
   }
 
   // 블록 관리 훅
-  const { blocks, addBlock, selectedBlockId, selectBlock, updateBlock } = useBlocks();
-
-  // 선택된 블록 찾기
-  const selectedBlock = useMemo(() => {
-    if (!selectedBlockId) return null;
-    return blocks.find((b) => b.id === selectedBlockId) ?? null;
-  }, [blocks, selectedBlockId]);
+  const { blocks, addBlock } = useBlocks();
 
   return (
     <aside className="flex w-80 flex-col overflow-hidden border-l border-border bg-card">
@@ -121,33 +112,19 @@ export function RightSettings() {
 
         {/* 블록 탭 */}
         <TabsContent value="blocks" className="flex-1 overflow-y-auto p-4 mt-0">
-          {/* 선택된 블록 설정 패널 */}
-          {selectedBlock && (
-            <>
-              <BlockSettingsPanel
-                selectedBlock={selectedBlock}
-                onUpdate={(updates: Partial<Block>) => {
-                  // Functional update를 사용하여 stale closure 문제 방지
-                  // 비동기 작업(이미지 업로드 등) 후에도 최신 블록 상태를 기반으로 업데이트
-                  updateBlock(selectedBlock.id, (currentBlock) => {
-                    // config가 있는 블록(HeaderBlock 등)의 경우 config를 병합
-                    if ('config' in updates && 'config' in currentBlock) {
-                      return {
-                        ...updates,
-                        config: {
-                          ...(currentBlock as { config: Record<string, unknown> }).config,
-                          ...(updates as { config: Record<string, unknown> }).config,
-                        },
-                      } as Partial<Block>;
-                    }
-                    return updates;
-                  });
-                }}
-                onClose={() => selectBlock(null)}
-              />
-              <Separator className="my-4" />
-            </>
-          )}
+          {/* 블록 설정 안내 메시지 */}
+          <div className="mb-4 flex items-start gap-3 rounded-lg bg-muted/50 p-3">
+            <MousePointerClick className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">
+                블록을 <span className="font-medium text-foreground">더블클릭</span>하거나{' '}
+                <span className="font-medium text-foreground">⚙️ 버튼</span>을 클릭하여 설정을 편집하세요.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                프로필 카드 영역을 클릭하면 프로필 설정을 편집할 수 있습니다.
+              </p>
+            </div>
+          </div>
 
           {/* 블록 팔레트 */}
           <BlockPalette blocks={blocks} onAddBlock={addBlock} />
@@ -157,22 +134,9 @@ export function RightSettings() {
         <TabsContent value="settings" className="flex-1 overflow-y-auto mt-0">
           <Accordion
             type="multiple"
-            defaultValue={['header', 'theme']}
+            defaultValue={['chatbot', 'theme']}
             className="p-4"
           >
-            {/* 헤더 설정 */}
-            <AccordionItem value="header" className="border-border">
-              <AccordionTrigger className="hover:no-underline">
-                <span className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  헤더 설정
-                </span>
-              </AccordionTrigger>
-              <AccordionContent>
-                <HeaderSettings />
-              </AccordionContent>
-            </AccordionItem>
-
             {/* 챗봇 설정 */}
             <AccordionItem value="chatbot" className="border-border">
               <AccordionTrigger className="hover:no-underline">

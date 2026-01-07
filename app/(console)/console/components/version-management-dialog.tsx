@@ -116,7 +116,7 @@ export function VersionManagementDialog({
       await revert();
       toast.success('되돌리기 완료', { description: '마지막 발행 버전으로 복원되었습니다.' });
       onClose();
-      window.location.reload();
+      // Note: window.location.reload() 제거 - useVersions의 revert()에서 Console 상태를 직접 동기화
     } catch (error) {
       toast.error('되돌리기 실패', {
         description: error instanceof Error ? error.message : '잠시 후 다시 시도해주세요.',
@@ -142,7 +142,7 @@ export function VersionManagementDialog({
         description: `버전 ${version.versionNumber}이 초안으로 복원되었습니다.`,
       });
       onClose();
-      window.location.reload();
+      // Note: window.location.reload() 제거 - useVersions의 rollback()에서 Console 상태를 직접 동기화
     } catch (error) {
       toast.error('롤백 실패', {
         description: error instanceof Error ? error.message : '잠시 후 다시 시도해주세요.',

@@ -19,13 +19,17 @@ import {
 } from './shared';
 
 export function SolidColorProfile({ config, theme }: HeaderProps) {
-  const { title, description, logoUrl, showBrandName } = config;
+  const { title, description, logoUrl, showBrandName, headerBackgroundColor } =
+    config;
   const { primaryColor } = theme;
+
+  // 헤더 전용 배경색 우선, 없으면 테마 primaryColor 사용
+  const backgroundColor = headerBackgroundColor || primaryColor;
 
   return (
     <header
       className="mb-8 flex flex-col items-center rounded-2xl p-8 text-center text-white"
-      style={{ backgroundColor: primaryColor }}
+      style={{ backgroundColor }}
     >
       <ProfileLogo
         logoUrl={logoUrl}

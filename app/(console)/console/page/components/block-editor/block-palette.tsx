@@ -14,10 +14,17 @@ import { PaletteItem } from './palette-item';
 import {
   BLOCK_METAS,
   BlockCategory,
+  BlockType,
   canAddBlock,
   type Block,
   type BlockTypeValue,
 } from '@/lib/public-page/block-types';
+
+/**
+ * 블록 팔레트에서 숨길 블록 타입
+ * - HEADER: 프로필은 고정 요소로 항상 표시되므로 추가 불필요
+ */
+const HIDDEN_BLOCK_TYPES: BlockTypeValue[] = [BlockType.HEADER];
 
 /**
  * 카테고리 표시 정보
@@ -41,11 +48,16 @@ interface BlockPaletteProps {
 }
 
 export function BlockPalette({ blocks, onAddBlock }: BlockPaletteProps) {
-  // 카테고리별로 블록 메타 그룹핑
+  // 카테고리별로 블록 메타 그룹핑 (숨길 블록 제외)
   const groupedMetas = useMemo(() => {
     const groups: Record<string, typeof BLOCK_METAS[BlockTypeValue][]> = {};
 
     Object.values(BLOCK_METAS).forEach((meta) => {
+      // 숨길 블록 타입은 팔레트에서 제외
+      if (HIDDEN_BLOCK_TYPES.includes(meta.type)) {
+        return;
+      }
+
       if (!groups[meta.category]) {
         groups[meta.category] = [];
       }

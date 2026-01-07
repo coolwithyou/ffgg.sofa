@@ -102,6 +102,7 @@ export interface WidgetChatResponse {
     content: string;
     score: number;
   }>;
+  pointsBalance?: number;
 }
 
 /**

@@ -28,6 +28,7 @@ export interface PublicPageChatResponse {
     documentId?: string;
     chunkId?: string;
   }>;
+  pointsBalance?: number;
   pointsWarning?: {
     code: 'POINTS_LOW_WARNING';
     remainingBalance: number;
@@ -113,7 +114,7 @@ export async function sendPublicPageMessage(
     });
 
     // 포인트 차감 (AI 응답 성공 후)
-    await usePoints({
+    const { newBalance } = await usePoints({
       tenantId,
       metadata: {
         chatbotId,
@@ -136,6 +137,7 @@ export async function sendPublicPageMessage(
       message: response.message,
       sessionId: response.sessionId,
       sources: mappedSources,
+      pointsBalance: newBalance,
     };
 
     if (pointValidation.errorCode === 'POINTS_LOW_WARNING') {

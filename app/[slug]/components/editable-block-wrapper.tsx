@@ -25,6 +25,13 @@ import { BLOCK_METAS, type Block } from '@/lib/public-page/block-types';
  */
 const LOW_HEIGHT_BLOCK_TYPES = ['divider'] as const;
 
+/**
+ * 툴바 위치 옵션
+ * - top: 블록 상단 바깥 (기본값)
+ * - bottom-inside: 블록 내부 하단 (프로필 헤더처럼 최상단 블록용)
+ */
+type ToolbarPosition = 'top' | 'bottom-inside';
+
 interface EditableBlockWrapperProps {
   block: Block;
   children: ReactNode;
@@ -42,6 +49,8 @@ interface EditableBlockWrapperProps {
   onMoveDown?: () => void;
   /** 설정 다이얼로그 열기 콜백 */
   onOpenSettings?: () => void;
+  /** 툴바 위치 (기본값: 'top') */
+  toolbarPosition?: ToolbarPosition;
 }
 
 export function EditableBlockWrapper({
@@ -56,6 +65,7 @@ export function EditableBlockWrapper({
   onMoveUp,
   onMoveDown,
   onOpenSettings,
+  toolbarPosition = 'top',
 }: EditableBlockWrapperProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -108,14 +118,17 @@ export function EditableBlockWrapper({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* 상단 편집 툴바 */}
+      {/* 편집 툴바 */}
       <div
         className={cn(
-          'absolute -top-10 left-0 right-0 z-10',
+          'absolute z-10',
           'flex items-center justify-between gap-2',
           'opacity-0 group-hover:opacity-100 transition-opacity duration-150',
           'pointer-events-none', // 빈 공간은 클릭 통과
-          isSelected && 'opacity-100'
+          isSelected && 'opacity-100',
+          // 툴바 위치: top (기본) vs bottom-inside
+          toolbarPosition === 'top' && '-top-10 left-0 right-0',
+          toolbarPosition === 'bottom-inside' && 'bottom-4 left-4 right-4'
         )}
       >
         {/* 좌측: 순서 컨트롤 (이동 기능이 있는 경우에만 표시) */}

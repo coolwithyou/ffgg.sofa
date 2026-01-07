@@ -16,6 +16,8 @@ interface DialogProps {
   children: ReactNode;
   /** 다이얼로그 최대 너비 */
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
+  /** 고정 높이 사용 여부 (true면 80vh 고정, 내부 스크롤) */
+  fixedHeight?: boolean;
 }
 
 const maxWidthClasses = {
@@ -36,6 +38,7 @@ export function Dialog({
   description,
   children,
   maxWidth = 'md',
+  fixedHeight = false,
 }: DialogProps) {
   // ESC 키로 닫기
   useEffect(() => {
@@ -74,7 +77,7 @@ export function Dialog({
 
       {/* 다이얼로그 */}
       <div
-        className={`relative z-10 w-full ${maxWidthClasses[maxWidth]} rounded-lg border border-border bg-card p-6 shadow-lg animate-in fade-in zoom-in-95`}
+        className={`relative z-10 w-full ${maxWidthClasses[maxWidth]} rounded-lg border border-border bg-card p-6 shadow-lg animate-in fade-in zoom-in-95 ${fixedHeight ? 'h-[80vh] flex flex-col' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="dialog-title"
@@ -108,7 +111,7 @@ export function Dialog({
         </div>
 
         {/* 컨텐츠 */}
-        <div className="mt-4">{children}</div>
+        <div className={`mt-4 ${fixedHeight ? 'flex-1 overflow-y-auto min-h-0' : ''}`}>{children}</div>
       </div>
     </div>
   );

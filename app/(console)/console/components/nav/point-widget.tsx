@@ -1,63 +1,59 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Link from 'next/link';
-import { Gem, AlertTriangle, TrendingUp } from 'lucide-react';
+import { Gem, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LOW_POINTS_THRESHOLD } from '@/lib/points/constants';
 import { Progress } from '@/components/ui/progress';
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
-
-interface PointsData {
-  balance: {
-    balance: number;
-    monthlyPointsBase: number;
-    isLow: boolean;
-  };
-  monthlyUsage: {
-    used: number;
-    transactionCount: number;
-  };
-}
+import { usePointsStore } from '@/lib/stores/points-store';
 
 /**
  * 사이드바 포인트 현황 위젯
  *
+ * - Zustand 스토어를 통한 전역 상태 관리
+ * - 실시간 포인트 업데이트 지원
  * - 현재 포인트 잔액 표시
  * - 이번 달 사용량 프로그레스 바
  * - 포인트 부족 시 경고 스타일
  * - 클릭 시 구독 관리 페이지로 이동
  */
 export function PointWidget() {
-  const [data, setData] = useState<PointsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const {
+    balance,
+    monthlyPointsBase,
+    monthlyUsed,
+    isLow,
+    isLoading,
+    error,
+    fetchPoints,
+  } = usePointsStore();
 
   useEffect(() => {
-    async function fetchPoints() {
-      try {
-        const res = await fetch('/api/points');
-        if (!res.ok) throw new Error('Failed to fetch');
-        const json = await res.json();
-        setData(json);
-        setError(false);
-      } catch {
-        setError(true);
-      } finally {
-        setLoading(false);
-      }
-    }
-
+    // 초기 로드
     fetchPoints();
 
-    // 5분마다 갱신
+    // 5분마다 갱신 (백업용 폴링)
     const interval = setInterval(fetchPoints, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
+
+    // 탭 포커스 시 즉시 갱신
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchPoints();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchPoints]);
 
   // 로딩 상태
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="px-3 py-2">
         <Skeleton className="h-16 w-full rounded-lg" />
@@ -65,19 +61,16 @@ export function PointWidget() {
     );
   }
 
-  // 에러 상태
-  if (error || !data) {
-    return null; // 에러 시 위젯 숨김
+  // 에러 상태 또는 데이터 없음
+  if (error || balance === null) {
+    return null;
   }
-
-  const { balance, monthlyUsage } = data;
-  const isLow = balance.balance <= LOW_POINTS_THRESHOLD;
 
   // 월간 사용률 계산 (월간 기본 포인트 대비)
   // Free 플랜(monthlyPointsBase = 0)은 체험 포인트 500 기준
-  const basePoints = balance.monthlyPointsBase || 500;
+  const basePoints = monthlyPointsBase || 500;
   const usagePercent = Math.min(
-    Math.round((monthlyUsage.used / basePoints) * 100),
+    Math.round((monthlyUsed / basePoints) * 100),
     100
   );
 
@@ -107,7 +100,7 @@ export function PointWidget() {
                 isLow ? 'text-destructive' : 'text-foreground'
               )}
             >
-              {balance.balance.toLocaleString()}
+              {balance.toLocaleString()}
               <span className="ml-0.5 text-sm font-medium">P</span>
             </span>
           </div>
@@ -129,7 +122,7 @@ export function PointWidget() {
 
         {/* 하단: 사용량 텍스트 */}
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>이번 달 {monthlyUsage.used.toLocaleString()}P 사용</span>
+          <span>이번 달 {monthlyUsed.toLocaleString()}P 사용</span>
           <span>{usagePercent}%</span>
         </div>
       </Link>
@@ -141,30 +134,21 @@ export function PointWidget() {
  * 축소된 사이드바용 포인트 아이콘
  *
  * SidebarMenuButton 스타일과 일관성 유지
+ * Zustand 스토어 공유로 실시간 동기화
  */
 export function PointWidgetCollapsed() {
-  const [balance, setBalance] = useState<number | null>(null);
-  const [isLow, setIsLow] = useState(false);
+  const { balance, isLow, isLoading, error, fetchPoints } = usePointsStore();
 
   useEffect(() => {
-    async function fetchPoints() {
-      try {
-        const res = await fetch('/api/points');
-        if (!res.ok) throw new Error('Failed to fetch');
-        const json: PointsData = await res.json();
-        setBalance(json.balance.balance);
-        setIsLow(json.balance.balance <= LOW_POINTS_THRESHOLD);
-      } catch {
-        // 에러 시 무시
-      }
+    // 스토어가 아직 로드되지 않았다면 로드
+    if (balance === null && !isLoading && !error) {
+      fetchPoints();
     }
+  }, [balance, isLoading, error, fetchPoints]);
 
-    fetchPoints();
-    const interval = setInterval(fetchPoints, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  if (balance === null) return null;
+  if (isLoading || error || balance === null) {
+    return null;
+  }
 
   return (
     <SidebarMenu>

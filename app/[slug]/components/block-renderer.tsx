@@ -32,6 +32,7 @@ import { OperatingHoursBlock } from './operating-hours-block';
 import {
   BlockType,
   type Block,
+  type HeaderBlock as HeaderBlockType,
   type LinkBlock as LinkBlockType,
   type TextBlock as TextBlockType,
   type DividerBlock as DividerBlockType,
@@ -86,16 +87,15 @@ export function BlockRenderer({
   const { header, theme, chatbot } = config;
 
   switch (block.type) {
-    case BlockType.HEADER:
-      return (
-        <HeaderBlock
-          title={header.title || chatbotName}
-          description={header.description}
-          logoUrl={header.logoUrl}
-          showBrandName={header.showBrandName}
-          primaryColor={theme.primaryColor}
-        />
-      );
+    case BlockType.HEADER: {
+      const headerBlock = block as HeaderBlockType;
+      // 블록 config 사용, title 없으면 chatbotName 폴백
+      const headerConfig = {
+        ...headerBlock.config,
+        title: headerBlock.config.title || chatbotName,
+      };
+      return <HeaderBlock config={headerConfig} theme={theme} />;
+    }
 
     case BlockType.CHATBOT:
       return (

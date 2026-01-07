@@ -155,7 +155,7 @@ export async function sendWidgetMessage(
     });
 
     // 포인트 차감
-    await usePoints({
+    const { newBalance } = await usePoints({
       tenantId,
       metadata: {
         chatbotId,
@@ -168,6 +168,7 @@ export async function sendWidgetMessage(
       message: response.message,
       sessionId: response.sessionId,
       sources: response.sources,
+      pointsBalance: newBalance,
     };
   } catch (error) {
     // 이미 구조화된 에러면 그대로 전달

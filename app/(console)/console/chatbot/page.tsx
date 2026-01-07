@@ -31,11 +31,6 @@ export default function KnowledgePage() {
   const [activeTab, setActiveTab] = useState<TabType>('documents');
   const [isLoading, setIsLoading] = useState(true);
 
-  // 챗봇 없음 상태 (로딩 전 조기 체크)
-  if (!currentChatbot) {
-    return <NoChatbotState />;
-  }
-
   // Documents tab data
   const [documentsData, setDocumentsData] = useState<GetDocumentsResult | null>(null);
 
@@ -86,6 +81,11 @@ export default function KnowledgePage() {
       console.error('Failed to refresh knowledge data:', error);
     }
   };
+
+  // 챗봇 없음 상태 (모든 훅 호출 후 체크)
+  if (!currentChatbot) {
+    return <NoChatbotState />;
+  }
 
   if (isLoading) {
     return (

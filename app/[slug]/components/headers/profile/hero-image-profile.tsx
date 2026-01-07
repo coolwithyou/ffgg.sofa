@@ -34,9 +34,11 @@ export function HeroImageProfile({ config, theme }: HeaderProps) {
   // heroImageUrl 우선, 없으면 theme.backgroundImage 사용
   const bgImage = heroImageUrl || backgroundImage;
 
+  // 카드 상단에 fixed로 배치되므로 둥근 모서리 불필요
+  // 부모 카드의 overflow: hidden과 border-radius가 적용됨
   return (
     <header
-      className="relative mb-8 overflow-hidden rounded-2xl"
+      className="relative mb-4 overflow-hidden"
       style={{ minHeight: heroMinHeight }}
     >
       {/* 배경 이미지 */}

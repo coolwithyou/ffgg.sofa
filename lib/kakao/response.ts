@@ -83,13 +83,14 @@ export function createTextCardResponse(
  * 에러 응답 생성
  */
 export function createErrorResponse(
-  errorType: 'timeout' | 'not_found' | 'invalid_request' | 'internal_error'
+  errorType: 'timeout' | 'not_found' | 'invalid_request' | 'internal_error' | 'insufficient_points'
 ): KakaoSkillResponse {
   const messages: Record<typeof errorType, string> = {
     timeout: '잠시 후 다시 시도해 주세요. 답변을 준비 중입니다.',
     not_found: '설정된 챗봇을 찾을 수 없습니다. 관리자에게 문의해 주세요.',
     invalid_request: '올바르지 않은 요청입니다.',
     internal_error: '죄송합니다. 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+    insufficient_points: '서비스 이용이 일시적으로 제한되었습니다. 관리자에게 문의해 주세요.',
   };
 
   return createSimpleTextResponse(messages[errorType]);

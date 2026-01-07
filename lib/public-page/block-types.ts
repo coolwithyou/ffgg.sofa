@@ -102,6 +102,10 @@ export interface HeaderBlock extends BaseBlock {
     /** 프로필 테마 (기본값: 'classic') */
     profileTheme?: ProfileThemeType;
 
+    // Solid Color 테마 전용 옵션
+    /** 헤더 배경색 (솔리드 컬러 테마용, 없으면 theme.primaryColor 사용) */
+    headerBackgroundColor?: string;
+
     // Hero Image 테마 전용 옵션
     /** 배경 이미지 URL (히어로 이미지 테마용) */
     heroImageUrl?: string;

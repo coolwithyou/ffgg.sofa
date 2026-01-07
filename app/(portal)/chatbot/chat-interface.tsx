@@ -8,6 +8,7 @@
 import { useState, useRef, useEffect, useTransition } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { sendTestMessage, type ChatMessage } from './actions';
+import { usePointsStore } from '@/lib/stores/points-store';
 
 interface ChatInterfaceProps {
   chatbotId: string;
@@ -21,6 +22,9 @@ export function ChatInterface({ chatbotId, chatbotName }: ChatInterfaceProps) {
   const [sessionId] = useState(() => crypto.randomUUID());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // 포인트 스토어 연동 (실시간 동기화)
+  const { syncFromServer, decrementPoints } = usePointsStore();
 
   // 자동 스크롤
   useEffect(() => {
@@ -47,11 +51,19 @@ export function ChatInterface({ chatbotId, chatbotName }: ChatInterfaceProps) {
     const currentInput = input;
     setInput('');
 
+    // 낙관적 업데이트: 메시지 전송 전 포인트 미리 차감 (UI 즉시 반영)
+    decrementPoints(1);
+
     startTransition(async () => {
       const result = await sendTestMessage(currentInput, sessionId, chatbotId);
 
       if (result.success && result.message) {
         setMessages((prev) => [...prev, result.message!]);
+
+        // 서버 응답의 정확한 잔액으로 동기화
+        if (result.pointsBalance !== undefined) {
+          syncFromServer(result.pointsBalance);
+        }
       } else {
         // 에러 메시지 추가
         setMessages((prev) => [
@@ -63,6 +75,11 @@ export function ChatInterface({ chatbotId, chatbotName }: ChatInterfaceProps) {
             createdAt: new Date().toISOString(),
           },
         ]);
+
+        // 실패 시에도 서버 잔액으로 동기화 (포인트 부족 등)
+        if (result.pointsBalance !== undefined) {
+          syncFromServer(result.pointsBalance);
+        }
       }
     });
   };
