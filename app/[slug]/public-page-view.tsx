@@ -297,7 +297,7 @@ export function PublicPageView({
                   // onDelete 미전달로 삭제 버튼 비활성화
                   // onMoveUp, onMoveDown 미전달로 이동 버튼 비활성화
                   onOpenSettings={() => onOpenBlockSettings?.(headerBlock.id)}
-                  toolbarPosition="bottom-inside"
+                  toolbarPosition="top-inside"
                 >
                   <BlockRenderer
                     block={headerBlock}

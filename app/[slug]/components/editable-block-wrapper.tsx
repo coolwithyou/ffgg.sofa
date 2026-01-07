@@ -28,9 +28,10 @@ const LOW_HEIGHT_BLOCK_TYPES = ['divider'] as const;
 /**
  * 툴바 위치 옵션
  * - top: 블록 상단 바깥 (기본값)
- * - bottom-inside: 블록 내부 하단 (프로필 헤더처럼 최상단 블록용)
+ * - top-inside: 블록 내부 상단 (프로필 헤더처럼 최상단 블록용)
+ * - bottom-inside: 블록 내부 하단
  */
-type ToolbarPosition = 'top' | 'bottom-inside';
+type ToolbarPosition = 'top' | 'top-inside' | 'bottom-inside';
 
 interface EditableBlockWrapperProps {
   block: Block;
@@ -126,8 +127,9 @@ export function EditableBlockWrapper({
           'opacity-0 group-hover:opacity-100 transition-opacity duration-150',
           'pointer-events-none', // 빈 공간은 클릭 통과
           isSelected && 'opacity-100',
-          // 툴바 위치: top (기본) vs bottom-inside
+          // 툴바 위치: top (기본), top-inside, bottom-inside
           toolbarPosition === 'top' && '-top-10 left-0 right-0',
+          toolbarPosition === 'top-inside' && 'top-4 left-4 right-4',
           toolbarPosition === 'bottom-inside' && 'bottom-4 left-4 right-4'
         )}
       >
