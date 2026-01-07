@@ -73,6 +73,7 @@ export interface ConsoleActions {
   selectChatbotById: (id: string) => void;
   navigateChatbot: (direction: 'prev' | 'next') => void;
   // 테넌트 설정 액션
+  refreshTier: () => Promise<void>;
   isAdvancedModeEnabled: () => boolean;
   canEnableAdvancedMode: () => boolean;
   setAdvancedMode: (enabled: boolean) => Promise<void>;

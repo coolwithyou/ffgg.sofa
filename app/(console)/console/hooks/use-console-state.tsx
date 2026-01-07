@@ -172,6 +172,11 @@ export function ConsoleProvider({
     loadTenantSettings();
   }, [loadTenantSettings]);
 
+  // 외부에서 tier 갱신용 (구독 변경 후 호출)
+  const refreshTier = useCallback(async () => {
+    await loadTenantSettings();
+  }, [loadTenantSettings]);
+
   // 고급 모드 활성화 여부 확인
   const isAdvancedModeEnabled = useCallback(() => {
     return tenantSettings.advancedDatasetMode === true;
@@ -377,6 +382,7 @@ export function ConsoleProvider({
       selectChatbotById,
       navigateChatbot,
       // 테넌트 설정 액션
+      refreshTier,
       isAdvancedModeEnabled,
       canEnableAdvancedMode,
       setAdvancedMode,
@@ -421,6 +427,7 @@ export function ConsoleProvider({
       selectChatbot,
       selectChatbotById,
       navigateChatbot,
+      refreshTier,
       isAdvancedModeEnabled,
       canEnableAdvancedMode,
       setAdvancedMode,
@@ -527,6 +534,7 @@ export function useTenantSettings() {
     tier,
     tenantSettings,
     isTenantLoading,
+    refreshTier,
     isAdvancedModeEnabled,
     canEnableAdvancedMode,
     setAdvancedMode,
@@ -535,6 +543,7 @@ export function useTenantSettings() {
     tier,
     tenantSettings,
     isTenantLoading,
+    refreshTier,
     isAdvancedModeEnabled,
     canEnableAdvancedMode,
     setAdvancedMode,

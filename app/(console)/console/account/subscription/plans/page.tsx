@@ -9,7 +9,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import PortOne from '@portone/browser-sdk/v2';
-import { Check, Sparkles, AlertCircle, Loader2, Crown } from 'lucide-react';
+import { Check, Sparkles, AlertCircle, Loader2, Crown, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Card,
@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useTenantSettings } from '@/app/(console)/console/hooks/use-console-state';
 
 interface Plan {
   id: string;
@@ -66,6 +67,7 @@ const RECOMMENDED_PLAN_ID = 'standard';
 
 export default function PlansPage() {
   const router = useRouter();
+  const { refreshTier } = useTenantSettings();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [currentSubscription, setCurrentSubscription] = useState<CurrentSubscription | null>(null);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
@@ -73,6 +75,7 @@ export default function PlansPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingPlanId, setProcessingPlanId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isTestMode, setIsTestMode] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -83,9 +86,10 @@ export default function PlansPage() {
       setIsLoading(true);
       setError(null);
 
-      const [plansRes, subscriptionRes] = await Promise.all([
+      const [plansRes, subscriptionRes, prepareRes] = await Promise.all([
         fetch('/api/billing/plans'),
         fetch('/api/billing/subscription'),
+        fetch('/api/billing/billing-key/prepare', { method: 'POST' }),
       ]);
 
       if (plansRes.ok) {
@@ -99,6 +103,12 @@ export default function PlansPage() {
         if (subData.subscription?.billingCycle) {
           setBillingCycle(subData.subscription.billingCycle);
         }
+      }
+
+      // 테스트 모드 여부 확인
+      if (prepareRes.ok) {
+        const prepareData = await prepareRes.json();
+        setIsTestMode(prepareData.isTestMode || false);
       }
     } catch {
       setError('데이터를 불러오는데 실패했습니다');
@@ -166,6 +176,8 @@ export default function PlansPage() {
           throw new Error(data.error || '플랜 변경에 실패했습니다');
         }
 
+        // 클라이언트 tier 상태 갱신
+        await refreshTier();
         router.push('/console/account/subscription');
         return;
       }
@@ -181,36 +193,48 @@ export default function PlansPage() {
 
       const prepareData = await prepareRes.json();
 
-      // 모바일 리다이렉션을 위해 플랜 정보 저장
-      sessionStorage.setItem(
-        SESSION_STORAGE_KEY,
-        JSON.stringify({ planId, billingCycle })
-      );
+      let billingKeyToSave: string;
 
-      // PortOne 빌링키 발급 창 호출
-      const response = await PortOne.requestIssueBillingKey({
-        storeId: prepareData.storeId,
-        channelKey: prepareData.channelKey,
-        billingKeyMethod: 'CARD',
-        customer: {
-          customerId: prepareData.customerId,
-          fullName: prepareData.customerName,
-          email: prepareData.customerEmail,
-        },
-        windowType: {
-          pc: 'IFRAME',
-          mobile: 'REDIRECTION',
-        },
-        redirectUrl: `${window.location.origin}/console/account/subscription/callback`,
-      });
+      // 테스트 모드: 포트원 팝업 없이 가상 빌링키로 진행
+      if (prepareData.isTestMode) {
+        console.log('[DEV TEST MODE] 포트원 SDK 호출 건너뜀, 가상 빌링키 생성');
+        billingKeyToSave = `test_bk_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      } else {
+        // 프로덕션: 포트원 빌링키 발급 진행
 
-      // 결과 처리 (PC IFRAME 방식)
-      if (response?.code) {
-        throw new Error(response.message || '빌링키 발급에 실패했습니다');
-      }
+        // 모바일 리다이렉션을 위해 플랜 정보 저장
+        sessionStorage.setItem(
+          SESSION_STORAGE_KEY,
+          JSON.stringify({ planId, billingCycle })
+        );
 
-      if (!response?.billingKey) {
-        throw new Error('빌링키를 받지 못했습니다');
+        // PortOne 빌링키 발급 창 호출
+        const response = await PortOne.requestIssueBillingKey({
+          storeId: prepareData.storeId,
+          channelKey: prepareData.channelKey,
+          billingKeyMethod: 'CARD',
+          customer: {
+            customerId: prepareData.customer.customerId,
+            fullName: prepareData.customer.customerName,
+            email: prepareData.customer.customerEmail,
+          },
+          windowType: {
+            pc: 'IFRAME',
+            mobile: 'REDIRECTION',
+          },
+          redirectUrl: `${window.location.origin}/console/account/subscription/callback`,
+        });
+
+        // 결과 처리 (PC IFRAME 방식)
+        if (response?.code) {
+          throw new Error(response.message || '빌링키 발급에 실패했습니다');
+        }
+
+        if (!response?.billingKey) {
+          throw new Error('빌링키를 받지 못했습니다');
+        }
+
+        billingKeyToSave = response.billingKey;
       }
 
       // 빌링키 저장 및 구독 시작
@@ -218,7 +242,7 @@ export default function PlansPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          billingKey: response.billingKey,
+          billingKey: billingKeyToSave,
           planId,
           billingCycle,
         }),
@@ -229,8 +253,9 @@ export default function PlansPage() {
         throw new Error(data.error || '구독 시작에 실패했습니다');
       }
 
-      // 성공 시 sessionStorage 정리 후 구독 페이지로 이동
+      // 성공 시 sessionStorage 정리 후 클라이언트 상태 갱신
       sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      await refreshTier();
       router.push('/console/account/subscription');
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다');
@@ -259,6 +284,19 @@ export default function PlansPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
+      {/* 테스트 모드 배너 */}
+      {isTestMode && (
+        <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
+          <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            <span className="font-medium">개발자 테스트 모드</span>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            실제 결제가 발생하지 않습니다. 포트원 연동 없이 가상 결제로 처리됩니다.
+          </p>
+        </div>
+      )}
+
       {/* 헤더 */}
       <div className="text-center">
         <h2 className="text-2xl font-bold text-foreground">플랜 선택</h2>
