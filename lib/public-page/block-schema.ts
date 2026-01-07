@@ -45,6 +45,38 @@ const baseBlockFields = {
 };
 
 /**
+ * 헤더 템플릿 타입 스키마
+ */
+export const headerTemplateSchema = z.enum([
+  'profile',
+  'floating-glass',
+  'minimal-sticky',
+  'pill-nav',
+]);
+
+/**
+ * 프로필 테마 타입 스키마
+ */
+export const profileThemeSchema = z.enum(['classic', 'solid-color', 'hero-image']);
+
+/**
+ * 네비게이션 링크 스키마
+ */
+export const navLinkSchema = z.object({
+  label: z.string(),
+  href: z.string(),
+});
+
+/**
+ * CTA 버튼 스키마
+ */
+export const ctaButtonSchema = z.object({
+  label: z.string(),
+  href: z.string(),
+  variant: z.enum(['primary', 'secondary', 'ghost']).optional(),
+});
+
+/**
  * 헤더 블록 스키마
  */
 export const headerBlockSchema = z.object({
@@ -55,6 +87,17 @@ export const headerBlockSchema = z.object({
     description: z.string(),
     logoUrl: z.string().optional(),
     showBrandName: z.boolean(),
+    // 템플릿 및 테마 설정
+    template: headerTemplateSchema.optional(),
+    profileTheme: profileThemeSchema.optional(),
+    // 프로필 배경 설정
+    headerBackgroundColor: z.string().optional(),
+    heroImageUrl: z.string().optional(),
+    heroOverlayOpacity: z.number().min(0).max(100).optional(),
+    heroMinHeight: z.string().optional(),
+    // 네비게이션 설정 (웹사이트 스타일 템플릿용)
+    navLinks: z.array(navLinkSchema).optional(),
+    ctaButton: ctaButtonSchema.optional(),
   }),
 });
 
