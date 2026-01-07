@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useVersions, type HistoryVersion, type PublishedVersion } from '../hooks/use-versions';
 import { useAutoSaveContext } from '../hooks/use-auto-save';
+import { useCurrentChatbot } from '../hooks/use-console-state';
 import { toast } from 'sonner';
-import { Dialog } from '@/components/ui/dialog';
+import { SimpleDialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,6 +21,8 @@ import {
   FileText,
   Calendar,
   History,
+  Globe,
+  Settings,
 } from 'lucide-react';
 
 interface VersionManagementDialogProps {
@@ -53,8 +57,15 @@ export function VersionManagementDialog({
     revert,
     rollback,
   } = useVersions();
+  const { currentChatbot } = useCurrentChatbot();
   const { saveStatus, saveNow } = useAutoSaveContext();
   const { confirm } = useAlertDialog();
+
+  // 공개 페이지 활성화 여부 확인
+  const isWidgetMode = mode === 'widget';
+  const isPublishEnabled = isWidgetMode
+    ? currentChatbot?.widgetEnabled
+    : currentChatbot?.publicPageEnabled && currentChatbot?.slug;
 
   const [publishNote, setPublishNote] = useState('');
   const [selectedVersion, setSelectedVersion] = useState<SelectedVersion>({
@@ -155,7 +166,7 @@ export function VersionManagementDialog({
   const modeLabel = mode === 'widget' ? '위젯' : '공개 페이지';
 
   return (
-    <Dialog
+    <SimpleDialog
       isOpen={isOpen}
       onClose={handleDialogClose}
       title="버전 관리"
@@ -267,6 +278,8 @@ export function VersionManagementDialog({
                 hasChanges={hasChanges}
                 publishNote={publishNote}
                 onPublishNoteChange={setPublishNote}
+                isPublishEnabled={!!isPublishEnabled}
+                isWidgetMode={isWidgetMode}
               />
             )}
 
@@ -300,7 +313,7 @@ export function VersionManagementDialog({
               닫기
             </Button>
 
-            {selectedVersion.type === 'draft' && hasChanges && (
+            {selectedVersion.type === 'draft' && hasChanges && isPublishEnabled && (
               <Button
                 onClick={handlePublish}
                 disabled={isPublishing || saveStatus === 'saving'}
@@ -321,7 +334,7 @@ export function VersionManagementDialog({
           </div>
         </div>
       </div>
-    </Dialog>
+    </SimpleDialog>
   );
 }
 
@@ -330,11 +343,18 @@ function DraftDetail({
   hasChanges,
   publishNote,
   onPublishNoteChange,
+  isPublishEnabled,
+  isWidgetMode,
 }: {
   hasChanges: boolean;
   publishNote: string;
   onPublishNoteChange: (note: string) => void;
+  isPublishEnabled: boolean;
+  isWidgetMode: boolean;
 }) {
+  const targetLabel = isWidgetMode ? '위젯' : '공개 페이지';
+  const settingsPath = '/console/chatbot/settings';
+
   return (
     <div className="space-y-4">
       <div>
@@ -344,7 +364,37 @@ function DraftDetail({
         </p>
       </div>
 
-      {hasChanges ? (
+      {/* 공개 페이지/위젯 비활성화 경고 */}
+      {!isPublishEnabled && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+          <div className="flex items-start gap-3">
+            <Globe className="mt-0.5 h-5 w-5 text-destructive" />
+            <div className="flex-1">
+              <p className="font-medium text-foreground">
+                {targetLabel}가 비활성화되어 있습니다
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                발행하려면 먼저 {targetLabel}를 활성화해야 합니다.
+                {!isWidgetMode && ' 일반 설정에서 공개 페이지를 활성화하세요.'}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                asChild
+              >
+                <Link href={settingsPath}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  일반 설정으로 이동
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 발행 가능한 상태 */}
+      {isPublishEnabled && hasChanges && (
         <>
           <div className="flex items-center gap-2 rounded-lg bg-yellow-500/10 p-3">
             <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
@@ -372,7 +422,10 @@ function DraftDetail({
             </p>
           </div>
         </>
-      ) : (
+      )}
+
+      {/* 최신 상태 (발행 활성화 + 변경사항 없음) */}
+      {isPublishEnabled && !hasChanges && (
         <div className="flex items-center gap-2 rounded-lg bg-green-500/10 p-3">
           <CheckCircle2 className="h-5 w-5 text-green-500" />
           <div>

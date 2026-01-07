@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useTransition, useCallback } from 'react';
-import { Dialog } from '@/components/ui/dialog';
+import { SimpleDialog } from '@/components/ui/dialog';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
 import { useToast } from '@/components/ui/toast';
 import type { ChunkReviewItem, ChunkStatus } from '@/lib/review/types';
@@ -239,7 +239,7 @@ export function ChunkDetailDialog({
     : '청크 상세';
 
   return (
-    <Dialog
+    <SimpleDialog
       isOpen={isOpen}
       onClose={onClose}
       title={dialogTitle}
@@ -401,7 +401,7 @@ export function ChunkDetailDialog({
           </div>
         )}
       </div>
-    </Dialog>
+    </SimpleDialog>
   );
 }
 

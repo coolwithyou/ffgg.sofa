@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { Dialog } from '@/components/ui/dialog';
+import { SimpleDialog } from '@/components/ui/dialog';
 import { createChatbot } from './actions';
 
 export function CreateChatbot() {
@@ -59,7 +59,7 @@ export function CreateChatbot() {
         새 챗봇
       </button>
 
-      <Dialog
+      <SimpleDialog
         isOpen={isOpen}
         onClose={handleClose}
         title="새 챗봇 생성"
@@ -129,7 +129,7 @@ export function CreateChatbot() {
             </button>
           </div>
         </form>
-      </Dialog>
+      </SimpleDialog>
     </>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Dialog } from '@/components/ui/dialog';
+import { SimpleDialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
@@ -119,7 +119,7 @@ export function SofaChatWidget() {
   };
 
   return (
-    <Dialog
+    <SimpleDialog
       isOpen={open}
       onClose={() => onOpenChange(false)}
       title="임베드 코드"
@@ -194,7 +194,7 @@ export function SofaChatWidget() {
             <WarningNote />
           </TabsContent>
       </Tabs>
-    </Dialog>
+    </SimpleDialog>
   );
 }
 

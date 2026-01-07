@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from 'react';
 import { Plus, Loader2, AlertTriangle } from 'lucide-react';
-import { Dialog } from '@/components/ui/dialog';
+import { SimpleDialog } from '@/components/ui/dialog';
 import { createChatbot } from '@/app/(portal)/chatbots/actions';
 import { useConsole } from '../hooks/use-console-state';
 import { TIER_LIMITS, TIER_NAMES, type Tier } from '@/lib/tier/constants';
@@ -81,7 +81,7 @@ export function CreateChatbotDialog({
   };
 
   return (
-    <Dialog isOpen={isOpen} onClose={handleClose} title="새 챗봇 생성">
+    <SimpleDialog isOpen={isOpen} onClose={handleClose} title="새 챗봇 생성">
       {isLimitReached ? (
         // 티어 제한 도달 시 안내
         <div className="space-y-4">
@@ -186,6 +186,6 @@ export function CreateChatbotDialog({
           </div>
         </form>
       )}
-    </Dialog>
+    </SimpleDialog>
   );
 }

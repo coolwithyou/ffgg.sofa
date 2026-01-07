@@ -316,6 +316,47 @@ export default function AISettingsPage() {
     }
   };
 
+  // 페르소나만 자동 생성 (RAG 인덱스는 업데이트하지 않음, 이름은 기존 값 유지)
+  const handleGeneratePersonaOnly = async () => {
+    if (!currentChatbot?.id) return;
+    setIsGenerating(true);
+
+    try {
+      const response = await fetch(
+        `/api/chatbots/${currentChatbot.id}/generate-persona`,
+        {
+          method: 'POST',
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '페르소나 생성에 실패했습니다');
+      }
+
+      const data = await response.json();
+
+      // 페르소나 필드만 업데이트 (이름은 기존 값 유지, RAG 인덱스는 무시)
+      if (data.persona) {
+        setPersonaConfig({
+          name: personaConfig.name, // 기존 이름 유지
+          expertiseArea: data.persona.expertiseArea ?? '',
+          expertiseDescription: data.persona.expertiseDescription ?? '',
+          tone: data.persona.tone ?? 'friendly',
+        });
+      }
+
+      toast.success('페르소나가 자동 생성되었습니다');
+    } catch (error) {
+      console.error('페르소나 생성 오류:', error);
+      toast.error(
+        error instanceof Error ? error.message : '페르소나 생성에 실패했습니다'
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   // 챗봇 없음 상태
   if (!currentChatbot) {
     return <NoChatbotState />;
@@ -364,40 +405,6 @@ export default function AISettingsPage() {
                   데이터셋 관리로 이동
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        ) : needsPersonaUpdate() && ragStatus !== 'generating' ? (
-          <Card size="md" className="border-primary/30 bg-primary/5">
-            <CardContent className="flex items-start gap-4 pt-6">
-              <RefreshCw className="h-5 w-5 shrink-0 text-primary" />
-              <div className="flex-1">
-                <p className="font-medium text-foreground">
-                  데이터셋이 업데이트되었습니다
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {datasets.length}개의 데이터셋에 총 {totalChunks.toLocaleString()}개의 청크가 있습니다.
-                  페르소나를 다시 생성하면 최신 데이터를 반영할 수 있습니다.
-                </p>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="mt-3"
-                  onClick={handleGeneratePersona}
-                  disabled={isGenerating || !hasContent}
-                >
-                  {isGenerating ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="mr-2 h-4 w-4" />
-                  )}
-                  페르소나 다시 생성
-                </Button>
-              </div>
-              {ragIndexConfig.lastGeneratedAt && (
-                <p className="text-xs text-muted-foreground">
-                  마지막 생성: {new Date(ragIndexConfig.lastGeneratedAt).toLocaleDateString('ko-KR')}
-                </p>
-              )}
             </CardContent>
           </Card>
         ) : null}
@@ -539,9 +546,24 @@ export default function AISettingsPage() {
         {/* 페르소나 설정 카드 - 사용자 편집 가능 */}
         <Card size="md">
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-muted-foreground" />
-              <CardTitle>페르소나 설정</CardTitle>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-muted-foreground" />
+                <CardTitle>페르소나 설정</CardTitle>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGeneratePersonaOnly}
+                disabled={isGenerating || !hasContent}
+              >
+                {isGenerating ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 h-4 w-4" />
+                )}
+                자동 생성
+              </Button>
             </div>
             <CardDescription>
               챗봇의 성격과 응답 스타일을 설정합니다. 자유롭게 수정할 수 있습니다.

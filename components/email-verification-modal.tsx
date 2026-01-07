@@ -19,7 +19,7 @@
  */
 
 import { useState, useCallback, createContext, useContext, ReactNode } from 'react';
-import { Dialog } from '@/components/ui/dialog';
+import { SimpleDialog } from '@/components/ui/dialog';
 import { Mail, CheckCircle, RefreshCw, AlertCircle } from 'lucide-react';
 
 interface EmailVerificationContextType {
@@ -148,7 +148,7 @@ export function EmailVerificationProvider({
     >
       {children}
 
-      <Dialog
+      <SimpleDialog
         isOpen={isModalOpen}
         onClose={handleClose}
         title="이메일 인증이 필요합니다"
@@ -254,7 +254,7 @@ export function EmailVerificationProvider({
             </button>
           </div>
         </div>
-      </Dialog>
+      </SimpleDialog>
     </EmailVerificationContext.Provider>
   );
 }
