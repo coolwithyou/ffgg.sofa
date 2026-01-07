@@ -18,6 +18,10 @@ interface DialogProps {
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
   /** 고정 높이 사용 여부 (true면 80vh 고정, 내부 스크롤) */
   fixedHeight?: boolean;
+  /** 다이얼로그 위치: center(기본), bottom(하단에 위치하여 상단 콘텐츠 보기 가능) */
+  position?: 'center' | 'bottom';
+  /** 다이얼로그 최대 높이 (position='bottom'일 때 유용) */
+  maxHeight?: string;
 }
 
 const maxWidthClasses = {
@@ -39,6 +43,8 @@ export function Dialog({
   children,
   maxWidth = 'md',
   fixedHeight = false,
+  position = 'center',
+  maxHeight,
 }: DialogProps) {
   // ESC 키로 닫기
   useEffect(() => {
@@ -66,8 +72,21 @@ export function Dialog({
 
   if (!isOpen) return null;
 
+  // 위치에 따른 컨테이너 클래스
+  const positionClasses = {
+    center: 'items-center justify-center',
+    bottom: 'items-end justify-center pb-4',
+  };
+
+  // 높이 스타일 결정
+  const getHeightStyle = () => {
+    if (maxHeight) return { maxHeight };
+    if (fixedHeight) return { height: '80vh' };
+    return {};
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className={`fixed inset-0 z-50 flex ${positionClasses[position]}`}>
       {/* 백드롭 */}
       <div
         className="absolute inset-0 bg-black/50"
@@ -77,7 +96,8 @@ export function Dialog({
 
       {/* 다이얼로그 */}
       <div
-        className={`relative z-10 w-full ${maxWidthClasses[maxWidth]} rounded-lg border border-border bg-card p-6 shadow-lg animate-in fade-in zoom-in-95 ${fixedHeight ? 'h-[80vh] flex flex-col' : ''}`}
+        className={`relative z-10 w-full ${maxWidthClasses[maxWidth]} rounded-lg border border-border bg-card p-6 shadow-lg animate-in fade-in zoom-in-95 ${fixedHeight || maxHeight ? 'flex flex-col' : ''}`}
+        style={getHeightStyle()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="dialog-title"
@@ -111,7 +131,7 @@ export function Dialog({
         </div>
 
         {/* 컨텐츠 */}
-        <div className={`mt-4 ${fixedHeight ? 'flex-1 overflow-y-auto min-h-0' : ''}`}>{children}</div>
+        <div className={`mt-4 ${fixedHeight || maxHeight ? 'flex-1 overflow-y-auto min-h-0' : ''}`}>{children}</div>
       </div>
     </div>
   );
