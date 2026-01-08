@@ -32,6 +32,36 @@ interface ChatbotBlockProps {
   maxHeight?: number;
   /** 편집 모드 여부 (편집 모드에서는 자동 스크롤 비활성화) */
   isEditing?: boolean;
+
+  // === 컨테이너 스타일 (미설정 시 테마 색상 사용) ===
+  /** 테두리 색상 */
+  borderColor?: string;
+  /** 배경 색상 */
+  backgroundColor?: string;
+
+  // === 입력 필드 스타일 ===
+  /** 입력 필드 배경색 */
+  inputBackgroundColor?: string;
+  /** 입력 필드 텍스트 색상 */
+  inputTextColor?: string;
+
+  // === 전송 버튼 스타일 ===
+  /** 버튼 배경색 (미설정 시 primaryColor) */
+  buttonBackgroundColor?: string;
+  /** 버튼 텍스트 색상 (미설정 시 #ffffff) */
+  buttonTextColor?: string;
+
+  // === 사용자 메시지 버블 ===
+  /** 사용자 메시지 배경색 (미설정 시 primaryColor) */
+  userMessageBackgroundColor?: string;
+  /** 사용자 메시지 텍스트 색상 (미설정 시 #ffffff) */
+  userMessageTextColor?: string;
+
+  // === AI 응답 버블 ===
+  /** AI 응답 배경색 (미설정 시 muted 색상) */
+  assistantMessageBackgroundColor?: string;
+  /** AI 응답 텍스트 색상 (미설정 시 textColor) */
+  assistantMessageTextColor?: string;
 }
 
 interface Message {
@@ -78,9 +108,24 @@ export function ChatbotBlock({
   welcomeMessage,
   placeholder,
   primaryColor,
+  textColor,
   minHeight = 400,
   maxHeight = 600,
   isEditing = false,
+  // 컨테이너 스타일
+  borderColor,
+  backgroundColor,
+  // 입력 필드 스타일
+  inputBackgroundColor,
+  inputTextColor,
+  // 버튼 스타일
+  buttonBackgroundColor,
+  buttonTextColor,
+  // 메시지 스타일
+  userMessageBackgroundColor,
+  userMessageTextColor,
+  assistantMessageBackgroundColor,
+  assistantMessageTextColor,
 }: ChatbotBlockProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -165,20 +210,53 @@ export function ChatbotBlock({
 
   const isInputValid = inputValue.trim().length > 0 && inputValue.length <= MAX_MESSAGE_LENGTH;
 
+  // 컨테이너 스타일 계산
+  const containerStyle: React.CSSProperties = {
+    minHeight,
+    maxHeight,
+    ...(backgroundColor && { backgroundColor }),
+    ...(borderColor && { borderColor }),
+  };
+
+  // 입력 필드 스타일 계산
+  const inputStyle: React.CSSProperties = {
+    ...(inputBackgroundColor && { backgroundColor: inputBackgroundColor }),
+    ...(inputTextColor && { color: inputTextColor }),
+  };
+
+  // 버튼 스타일 계산
+  const buttonStyle: React.CSSProperties = {
+    backgroundColor: buttonBackgroundColor || primaryColor,
+    color: buttonTextColor || '#ffffff',
+  };
+
   return (
     <div
       className="flex flex-col rounded-2xl border border-border bg-card shadow-lg"
-      style={{ minHeight, maxHeight }}
+      style={containerStyle}
     >
       {/* 메시지 목록 */}
       <div className="flex-1 overflow-y-auto p-4">
         <div className="space-y-4">
           {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} primaryColor={primaryColor} />
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              primaryColor={primaryColor}
+              userMessageBackgroundColor={userMessageBackgroundColor}
+              userMessageTextColor={userMessageTextColor}
+              assistantMessageBackgroundColor={assistantMessageBackgroundColor}
+              assistantMessageTextColor={assistantMessageTextColor}
+            />
           ))}
           {isLoading && (
             <div className="flex justify-start">
-              <div className="max-w-[85%] rounded-2xl bg-muted px-4 py-3">
+              <div
+                className="max-w-[85%] rounded-2xl px-4 py-3"
+                style={{
+                  backgroundColor: assistantMessageBackgroundColor || undefined,
+                }}
+              >
                 <ProgressIndicator isLoading={isLoading} primaryColor={primaryColor} compact />
               </div>
             </div>
@@ -210,12 +288,13 @@ export function ChatbotBlock({
             disabled={isLoading}
             maxLength={MAX_MESSAGE_LENGTH}
             className="flex-1 rounded-full border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+            style={inputStyle}
           />
           <button
             onClick={handleSend}
             disabled={isLoading || !isInputValid}
-            className="flex h-12 w-12 items-center justify-center rounded-full text-white transition-opacity disabled:opacity-50"
-            style={{ backgroundColor: primaryColor }}
+            className="flex h-12 w-12 items-center justify-center rounded-full transition-opacity disabled:opacity-50"
+            style={buttonStyle}
             aria-label="전송"
           >
             <SendIcon className="h-5 w-5" />
@@ -235,19 +314,39 @@ export function ChatbotBlock({
 function MessageBubble({
   message,
   primaryColor,
+  userMessageBackgroundColor,
+  userMessageTextColor,
+  assistantMessageBackgroundColor,
+  assistantMessageTextColor,
 }: {
   message: Message;
   primaryColor: string;
+  userMessageBackgroundColor?: string;
+  userMessageTextColor?: string;
+  assistantMessageBackgroundColor?: string;
+  assistantMessageTextColor?: string;
 }) {
   const isUser = message.role === 'user';
+
+  // 사용자 메시지 스타일 계산
+  const userStyle: React.CSSProperties = {
+    backgroundColor: userMessageBackgroundColor || primaryColor,
+    color: userMessageTextColor || '#ffffff',
+  };
+
+  // AI 응답 스타일 계산
+  const assistantStyle: React.CSSProperties = {
+    ...(assistantMessageBackgroundColor && { backgroundColor: assistantMessageBackgroundColor }),
+    ...(assistantMessageTextColor && { color: assistantMessageTextColor }),
+  };
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`} data-role={message.role}>
       <div
         className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-          isUser ? 'text-white' : 'bg-muted text-foreground'
+          isUser ? '' : 'bg-muted text-foreground'
         }`}
-        style={isUser ? { backgroundColor: primaryColor } : undefined}
+        style={isUser ? userStyle : assistantStyle}
       >
         {isUser ? (
           <p className="whitespace-pre-wrap text-sm">{message.content}</p>

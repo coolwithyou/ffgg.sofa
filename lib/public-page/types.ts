@@ -34,6 +34,38 @@ export interface ChatbotBlockConfig {
   minHeight: number;
   /** 최대 높이 (px) - 기본 600 */
   maxHeight: number;
+
+  // === 컨테이너 스타일 (미설정 시 테마 색상 사용) ===
+  /** 테두리 색상 */
+  borderColor?: string;
+  /** 배경 색상 */
+  backgroundColor?: string;
+
+  // === 입력 필드 스타일 ===
+  /** 입력 필드 배경색 */
+  inputBackgroundColor?: string;
+  /** 입력 필드 텍스트 색상 */
+  inputTextColor?: string;
+  /** Placeholder 텍스트 */
+  inputPlaceholder?: string;
+
+  // === 전송 버튼 스타일 ===
+  /** 버튼 배경색 */
+  buttonBackgroundColor?: string;
+  /** 버튼 텍스트 색상 */
+  buttonTextColor?: string;
+
+  // === 사용자 메시지 버블 ===
+  /** 사용자 메시지 배경색 */
+  userMessageBackgroundColor?: string;
+  /** 사용자 메시지 텍스트 색상 */
+  userMessageTextColor?: string;
+
+  // === AI 응답 버블 ===
+  /** AI 응답 배경색 */
+  assistantMessageBackgroundColor?: string;
+  /** AI 응답 텍스트 색상 */
+  assistantMessageTextColor?: string;
 }
 
 /**

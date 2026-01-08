@@ -128,6 +128,38 @@ export interface ChatbotBlock extends BaseBlock {
     minHeight: number;
     /** 최대 높이 (px) */
     maxHeight: number;
+
+    // === 컨테이너 스타일 (미설정 시 테마 색상 사용) ===
+    /** 테두리 색상 */
+    borderColor?: string;
+    /** 배경 색상 */
+    backgroundColor?: string;
+
+    // === 입력 필드 스타일 ===
+    /** 입력 필드 배경색 */
+    inputBackgroundColor?: string;
+    /** 입력 필드 텍스트 색상 */
+    inputTextColor?: string;
+    /** Placeholder 텍스트 (미설정 시 챗봇 기본 placeholder 사용) */
+    inputPlaceholder?: string;
+
+    // === 전송 버튼 스타일 ===
+    /** 버튼 배경색 (미설정 시 theme.primaryColor) */
+    buttonBackgroundColor?: string;
+    /** 버튼 텍스트 색상 (미설정 시 #ffffff) */
+    buttonTextColor?: string;
+
+    // === 사용자 메시지 버블 ===
+    /** 사용자 메시지 배경색 (미설정 시 theme.primaryColor) */
+    userMessageBackgroundColor?: string;
+    /** 사용자 메시지 텍스트 색상 (미설정 시 #ffffff) */
+    userMessageTextColor?: string;
+
+    // === AI 응답 버블 ===
+    /** AI 응답 배경색 (미설정 시 muted 색상) */
+    assistantMessageBackgroundColor?: string;
+    /** AI 응답 텍스트 색상 (미설정 시 theme.textColor) */
+    assistantMessageTextColor?: string;
   };
 }
 
@@ -431,6 +463,13 @@ export interface ContactFormBlock extends BaseBlock {
 export type MapProvider = 'google' | 'kakao' | 'naver';
 
 /**
+ * 지도 표시 타입
+ * - embed: 페이지에 지도를 직접 임베드
+ * - button: 지도 열기 버튼만 표시
+ */
+export type MapDisplayType = 'embed' | 'button';
+
+/**
  * 지도 블록
  * - Google/Kakao/Naver 지도 임베드
  */
@@ -447,6 +486,12 @@ export interface MapBlock extends BaseBlock {
     lng?: number;
     /** 줌 레벨 */
     zoom: number;
+    /** 표시 타입 (기본: embed) */
+    displayType?: MapDisplayType;
+    /** 임베드 모드 높이 (px, 기본: 300) */
+    height?: number;
+    /** 위치명 (마커 위 InfoWindow에 표시) */
+    placeName?: string;
   };
 }
 
@@ -1054,6 +1099,8 @@ export function createMapBlock(id: string, order: number): MapBlock {
       lat: undefined,
       lng: undefined,
       zoom: 15,
+      displayType: 'embed',
+      height: 300,
     },
   };
 }
