@@ -108,8 +108,30 @@ export const chatbotBlockSchema = z.object({
   ...baseBlockFields,
   type: z.literal(BlockType.CHATBOT),
   config: z.object({
+    // 크기 설정
     minHeight: z.number().int().min(100).max(1000),
     maxHeight: z.number().int().min(100).max(1500),
+
+    // 컨테이너 스타일 (미설정 시 테마 사용)
+    borderColor: z.string().optional(),
+    backgroundColor: z.string().optional(),
+
+    // 입력 필드 스타일
+    inputBackgroundColor: z.string().optional(),
+    inputTextColor: z.string().optional(),
+    inputPlaceholder: z.string().optional(),
+
+    // 전송 버튼 스타일
+    buttonBackgroundColor: z.string().optional(),
+    buttonTextColor: z.string().optional(),
+
+    // 사용자 메시지 버블
+    userMessageBackgroundColor: z.string().optional(),
+    userMessageTextColor: z.string().optional(),
+
+    // AI 응답 버블
+    assistantMessageBackgroundColor: z.string().optional(),
+    assistantMessageTextColor: z.string().optional(),
   }),
 });
 
