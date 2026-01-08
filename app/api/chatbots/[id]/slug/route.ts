@@ -190,22 +190,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // 트랜잭션으로 슬러그 업데이트 + 변경 로그 기록
-    await db.transaction(async (tx) => {
-      // chatbots 테이블 업데이트
-      await tx
-        .update(chatbots)
-        .set({
-          slug: newSlug,
-          updatedAt: new Date(),
-        })
-        .where(eq(chatbots.id, id));
+    // 슬러그 업데이트 (Neon HTTP 드라이버는 트랜잭션 미지원)
+    await db
+      .update(chatbots)
+      .set({
+        slug: newSlug,
+        updatedAt: new Date(),
+      })
+      .where(eq(chatbots.id, id));
 
-      // 변경 로그 기록 (logSlugChange는 트랜잭션 외부라서 직접 삽입)
-      // logSlugChange 함수는 별도 db 인스턴스 사용하므로 여기서 직접 처리
-    });
-
-    // 변경 로그 기록 (트랜잭션 성공 후)
+    // 변경 로그 기록
     await logSlugChange({
       chatbotId: id,
       previousSlug: chatbot.slug,
