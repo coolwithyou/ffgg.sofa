@@ -41,6 +41,9 @@ export const TIER_LIMITS = {
 
     // 포인트 (월간)
     monthlyPoints: 0, // 월간 포인트 없음 (체험 500P만)
+
+    // 슬러그 변경 제한 (챗봇별 하루)
+    slugChangesPerDay: 0, // 변경 불가 (발행 불가이므로)
   },
 
   pro: {
@@ -74,6 +77,9 @@ export const TIER_LIMITS = {
 
     // 포인트 (월간)
     monthlyPoints: 3000, // ~300회 AI 응답
+
+    // 슬러그 변경 제한 (챗봇별 하루)
+    slugChangesPerDay: 3, // 하루 3회
   },
 
   business: {
@@ -107,6 +113,9 @@ export const TIER_LIMITS = {
 
     // 포인트 (월간)
     monthlyPoints: 10000, // ~1,000회 AI 응답
+
+    // 슬러그 변경 제한 (챗봇별 하루)
+    slugChangesPerDay: -1, // 무제한 (-1)
   },
 } as const;
 

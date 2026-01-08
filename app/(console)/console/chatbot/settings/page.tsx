@@ -15,6 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { SimpleDialog } from '@/components/ui/dialog';
 import { Bot, Globe, Trash2, FlaskConical, Lock, Crown, Loader2 } from 'lucide-react';
+import { SlugEditor } from './components/slug-editor';
 import { toast } from 'sonner';
 
 /**
@@ -234,15 +235,12 @@ export default function SettingsPage() {
               </Button>
             </div>
 
-            {/* 현재 슬러그 표시 */}
-            {currentChatbot?.slug && (
-              <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-xs text-muted-foreground">공개 페이지 주소</p>
-                <p className="mt-1 font-mono text-sm text-foreground">
-                  {typeof window !== 'undefined' ? window.location.origin : ''}/{currentChatbot.slug}
-                </p>
-              </div>
-            )}
+            {/* 슬러그 편집 컴포넌트 */}
+            <SlugEditor
+              chatbotId={currentChatbot.id}
+              currentSlug={currentChatbot.slug}
+              onSlugChange={() => reloadChatbots()}
+            />
           </CardContent>
         </Card>
 

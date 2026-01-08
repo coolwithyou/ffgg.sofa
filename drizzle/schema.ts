@@ -1235,3 +1235,29 @@ export const reservedSlugs = pgTable(
 
 export type ReservedSlug = typeof reservedSlugs.$inferSelect;
 export type NewReservedSlug = typeof reservedSlugs.$inferInsert;
+
+// ============================================
+// 슬러그 변경 이력
+// ============================================
+export const slugChangeLogs = pgTable(
+  'slug_change_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    chatbotId: uuid('chatbot_id')
+      .notNull()
+      .references(() => chatbots.id, { onDelete: 'cascade' }),
+    previousSlug: text('previous_slug'),
+    newSlug: text('new_slug').notNull(),
+    changedBy: uuid('changed_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    changedAt: timestamp('changed_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_slug_change_logs_chatbot').on(table.chatbotId),
+    index('idx_slug_change_logs_changed_at').on(table.changedAt),
+  ]
+);
+
+export type SlugChangeLog = typeof slugChangeLogs.$inferSelect;
+export type NewSlugChangeLog = typeof slugChangeLogs.$inferInsert;

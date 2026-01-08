@@ -10,7 +10,7 @@ import { eq, and, ne } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { chatbots } from '@/drizzle/schema';
 import { validateSession } from '@/lib/auth/session';
-import { validateSlug } from '@/lib/public-page/reserved-slugs';
+import { validateSlugAsync } from '@/lib/public-page/reserved-slugs';
 
 /**
  * GET /api/chatbots/check-slug
@@ -44,17 +44,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 슬러그 형식 및 예약어 검사
-    const validation = validateSlug(slug);
+    // 슬러그 형식, 시스템 예약어, DB 예약어 검사
+    const validation = await validateSlugAsync(slug);
     if (!validation.valid) {
       return NextResponse.json({
         valid: false,
         available: false,
-        error: validation.error,
+        // 중복/예약 구분 없이 통합 메시지
+        error: '사용할 수 없는 키워드입니다',
       });
     }
 
-    // DB에서 중복 체크
+    // DB에서 중복 체크 (다른 챗봇이 사용 중인지)
     const existingChatbot = await db.query.chatbots.findFirst({
       where: excludeId
         ? and(eq(chatbots.slug, slug), ne(chatbots.id, excludeId))
@@ -67,7 +68,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       valid: true,
       available,
-      error: available ? null : '이미 사용 중인 슬러그입니다.',
+      // 중복/예약 구분 없이 통합 메시지
+      error: available ? null : '사용할 수 없는 키워드입니다',
     });
   } catch (error) {
     console.error('Check slug error:', error);
