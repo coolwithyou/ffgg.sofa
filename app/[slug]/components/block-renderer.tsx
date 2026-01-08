@@ -97,20 +97,37 @@ export function BlockRenderer({
       return <HeaderBlock config={headerConfig} theme={theme} />;
     }
 
-    case BlockType.CHATBOT:
+    case BlockType.CHATBOT: {
+      const chatbotBlock = block as import('@/lib/public-page/block-types').ChatbotBlock;
       return (
         <ChatbotBlock
           chatbotId={chatbotId}
           tenantId={tenantId}
           welcomeMessage={welcomeMessage}
-          placeholder={placeholder}
+          placeholder={chatbotBlock.config.inputPlaceholder || placeholder}
           primaryColor={theme.primaryColor}
           textColor={theme.textColor}
-          minHeight={chatbot.minHeight}
-          maxHeight={chatbot.maxHeight}
+          minHeight={chatbotBlock.config.minHeight || chatbot.minHeight}
+          maxHeight={chatbotBlock.config.maxHeight || chatbot.maxHeight}
           isEditing={isEditing}
+          // 컨테이너 스타일
+          borderColor={chatbotBlock.config.borderColor}
+          backgroundColor={chatbotBlock.config.backgroundColor}
+          // 입력 필드 스타일
+          inputBackgroundColor={chatbotBlock.config.inputBackgroundColor}
+          inputTextColor={chatbotBlock.config.inputTextColor}
+          // 버튼 스타일
+          buttonBackgroundColor={chatbotBlock.config.buttonBackgroundColor}
+          buttonTextColor={chatbotBlock.config.buttonTextColor}
+          // 사용자 메시지 스타일
+          userMessageBackgroundColor={chatbotBlock.config.userMessageBackgroundColor}
+          userMessageTextColor={chatbotBlock.config.userMessageTextColor}
+          // AI 응답 스타일
+          assistantMessageBackgroundColor={chatbotBlock.config.assistantMessageBackgroundColor}
+          assistantMessageTextColor={chatbotBlock.config.assistantMessageTextColor}
         />
       );
+    }
 
     case BlockType.PLACEHOLDER:
       return <PlaceholderBlock />;
@@ -234,6 +251,9 @@ export function BlockRenderer({
           lat={mapBlock.config.lat}
           lng={mapBlock.config.lng}
           zoom={mapBlock.config.zoom}
+          displayType={mapBlock.config.displayType}
+          height={mapBlock.config.height}
+          placeName={mapBlock.config.placeName}
         />
       );
     }

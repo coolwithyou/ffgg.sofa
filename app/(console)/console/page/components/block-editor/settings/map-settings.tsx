@@ -5,13 +5,15 @@
  *
  * MapBlock의 설정을 편집합니다:
  * - 제공자: Google, Kakao, Naver
+ * - 표시 타입: embed (지도 임베드) / button (버튼만)
  * - 주소 (Daum 우편번호 서비스로 검색 가능)
  * - 좌표 (주소 검색 시 자동 입력, 수동 수정 가능)
  * - 줌 레벨
+ * - 높이 (embed 모드에서만)
  */
 
 import { useState } from 'react';
-import { MapPin, Check, X, Loader2 } from 'lucide-react';
+import { MapPin, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -24,13 +26,30 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useDaumPostcode, type AddressResult } from '@/hooks/use-daum-postcode';
-import type { MapBlock, MapProvider } from '@/lib/public-page/block-types';
+import type { MapBlock, MapProvider, MapDisplayType } from '@/lib/public-page/block-types';
 import type { BlockSettingsProps } from './index';
 
 const PROVIDER_OPTIONS: { value: MapProvider; label: string }[] = [
   { value: 'google', label: 'Google Maps' },
   { value: 'kakao', label: '카카오맵' },
   { value: 'naver', label: '네이버지도' },
+];
+
+const DISPLAY_TYPE_OPTIONS: {
+  value: MapDisplayType;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: 'embed',
+    label: '지도 임베드',
+    description: '페이지에 지도를 직접 표시합니다',
+  },
+  {
+    value: 'button',
+    label: '버튼만 표시',
+    description: '클릭 시 지도 앱/웹으로 연결됩니다',
+  },
 ];
 
 export function MapBlockSettings({
@@ -40,8 +59,7 @@ export function MapBlockSettings({
   const { config } = block;
   const [showPostcode, setShowPostcode] = useState(false);
 
-  const { containerRef, openPostcode, isLoading, error, clearError } =
-    useDaumPostcode();
+  const { containerRef, openPostcode, error, clearError } = useDaumPostcode();
 
   /**
    * config 내 특정 필드 업데이트
@@ -65,9 +83,17 @@ export function MapBlockSettings({
   };
 
   /**
-   * 주소 검색 버튼 클릭
+   * 주소 검색 토글 (열기/닫기)
    */
-  const handleOpenPostcode = async () => {
+  const handleTogglePostcode = async () => {
+    // 이미 열려있으면 닫기
+    if (showPostcode) {
+      setShowPostcode(false);
+      clearError();
+      return;
+    }
+
+    // 닫혀있으면 열기
     setShowPostcode(true);
     clearError();
 
@@ -85,14 +111,6 @@ export function MapBlockSettings({
       // 검색창 닫기
       setShowPostcode(false);
     });
-  };
-
-  /**
-   * 주소 검색창 닫기
-   */
-  const handleClosePostcode = () => {
-    setShowPostcode(false);
-    clearError();
   };
 
   // 좌표 유효성 확인
@@ -124,12 +142,42 @@ export function MapBlockSettings({
             ))}
           </SelectContent>
         </Select>
-        {config.provider !== 'google' && (
+        {config.provider === 'naver' && (
           <p className="text-xs text-muted-foreground">
-            {config.provider === 'kakao' ? '카카오맵' : '네이버지도'}은 외부
-            링크로 연결됩니다.
+            네이버지도는 별도 API 키가 필요하여 외부 링크로 연결됩니다.
           </p>
         )}
+      </div>
+
+      {/* 표시 타입 */}
+      <div className="space-y-2">
+        <Label htmlFor="map-display-type">표시 방식</Label>
+        <Select
+          value={config.displayType ?? 'embed'}
+          onValueChange={(value: MapDisplayType) =>
+            updateConfig({ displayType: value })
+          }
+        >
+          <SelectTrigger id="map-display-type">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DISPLAY_TYPE_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          {(config.displayType ?? 'embed') === 'embed'
+            ? config.provider === 'google'
+              ? '페이지에 Google Maps 지도가 직접 표시됩니다'
+              : config.provider === 'kakao'
+                ? '페이지에 카카오맵 지도가 직접 표시됩니다'
+                : '네이버지도는 별도 API 키가 필요하여 링크 카드로 표시됩니다'
+            : '버튼 클릭 시 선택한 지도 서비스로 이동합니다'}
+        </p>
       </div>
 
       {/* 주소 */}
@@ -142,22 +190,20 @@ export function MapBlockSettings({
             value={config.address}
             readOnly
             className="flex-1 cursor-pointer bg-muted/50"
-            onClick={handleOpenPostcode}
+            onClick={handleTogglePostcode}
           />
           <Button
             type="button"
             variant="outline"
             size="default"
-            onClick={handleOpenPostcode}
-            disabled={isLoading}
+            onClick={handleTogglePostcode}
           >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+            <MapPin className="mr-1 h-4 w-4" />
+            주소찾기
+            {showPostcode ? (
+              <ChevronUp className="ml-1 h-4 w-4" />
             ) : (
-              <>
-                <MapPin className="mr-1 h-4 w-4" />
-                주소찾기
-              </>
+              <ChevronDown className="ml-1 h-4 w-4" />
             )}
           </Button>
         </div>
@@ -174,7 +220,7 @@ export function MapBlockSettings({
               variant="ghost"
               size="icon"
               className="absolute right-2 top-2 z-10 h-6 w-6 bg-background/80 hover:bg-background"
-              onClick={handleClosePostcode}
+              onClick={handleTogglePostcode}
             >
               <X className="h-4 w-4" />
             </Button>
@@ -187,6 +233,20 @@ export function MapBlockSettings({
         {error && (
           <p className="text-xs text-destructive">{error}</p>
         )}
+      </div>
+
+      {/* 위치명 (선택) */}
+      <div className="space-y-2">
+        <Label htmlFor="map-place-name">위치명 (선택)</Label>
+        <Input
+          id="map-place-name"
+          placeholder="예: 강남역 2번 출구"
+          value={config.placeName ?? ''}
+          onChange={(e) => updateConfig({ placeName: e.target.value })}
+        />
+        <p className="text-xs text-muted-foreground">
+          마커 위에 표시할 위치명입니다. 비워두면 마커만 표시됩니다.
+        </p>
       </div>
 
       {/* 좌표 (선택) */}
@@ -257,6 +317,29 @@ export function MapBlockSettings({
           1: 세계 전체, 15: 거리 수준, 21: 건물 수준
         </p>
       </div>
+
+      {/* 높이 (embed 모드에서만) */}
+      {(config.displayType ?? 'embed') === 'embed' && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="map-height">높이</Label>
+            <span className="text-sm text-muted-foreground">
+              {config.height ?? 300}px
+            </span>
+          </div>
+          <Slider
+            id="map-height"
+            value={[config.height ?? 300]}
+            min={150}
+            max={600}
+            step={50}
+            onValueChange={([value]) => updateConfig({ height: value })}
+          />
+          <p className="text-xs text-muted-foreground">
+            지도 블록의 높이입니다. (150-600px)
+          </p>
+        </div>
+      )}
     </div>
   );
 }
