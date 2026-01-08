@@ -87,11 +87,13 @@ export function PublicPageView({
   const { header, theme, chatbot } = config;
 
   // 테마 CSS 변수 설정
+  // --card: ProfileGradientZone이 카드 배경색 그라데이션에 사용
   const themeStyles = {
     '--pp-bg-color': theme.backgroundColor,
     '--pp-primary-color': theme.primaryColor,
     '--pp-text-color': theme.textColor,
     '--pp-font-family': theme.fontFamily || 'system-ui, -apple-system, sans-serif',
+    '--card': theme.cardBackgroundColor ?? '#ffffff',
   } as React.CSSProperties;
 
   // 헤더 타이틀 (설정값 없으면 챗봇 이름 사용)

@@ -134,7 +134,8 @@ export function EditableBlockWrapper({
         )}
       >
         {/* 좌측: 순서 컨트롤 (이동 기능이 있는 경우에만 표시) */}
-        <div className="pointer-events-auto flex items-center gap-0.5 rounded-lg bg-card border border-border shadow-sm p-0.5">
+        {/* bg-white 고정: 공개 페이지의 --card 변수 오버라이드 영향 방지 */}
+        <div className="pointer-events-auto flex items-center gap-0.5 rounded-lg bg-white border border-border shadow-sm p-0.5">
           {/* 위로 이동 버튼 (onMoveUp이 있을 때만 표시) */}
           {onMoveUp && (
             <button
@@ -195,7 +196,8 @@ export function EditableBlockWrapper({
         </div>
 
         {/* 우측: 액션 버튼 */}
-        <div className="pointer-events-auto flex items-center gap-0.5 rounded-lg bg-card border border-border shadow-sm p-0.5">
+        {/* bg-white 고정: 공개 페이지의 --card 변수 오버라이드 영향 방지 */}
+        <div className="pointer-events-auto flex items-center gap-0.5 rounded-lg bg-white border border-border shadow-sm p-0.5">
           {/* 설정 버튼 */}
           <button
             onClick={(e) => {
