@@ -63,10 +63,10 @@ const nextConfig: NextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-eval' 'unsafe-inline' http://t1.daumcdn.net https://t1.daumcdn.net http://dapi.kakao.com https://dapi.kakao.com", // Next.js + Kakao SDK
               "style-src 'self' 'unsafe-inline'", // Tailwind 필요
-              "img-src 'self' data: blob: https: http://t1.daumcdn.net", // Kakao SDK 이미지
+              "img-src 'self' data: blob: https: http://*.daumcdn.net https://*.daumcdn.net", // Kakao Maps 타일 이미지
               "font-src 'self' data:",
               "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech http://dapi.kakao.com https://dapi.kakao.com", // Kakao Geocoder API
-              "frame-src http://postcode.map.daum.net https://postcode.map.daum.net", // Daum 우편번호 iframe
+              "frame-src http://postcode.map.daum.net https://postcode.map.daum.net https://www.google.com https://maps.google.com", // Daum 우편번호 + Google Maps iframe
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
@@ -97,7 +97,7 @@ const nextConfig: NextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://t1.daumcdn.net https://dapi.kakao.com",
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https:",
+              "img-src 'self' data: blob: https: http://*.daumcdn.net https://*.daumcdn.net", // Kakao Maps 타일 이미지
               "font-src 'self' data:",
               "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech https://dapi.kakao.com",
               "frame-ancestors *", // iframe 허용
@@ -135,9 +135,10 @@ const nextConfig: NextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://t1.daumcdn.net https://dapi.kakao.com",
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https:",
+              "img-src 'self' data: blob: https: http://*.daumcdn.net https://*.daumcdn.net", // Kakao Maps 타일 이미지
               "font-src 'self' data:",
               "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech https://dapi.kakao.com",
+              "frame-src https://www.google.com https://maps.google.com", // Google Maps iframe 허용
               "frame-ancestors 'none'", // iframe 완전 차단
               "base-uri 'self'",
               "form-action 'self'",
