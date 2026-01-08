@@ -22,7 +22,8 @@ export interface WidgetSaveError {
  * 위젯 자동 저장 훅 옵션
  */
 interface UseWidgetAutoSaveOptions {
-  debounceDelay?: number;
+  /** Idle 딜레이 (ms) - 변경 후 저장까지 대기 시간 */
+  idleDelay?: number;
   maxRetries?: number;
   autoRetry?: boolean;
   onSaveSuccess?: () => void;
@@ -32,12 +33,12 @@ interface UseWidgetAutoSaveOptions {
 /**
  * 위젯 자동 저장 훅
  *
- * widgetConfig 변경 시 설정된 debounce 시간 후 API 호출
+ * widgetConfig 변경 시 설정된 idle 시간 후 API 호출
  * 실패 시 자동 재시도 및 에러 상태 관리
  */
 export function useWidgetAutoSave(options?: UseWidgetAutoSaveOptions) {
   const {
-    debounceDelay = AUTO_SAVE_CONFIG.debounceDelay,
+    idleDelay = AUTO_SAVE_CONFIG.idleDelay,
     maxRetries = AUTO_SAVE_CONFIG.maxRetries,
     autoRetry = AUTO_SAVE_CONFIG.autoRetry,
     onSaveSuccess,
@@ -147,8 +148,8 @@ export function useWidgetAutoSave(options?: UseWidgetAutoSaveOptions) {
     ]
   );
 
-  // 디바운스된 저장 함수
-  const debouncedSave = useDebouncedCallback(saveToServer, debounceDelay);
+  // 디바운스된 저장 함수 (Idle 기반)
+  const debouncedSave = useDebouncedCallback(saveToServer, idleDelay);
 
   // widgetConfig 변경 감지 및 저장
   useEffect(() => {

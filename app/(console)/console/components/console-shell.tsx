@@ -1,12 +1,77 @@
 'use client';
 
+import { useCallback } from 'react';
 import { AppSidebar } from './nav/app-sidebar';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
-import { AutoSaveProvider } from '../hooks/use-auto-save';
+import { AutoSaveProvider, useAutoSaveContext } from '../hooks/use-auto-save';
 import { VersionsProvider, useVersions } from '../hooks/use-versions';
+import { useUnsavedChangesWarning } from '../hooks/use-unsaved-changes-warning';
+import {
+  UnsavedChangesDialogProvider,
+  useUnsavedChangesDialog,
+} from './unsaved-changes-dialog';
 
 interface ConsoleShellProps {
   children: React.ReactNode;
+}
+
+/**
+ * 미저장 경고 기능을 제공하는 컴포넌트
+ *
+ * AutoSaveProvider 내부에서 사용되어야 합니다.
+ */
+function UnsavedChangesGuard({ children }: { children: React.ReactNode }) {
+  const { hasChanges, saveStatus } = useAutoSaveContext();
+  const { showUnsavedChangesDialog } = useUnsavedChangesDialog();
+
+  const handleNavigationAttempt = useCallback(
+    async (_targetPath: string): Promise<boolean> => {
+      // 저장 중이면 잠시 대기
+      if (saveStatus === 'saving') {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      const result = await showUnsavedChangesDialog();
+
+      switch (result) {
+        case 'save':
+          // 저장 성공 시에만 네비게이션 허용
+          return true;
+        case 'discard':
+          // 저장 없이 네비게이션 허용
+          return true;
+        case 'cancel':
+        default:
+          // 현재 페이지에 머무름
+          return false;
+      }
+    },
+    [showUnsavedChangesDialog, saveStatus]
+  );
+
+  useUnsavedChangesWarning({
+    hasChanges,
+    onNavigationAttempt: handleNavigationAttempt,
+  });
+
+  return <>{children}</>;
+}
+
+/**
+ * UnsavedChangesGuard를 다이얼로그 Provider와 함께 래핑
+ */
+function UnsavedChangesGuardWithDialog({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { saveNow } = useAutoSaveContext();
+
+  return (
+    <UnsavedChangesDialogProvider onSave={saveNow}>
+      <UnsavedChangesGuard>{children}</UnsavedChangesGuard>
+    </UnsavedChangesDialogProvider>
+  );
 }
 
 /**
@@ -20,7 +85,7 @@ function AutoSaveWithVersionSync({ children }: { children: React.ReactNode }) {
 
   return (
     <AutoSaveProvider onSaveSuccess={refreshVersions}>
-      {children}
+      <UnsavedChangesGuardWithDialog>{children}</UnsavedChangesGuardWithDialog>
     </AutoSaveProvider>
   );
 }
