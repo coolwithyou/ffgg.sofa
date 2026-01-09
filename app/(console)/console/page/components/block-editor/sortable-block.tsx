@@ -197,7 +197,7 @@ export function SortableBlock({
       className={cn(
         'group relative flex items-center gap-3 rounded-lg border bg-card p-3 transition-all',
         isDragging && 'z-50 shadow-lg opacity-90',
-        isSelected && 'border-primary ring-1 ring-primary',
+        isSelected && 'border-primary',
         !isSelected && 'border-border hover:border-muted-foreground/50',
         !block.visible && 'opacity-50'
       )}

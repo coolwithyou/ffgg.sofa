@@ -106,7 +106,7 @@ export function EditableBlockWrapper({
       className={cn(
         'group relative',
         isDragging && 'z-50 opacity-50',
-        isSelected && 'ring-2 ring-primary ring-offset-2 ring-offset-background rounded-xl'
+        isSelected && 'rounded-xl'
       )}
       onClick={(e) => {
         e.stopPropagation();
