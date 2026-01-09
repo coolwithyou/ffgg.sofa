@@ -12,7 +12,13 @@ export type ModelId =
   | 'claude-3-haiku-20240307'
   | (string & {}); // Allow any string for future model IDs
 
-export type FeatureType = 'chat' | 'embedding' | 'rewrite' | 'context_generation' | 'rerank';
+export type FeatureType =
+  | 'chat'
+  | 'embedding'
+  | 'rewrite'
+  | 'context_generation'
+  | 'rerank'
+  | 'semantic_chunking';
 
 export interface TokenUsageParams {
   tenantId: string;

@@ -8,6 +8,12 @@ import { db, documents, chunks, datasets, chatbotDatasets } from '@/lib/db';
 import { eq, sql } from 'drizzle-orm';
 import { parseDocument, type SupportedFileType } from '@/lib/parsers';
 import { smartChunk } from '@/lib/rag/chunking';
+import {
+  semanticChunk,
+  isSemanticChunkingEnabled,
+  calculateSemanticQualityScore,
+  type SemanticChunk,
+} from '@/lib/rag/semantic-chunking';
 import { embedTexts } from '@/lib/rag/embedding';
 import {
   isContextGenerationEnabled,
@@ -169,11 +175,50 @@ onFailure: async ({ event, error }) => {
       durationMs: Date.now() - parsingStartTime,
     });
 
-    // Step 3: 스마트 청킹
+    // Step 3: 청킹 (AI Semantic Chunking 우선, 폴백으로 규칙 기반)
     const chunkingStartTime = Date.now();
     const chunkResults = await step.run('chunk-document', async () => {
       await updateDocumentProgress(documentId, 'chunking', 0);
 
+      // AI Semantic Chunking 활성화 시 사용
+      if (isSemanticChunkingEnabled()) {
+        logger.info('Using AI Semantic Chunking', { documentId });
+
+        const semanticChunks = await semanticChunk(
+          parseResult.text,
+          {
+            minChunkSize: 100,
+            maxChunkSize: 600,
+            preChunkSize: 2000,
+          },
+          async (current, total) => {
+            const progress = Math.round((current / total) * 100);
+            await updateDocumentProgress(documentId, 'chunking', progress);
+          },
+          { tenantId }
+        );
+
+        // 기존 Chunk 타입과 호환되도록 변환
+        return semanticChunks.map((chunk) => ({
+          content: chunk.content,
+          index: chunk.index,
+          qualityScore: calculateSemanticQualityScore(chunk),
+          metadata: {
+            startOffset: chunk.metadata.startOffset,
+            endOffset: chunk.metadata.endOffset,
+            hasHeader: chunk.type === 'header',
+            isQAPair: chunk.type === 'qa',
+            isTable: chunk.type === 'table',
+            isList: chunk.type === 'list',
+            // Semantic Chunking 추가 메타데이터
+            chunkType: chunk.type,
+            topic: chunk.topic,
+          },
+        }));
+      }
+
+      // 폴백: 기존 규칙 기반 청킹
+      logger.info('Using rule-based chunking (fallback)', { documentId });
       const chunksData = await smartChunk(parseResult.text, {
         maxChunkSize: 500,
         overlap: 50,
