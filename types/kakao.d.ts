@@ -22,8 +22,6 @@ declare global {
         LatLng: new (lat: number, lng: number) => kakao.maps.LatLng;
         /** 마커 생성자 */
         Marker: new (options: kakao.maps.MarkerOptions) => kakao.maps.Marker;
-        /** InfoWindow 생성자 */
-        InfoWindow: new (options?: kakao.maps.InfoWindowOptions) => kakao.maps.InfoWindow;
         services: {
           Geocoder: new () => KakaoGeocoder;
           Status: {
@@ -86,58 +84,6 @@ declare global {
       getPosition(): LatLng;
       /** 마커 위치 설정 */
       setPosition(position: LatLng): void;
-    }
-
-    /** InfoWindow 옵션 */
-    interface InfoWindowOptions {
-      /** 표시할 내용 (HTML 문자열 또는 DOM Element) */
-      content?: string | HTMLElement;
-      /** 지도에 표시 */
-      map?: Map;
-      /** 표시 위치 */
-      position?: LatLng;
-      /** 닫기 버튼 표시 여부 */
-      removable?: boolean;
-      /** z-index */
-      zIndex?: number;
-      /** 고도 (미터 단위) */
-      altitude?: number;
-      /** 범위 (미터 단위) */
-      range?: number;
-      /** 우측 하단 끝 위치 비활성화 */
-      disableAutoPan?: boolean;
-    }
-
-    /** InfoWindow 인스턴스 */
-    interface InfoWindow {
-      /** 지도에 표시 */
-      open(map: Map, marker?: Marker): void;
-      /** 지도에서 제거 */
-      close(): void;
-      /** 표시할 지도 설정 */
-      setMap(map: Map | null): void;
-      /** 표시할 지도 가져오기 */
-      getMap(): Map | null;
-      /** 표시 위치 설정 */
-      setPosition(position: LatLng): void;
-      /** 표시 위치 가져오기 */
-      getPosition(): LatLng;
-      /** z-index 설정 */
-      setZIndex(zIndex: number): void;
-      /** z-index 가져오기 */
-      getZIndex(): number;
-      /** 고도 설정 */
-      setAltitude(altitude: number): void;
-      /** 고도 가져오기 */
-      getAltitude(): number;
-      /** 범위 설정 */
-      setRange(range: number): void;
-      /** 범위 가져오기 */
-      getRange(): number;
-      /** 내용 설정 */
-      setContent(content: string | HTMLElement): void;
-      /** 내용 가져오기 */
-      getContent(): string | HTMLElement;
     }
 
     namespace services {

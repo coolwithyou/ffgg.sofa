@@ -24,8 +24,6 @@ interface KakaoMapEmbedProps {
   zoom: number;
   /** 높이 (px) */
   height: number;
-  /** 위치명 (마커 위 InfoWindow에 표시) */
-  placeName?: string;
 }
 
 /**
@@ -46,7 +44,6 @@ export function KakaoMapEmbed({
   lng,
   zoom,
   height,
-  placeName,
 }: KakaoMapEmbedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
@@ -110,19 +107,10 @@ export function KakaoMapEmbed({
         });
 
         // 마커 추가
-        const marker = new window.kakao.maps.Marker({
+        new window.kakao.maps.Marker({
           position: center,
           map,
         });
-
-        // InfoWindow 추가 (placeName이 있을 경우)
-        if (placeName && placeName.trim()) {
-          const infoWindow = new window.kakao.maps.InfoWindow({
-            content: `<div style="padding:5px 10px;font-size:12px;font-weight:500;white-space:nowrap;">${placeName}</div>`,
-            removable: false,
-          });
-          infoWindow.open(map, marker);
-        }
 
         mapRef.current = map;
         setIsLoading(false);
@@ -142,7 +130,7 @@ export function KakaoMapEmbed({
       // 지도 정리 (kakao maps는 별도 destroy 메서드 없음)
       mapRef.current = null;
     };
-  }, [address, lat, lng, zoom, placeName]);
+  }, [address, lat, lng, zoom]);
 
   // 에러 상태
   if (error) {

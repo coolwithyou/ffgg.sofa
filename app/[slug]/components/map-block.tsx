@@ -24,8 +24,6 @@ interface MapBlockProps {
   displayType?: MapDisplayType;
   /** 임베드 모드 높이 (px, 기본: 300) */
   height?: number;
-  /** 위치명 (마커 위 InfoWindow에 표시) */
-  placeName?: string;
 }
 
 /**
@@ -78,7 +76,6 @@ export function MapBlock({
   zoom,
   displayType = 'embed',
   height = 300,
-  placeName,
 }: MapBlockProps) {
   // 주소가 없으면 플레이스홀더 표시
   if (!address || address.trim() === '') {
@@ -110,10 +107,11 @@ export function MapBlock({
   // embed 모드: Google Maps만 iframe 임베드 지원
   if (provider === 'google') {
     // 데모 모드: API 키 없이 작동하는 simple embed
+    // iwloc=near: 정보 박스(좌표/길찾기 버튼) 숨김
     const embedUrl =
       lat !== undefined && lng !== undefined
-        ? `https://www.google.com/maps?q=${lat},${lng}&z=${zoom}&output=embed`
-        : `https://www.google.com/maps?q=${encodeURIComponent(address)}&z=${zoom}&output=embed`;
+        ? `https://www.google.com/maps?q=${lat},${lng}&z=${zoom}&iwloc=near&output=embed`
+        : `https://www.google.com/maps?q=${encodeURIComponent(address)}&z=${zoom}&iwloc=near&output=embed`;
 
     return (
       <div
@@ -127,14 +125,6 @@ export function MapBlock({
           referrerPolicy="no-referrer-when-downgrade"
           className="absolute inset-0 h-full w-full border-0"
         />
-        {/* placeName 오버레이 (iframe에는 InfoWindow 불가하므로 오버레이로 표시) */}
-        {placeName && placeName.trim() && (
-          <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
-            <div className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-gray-900 shadow-lg">
-              {placeName}
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -148,7 +138,6 @@ export function MapBlock({
         lng={lng}
         zoom={zoom}
         height={height}
-        placeName={placeName}
       />
     );
   }

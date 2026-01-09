@@ -253,7 +253,6 @@ export function BlockRenderer({
           zoom={mapBlock.config.zoom}
           displayType={mapBlock.config.displayType}
           height={mapBlock.config.height}
-          placeName={mapBlock.config.placeName}
         />
       );
     }

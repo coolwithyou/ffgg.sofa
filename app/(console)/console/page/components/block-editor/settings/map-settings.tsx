@@ -235,20 +235,6 @@ export function MapBlockSettings({
         )}
       </div>
 
-      {/* 위치명 (선택) */}
-      <div className="space-y-2">
-        <Label htmlFor="map-place-name">위치명 (선택)</Label>
-        <Input
-          id="map-place-name"
-          placeholder="예: 강남역 2번 출구"
-          value={config.placeName ?? ''}
-          onChange={(e) => updateConfig({ placeName: e.target.value })}
-        />
-        <p className="text-xs text-muted-foreground">
-          마커 위에 표시할 위치명입니다. 비워두면 마커만 표시됩니다.
-        </p>
-      </div>
-
       {/* 좌표 (선택) */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">

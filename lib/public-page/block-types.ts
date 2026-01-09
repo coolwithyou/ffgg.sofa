@@ -490,8 +490,6 @@ export interface MapBlock extends BaseBlock {
     displayType?: MapDisplayType;
     /** 임베드 모드 높이 (px, 기본: 300) */
     height?: number;
-    /** 위치명 (마커 위 InfoWindow에 표시) */
-    placeName?: string;
   };
 }
 
