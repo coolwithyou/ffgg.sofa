@@ -11,8 +11,8 @@
  *   ADMIN_COMPANY - 회사명 (기본값: SOFA Admin)
  */
 
-import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
@@ -76,9 +76,9 @@ async function createAdmin() {
   console.log('');
 
   try {
-    // DB 연결
-    const sql = neon(process.env.DATABASE_URL);
-    const db = drizzle(sql, { schema });
+    // DB 연결 (Supabase SSL 필수)
+    const client = postgres(process.env.DATABASE_URL!, { ssl: 'require' });
+    const db = drizzle(client, { schema });
 
     // 이메일 중복 확인
     const existingUser = await db.query.users.findFirst({
