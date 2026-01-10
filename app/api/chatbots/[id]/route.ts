@@ -48,6 +48,19 @@ const updateChatbotSchema = z.object({
     })
     .optional(),
   // ragIndexConfig는 스키마에서 제외 (AI 자동 생성, 사용자 편집 불가)
+  // 청킹 실험 설정 (A/B 테스트용)
+  experimentConfig: z
+    .object({
+      chunkingStrategy: z
+        .enum(['smart', 'semantic', 'late', 'auto'])
+        .optional(),
+      abTestEnabled: z.boolean().optional(),
+      semanticTrafficPercent: z.number().min(0).max(100).optional(),
+      experimentStartedAt: z.string().optional(),
+      experimentEndedAt: z.string().optional(),
+      experimentNote: z.string().max(500).optional(),
+    })
+    .optional(),
 });
 
 interface RouteParams {
@@ -190,6 +203,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       ? { ...(existingChatbot.personaConfig as object), ...updateData.personaConfig }
       : existingChatbot.personaConfig;
 
+    // 실험 설정 병합 (Phase 5: A/B 테스트용)
+    const updatedExperimentConfig = updateData.experimentConfig
+      ? { ...(existingChatbot.experimentConfig as object), ...updateData.experimentConfig }
+      : existingChatbot.experimentConfig;
+
     // 챗봇 수정
     const [updatedChatbot] = await db
       .update(chatbots)
@@ -200,6 +218,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         llmConfig: updatedLlmConfig,
         searchConfig: updatedSearchConfig,
         personaConfig: updatedPersonaConfig,
+        experimentConfig: updatedExperimentConfig,
         updatedAt: new Date(),
       })
       .where(eq(chatbots.id, id))

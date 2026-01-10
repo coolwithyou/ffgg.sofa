@@ -169,6 +169,13 @@
       "when": 1767818344400,
       "tag": "0023_nifty_beyonder",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1768023620745,
+      "tag": "0024_slim_talon",
+      "breakpoints": true
     }
   ]
 }

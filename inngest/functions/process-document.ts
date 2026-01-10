@@ -4,7 +4,7 @@
  */
 
 import { inngestClient } from '../client';
-import { db, documents, chunks, datasets, chatbotDatasets } from '@/lib/db';
+import { db, documents, chunks, datasets, chatbotDatasets, chatbots } from '@/lib/db';
 import { eq, sql } from 'drizzle-orm';
 import { parseDocument, type SupportedFileType } from '@/lib/parsers';
 import { smartChunk } from '@/lib/rag/chunking';
@@ -28,6 +28,12 @@ import {
   clearDocumentLogs,
 } from '@/lib/document-log';
 import { triggerRagIndexGeneration } from '@/lib/chat/rag-index-generator';
+import {
+  determineChunkingStrategy,
+  toChunkExperimentMetadata,
+  type ChunkingStrategyResult,
+} from '@/lib/rag/experiment';
+import type { ExperimentConfig, ChunkExperimentMetadata } from '@/types/experiment';
 
 export const processDocument = inngestClient.createFunction(
   {
@@ -106,7 +112,7 @@ onFailure: async ({ event, error }) => {
       });
     });
 
-    // Step 1: 문서 상태 업데이트 및 datasetId 검증/동기화
+    // Step 1: 문서 상태 업데이트 및 datasetId 검증/동기화 + 실험 설정 조회
     const initResult = await step.run('initialize-processing', async () => {
       await updateDocumentProgress(documentId, 'parsing', 0);
 
@@ -128,11 +134,40 @@ onFailure: async ({ event, error }) => {
         }
       }
 
-      return { initialized: true, datasetId: resolvedDatasetId };
+      // Phase 5: 챗봇별 실험 설정 조회
+      // 데이터셋에 연결된 첫 번째 챗봇의 experimentConfig 사용
+      let experimentConfig: ExperimentConfig | null = null;
+      let connectedChatbotId: string | null = null;
+
+      if (resolvedDatasetId) {
+        const [connection] = await db
+          .select({
+            chatbotId: chatbotDatasets.chatbotId,
+            experimentConfig: chatbots.experimentConfig,
+          })
+          .from(chatbotDatasets)
+          .innerJoin(chatbots, eq(chatbotDatasets.chatbotId, chatbots.id))
+          .where(eq(chatbotDatasets.datasetId, resolvedDatasetId))
+          .limit(1);
+
+        if (connection) {
+          connectedChatbotId = connection.chatbotId;
+          experimentConfig = connection.experimentConfig as ExperimentConfig | null;
+        }
+      }
+
+      return {
+        initialized: true,
+        datasetId: resolvedDatasetId,
+        experimentConfig,
+        connectedChatbotId,
+      };
     });
 
     // 검증된 datasetId 사용 (event 값 또는 documents 테이블에서 조회한 값)
     const datasetId = initResult.datasetId;
+    const experimentConfig = initResult.experimentConfig;
+    const connectedChatbotId = initResult.connectedChatbotId;
 
     // Step 2: 문서 파싱 (파일 다운로드 포함)
     const parsingStartTime = Date.now();
@@ -175,14 +210,36 @@ onFailure: async ({ event, error }) => {
       durationMs: Date.now() - parsingStartTime,
     });
 
-    // Step 3: 청킹 (AI Semantic Chunking 우선, 폴백으로 규칙 기반)
+    // Step 3: 청킹 (Phase 5: 챗봇별 전략 결정)
     const chunkingStartTime = Date.now();
+
+    // 청킹 전략 결정 (챗봇 설정 또는 글로벌 설정 사용)
+    const strategyResult: ChunkingStrategyResult = determineChunkingStrategy(
+      connectedChatbotId || 'default',
+      experimentConfig,
+      documentId // 문서 ID로 일관된 A/B 분배
+    );
+
+    // 실험 메타데이터 생성 (청크에 저장할 정보)
+    const experimentMetadata: ChunkExperimentMetadata = toChunkExperimentMetadata(strategyResult);
+
+    logger.info('Chunking strategy determined', {
+      documentId,
+      chatbotId: connectedChatbotId,
+      strategy: strategyResult.strategy,
+      variant: strategyResult.variant,
+      reason: strategyResult.reason,
+    });
+
     const chunkResults = await step.run('chunk-document', async () => {
       await updateDocumentProgress(documentId, 'chunking', 0);
 
-      // AI Semantic Chunking 활성화 시 사용
-      if (isSemanticChunkingEnabled()) {
-        logger.info('Using AI Semantic Chunking', { documentId });
+      // Phase 5: 전략에 따른 청킹 실행
+      if (strategyResult.strategy === 'semantic') {
+        logger.info('Using AI Semantic Chunking', {
+          documentId,
+          variant: strategyResult.variant,
+        });
 
         const semanticChunks = await semanticChunk(
           parseResult.text,
@@ -198,7 +255,7 @@ onFailure: async ({ event, error }) => {
           { tenantId }
         );
 
-        // 기존 Chunk 타입과 호환되도록 변환
+        // 기존 Chunk 타입과 호환되도록 변환 + 실험 메타데이터 포함
         return semanticChunks.map((chunk) => ({
           content: chunk.content,
           index: chunk.index,
@@ -213,12 +270,18 @@ onFailure: async ({ event, error }) => {
             // Semantic Chunking 추가 메타데이터
             chunkType: chunk.type,
             topic: chunk.topic,
+            // Phase 5: A/B 테스트 실험 메타데이터
+            ...experimentMetadata,
           },
         }));
       }
 
-      // 폴백: 기존 규칙 기반 청킹
-      logger.info('Using rule-based chunking (fallback)', { documentId });
+      // smart 또는 late 전략: 규칙 기반 청킹
+      logger.info('Using rule-based chunking', {
+        documentId,
+        strategy: strategyResult.strategy,
+        variant: strategyResult.variant,
+      });
       const chunksData = await smartChunk(parseResult.text, {
         maxChunkSize: 500,
         overlap: 50,
@@ -227,7 +290,15 @@ onFailure: async ({ event, error }) => {
 
       await updateDocumentProgress(documentId, 'chunking', 100);
 
-      return chunksData;
+      // 실험 메타데이터 추가
+      return chunksData.map((chunk) => ({
+        ...chunk,
+        metadata: {
+          ...chunk.metadata,
+          // Phase 5: A/B 테스트 실험 메타데이터
+          ...experimentMetadata,
+        },
+      }));
     });
 
     // 청킹 완료 로그 (step.run 외부에서 호출)
@@ -237,7 +308,13 @@ onFailure: async ({ event, error }) => {
       step: 'chunking',
       status: 'completed',
       message: '청크 분할 완료',
-      details: { chunkCount: chunkResults.length },
+      details: {
+        chunkCount: chunkResults.length,
+        // Phase 5: 전략 정보 추가
+        strategy: strategyResult.strategy,
+        variant: strategyResult.variant,
+        strategyReason: strategyResult.reason,
+      },
       durationMs: Date.now() - chunkingStartTime,
     });
 

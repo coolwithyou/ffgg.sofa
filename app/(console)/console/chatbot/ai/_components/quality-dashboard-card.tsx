@@ -37,7 +37,7 @@ import type {
 import {
   QUALITY_GRADE_LABELS,
   RECOMMENDATION_MESSAGES,
-} from '@/lib/rag/quality-metrics';
+} from '@/lib/rag/quality-constants';
 
 interface QualityDashboardCardProps {
   chatbotId: string;

@@ -16,6 +16,15 @@ import type {
   ExperimentVariant,
 } from '@/types/experiment';
 
+// 클라이언트/서버 공용 상수 re-export (하위 호환성 유지)
+export {
+  MIN_SAMPLE_SIZE,
+  SIGNIFICANCE_THRESHOLD,
+  getQualityGrade,
+  QUALITY_GRADE_LABELS,
+  RECOMMENDATION_MESSAGES,
+} from './quality-constants';
+
 /**
  * Raw SQL 결과 행 타입
  */
@@ -157,15 +166,11 @@ function transformResults(rows: RawMetricRow[]): QualityMetrics[] {
   }));
 }
 
-/**
- * 최소 샘플 크기 (A/B 테스트 유의성 판단용)
- */
-export const MIN_SAMPLE_SIZE = 100;
-
-/**
- * 유의미한 품질 차이 임계값 (점수)
- */
-export const SIGNIFICANCE_THRESHOLD = 2;
+// 상수는 quality-constants.ts에서 re-export됨
+import {
+  MIN_SAMPLE_SIZE,
+  SIGNIFICANCE_THRESHOLD,
+} from './quality-constants';
 
 /**
  * A/B 테스트 결과 분석
@@ -301,36 +306,5 @@ export function extractABTestResult(
   return analyzeABTest(control, treatment);
 }
 
-/**
- * 품질 등급 반환
- *
- * @param score - 품질 점수 (0-100)
- * @returns 등급 (excellent | good | fair | poor)
- */
-export function getQualityGrade(
-  score: number
-): 'excellent' | 'good' | 'fair' | 'poor' {
-  if (score >= 85) return 'excellent';
-  if (score >= 70) return 'good';
-  if (score >= 50) return 'fair';
-  return 'poor';
-}
-
-/**
- * 품질 등급 한글 이름
- */
-export const QUALITY_GRADE_LABELS: Record<string, string> = {
-  excellent: '우수',
-  good: '양호',
-  fair: '보통',
-  poor: '미흡',
-};
-
-/**
- * A/B 테스트 권장 조치 한글 메시지
- */
-export const RECOMMENDATION_MESSAGES: Record<ABTestRecommendation, string> = {
-  adopt_treatment: '✅ Semantic 전략 채택 권장',
-  keep_control: '⚪ 현재 전략 유지 권장',
-  need_more_data: '⏳ 더 많은 데이터 필요',
-};
+// getQualityGrade, QUALITY_GRADE_LABELS, RECOMMENDATION_MESSAGES는
+// quality-constants.ts에서 정의되고 상단에서 re-export됨

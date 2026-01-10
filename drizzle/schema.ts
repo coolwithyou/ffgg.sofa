@@ -225,6 +225,10 @@ export const chatbots = pgTable(
     // idle: 대기, generating: 생성 중, completed: 완료, failed: 실패
     ragIndexStatus: text('rag_index_status').default('idle'),
 
+    // 청킹 실험 설정 (A/B 테스트용)
+    // Phase 5: A/B 테스트 및 품질 검증
+    experimentConfig: jsonb('experiment_config'),
+
     status: text('status').default('active'), // active, inactive
     isDefault: boolean('is_default').default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
@@ -599,6 +603,8 @@ export const tokenUsageLogs = pgTable(
     index('idx_token_usage_tenant_date').on(table.tenantId, table.createdAt),
     index('idx_token_usage_model').on(table.modelProvider, table.modelId),
     index('idx_token_usage_chatbot').on(table.chatbotId),
+    // Admin 대시보드 쿼리 성능 개선: createdAt 단독 인덱스
+    index('idx_token_usage_created').on(table.createdAt),
   ]
 );
 
