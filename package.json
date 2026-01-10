@@ -18,7 +18,8 @@
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
     "seed": "dotenv -e .env.local -- tsx scripts/seed.ts",
     "seed:all": "ADMIN_PASSWORD=${ADMIN_PASSWORD} dotenv -e .env.local -- tsx scripts/seed.ts",
-    "db:seed:admin": "dotenv -e .env.local -- tsx scripts/create-admin.ts",
+    "admin:create": "dotenv -e .env.local -- tsx scripts/create-admin.ts",
+    "admin:reset-password": "dotenv -e .env.local -- tsx scripts/reset-password.ts",
     "db:enable-vector": "dotenv -e .env.local -- tsx scripts/enable-pgvector.ts",
     "db:reprocess": "dotenv -e .env.local -- tsx scripts/reprocess-documents.ts",
     "rag:evaluate": "dotenv -e .env.local -- tsx scripts/evaluate-rag.ts"
