@@ -119,10 +119,11 @@ export function DocumentUpload() {
   useEffect(() => {
     async function fetchPointBalance() {
       try {
-        const response = await fetch('/api/points/balance');
+        const response = await fetch('/api/points');
         if (response.ok) {
           const data = await response.json();
-          setCurrentBalance(data.balance || 0);
+          // data.balance는 PointBalanceInfo 객체, data.balance.balance가 실제 잔액
+          setCurrentBalance(data.balance?.balance || 0);
         }
       } catch (err) {
         console.error('Failed to fetch point balance:', err);
