@@ -6,7 +6,7 @@
 
 ### 인프라
 - **프레임워크**: Next.js 16 (App Router)
-- **데이터베이스**: Neon PostgreSQL + pgvector
+- **데이터베이스**: Supabase PostgreSQL + pgvector
 - **ORM**: Drizzle ORM
 - **인증**: Iron Session
 - **Rate Limiting**: Upstash Redis
@@ -19,7 +19,7 @@
 | **LLM (메인)** | Gemini 2.5 Flash-Lite | 가성비 최고             |
 | **LLM (폴백)** | GPT-4o-mini           | 안정성                  |
 | **임베딩**     | BGE-m3-ko             | 한국어 최적화, 1024차원 |
-| **FTS**        | Nori + BM25           | Hybrid Retrieval        |
+| **FTS**        | ILIKE + RRF           | Hybrid Retrieval        |
 
 ## 주요 기능
 
@@ -38,8 +38,8 @@
 `.env.local` 파일을 생성하고 다음 환경 변수를 설정하세요:
 
 ```bash
-# 데이터베이스 (Neon PostgreSQL)
-DATABASE_URL=postgresql://...
+# 데이터베이스 (Supabase PostgreSQL - Transaction Mode)
+DATABASE_URL=postgres://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
 
 # 세션 암호화 키 (32자 이상 권장)
 SESSION_SECRET=your-secret-key-at-least-32-characters
@@ -81,16 +81,30 @@ pnpm db:push
 pnpm db:enable-vector
 ```
 
-### 4. 초기 어드민 생성
+### 4. 초기 데이터 시드
+
+통합 시드 스크립트로 LLM 모델, 예약 슬러그, 관리자 계정을 한 번에 설정합니다.
 
 ```bash
-# 환경변수로 비밀번호 설정
+# 기본 시드 (LLM 모델 + 예약 슬러그)
+pnpm seed
+
+# 관리자 포함 전체 시드
 ADMIN_EMAIL=admin@your-domain.com \
 ADMIN_PASSWORD=YourSecurePassword123! \
-pnpm db:seed:admin
+pnpm seed
 ```
 
-또는 `.env.local`에 추가:
+**시드 포함 항목:**
+| 항목 | 설명 |
+| --- | --- |
+| LLM 모델 | Gemini, GPT-4o-mini, Claude Haiku, Embedding 모델 가격 정보 |
+| 예약 슬러그 | 373개 예약어 (브랜드, 시스템, 금지어 등) |
+| 관리자 계정 | `ADMIN_PASSWORD` 설정 시에만 생성 |
+
+> ⚠️ 시드는 Idempotent(멱등성)합니다. 여러 번 실행해도 중복 데이터가 생성되지 않습니다.
+
+`.env.local`에 관리자 정보 설정 (선택):
 ```bash
 ADMIN_EMAIL=admin@your-domain.com
 ADMIN_PASSWORD=YourSecurePassword123!
@@ -103,7 +117,7 @@ ADMIN_COMPANY=Your Company Name
 pnpm dev
 ```
 
-[http://localhost:3000](http://localhost:3000)에서 확인할 수 있습니다.
+[http://localhost:3060](http://localhost:3060)에서 확인할 수 있습니다.
 
 ## 테스트
 
@@ -169,21 +183,50 @@ ffgg.sofa/
 
 ## 스크립트
 
-| 명령어                  | 설명                     |
-| ----------------------- | ------------------------ |
-| `pnpm dev`              | 개발 서버 실행           |
-| `pnpm build`            | 프로덕션 빌드            |
-| `pnpm start`            | 프로덕션 서버 실행       |
-| `pnpm lint`             | ESLint 실행              |
-| `pnpm test`             | 테스트 실행 (watch 모드) |
-| `pnpm test:run`         | 테스트 1회 실행          |
-| `pnpm test:coverage`    | 커버리지 포함 테스트     |
-| `pnpm db:push`          | DB 스키마 푸시           |
-| `pnpm db:generate`      | 마이그레이션 생성        |
-| `pnpm db:migrate`       | 마이그레이션 실행        |
-| `pnpm db:studio`        | Drizzle Studio 실행      |
-| `pnpm db:seed:admin`    | 초기 어드민 생성         |
-| `pnpm db:enable-vector` | pgvector 확장 활성화     |
+### 개발
+
+| 명령어              | 설명                        |
+| ------------------- | --------------------------- |
+| `pnpm dev`          | 개발 서버 실행 (port 3060)  |
+| `pnpm dev:inngest`  | Inngest 개발 서버 실행      |
+| `pnpm build`        | 프로덕션 빌드               |
+| `pnpm start`        | 프로덕션 서버 실행          |
+| `pnpm lint`         | ESLint 실행                 |
+
+### 테스트
+
+| 명령어               | 설명                     |
+| -------------------- | ------------------------ |
+| `pnpm test`          | 테스트 실행 (watch 모드) |
+| `pnpm test:run`      | 테스트 1회 실행          |
+| `pnpm test:coverage` | 커버리지 포함 테스트     |
+
+### 데이터베이스
+
+| 명령어                  | 설명                   |
+| ----------------------- | ---------------------- |
+| `pnpm db:push`          | DB 스키마 푸시         |
+| `pnpm db:generate`      | 마이그레이션 생성      |
+| `pnpm db:migrate`       | 마이그레이션 실행      |
+| `pnpm db:studio`        | Drizzle Studio 실행    |
+| `pnpm db:enable-vector` | pgvector 확장 활성화   |
+
+### 시드 및 데이터
+
+| 명령어             | 설명                                            |
+| ------------------ | ----------------------------------------------- |
+| `pnpm seed`        | 통합 시드 (LLM 모델 + 예약 슬러그 + 관리자*)    |
+| `pnpm seed:all`    | 전체 시드 (ADMIN_PASSWORD 환경변수 필요)        |
+| `pnpm db:seed:admin` | 관리자만 생성 (레거시, seed 권장)             |
+| `pnpm db:reprocess`| 문서 재처리 (청킹/임베딩)                       |
+
+> *관리자는 `ADMIN_PASSWORD` 환경변수가 설정된 경우에만 생성됩니다.
+
+### RAG
+
+| 명령어             | 설명                       |
+| ------------------ | -------------------------- |
+| `pnpm rag:evaluate`| RAG 검색 품질 평가         |
 
 ## API 엔드포인트
 
