@@ -178,6 +178,19 @@ export async function createAuditLog(input: AuditLogInput): Promise<void> {
 }
 
 /**
+ * IP 주소 유효성 검사
+ * PostgreSQL inet 타입에 호환되는 형식인지 확인
+ */
+function isValidIpAddress(ip: string): boolean {
+  // IPv4: 0.0.0.0 ~ 255.255.255.255
+  const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+  // IPv6: 기본 형식 (간략화된 검사)
+  const ipv6Regex = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
+
+  return ipv4Regex.test(ip) || ipv6Regex.test(ip);
+}
+
+/**
  * 요청 컨텍스트에서 접속기록 생성 (헬퍼)
  */
 export function createAuditLogFromRequest(
@@ -187,10 +200,13 @@ export function createAuditLogFromRequest(
   const headers = request.headers;
 
   // IP 주소 추출 (프록시 환경 고려)
-  const ipAddress =
+  const rawIp =
     headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     headers.get('x-real-ip') ||
-    'unknown';
+    undefined;
+
+  // IP 주소 유효성 검사 (inet 타입 호환)
+  const ipAddress = rawIp && isValidIpAddress(rawIp) ? rawIp : undefined;
 
   const userAgent = headers.get('user-agent') || undefined;
 
@@ -228,10 +244,13 @@ export async function logLoginFailure(
   reason?: string
 ): Promise<void> {
   // 로그인 실패는 콘솔에 기록 (보안 모니터링용)
-  const ipAddress =
+  const rawIp =
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     request.headers.get('x-real-ip') ||
-    'unknown';
+    undefined;
+
+  // IP 주소는 로깅에는 유효성 체크 없이 기록 (콘솔에서는 'unknown'도 OK)
+  const ipAddress = rawIp || 'unknown';
 
   logger.warn('Login failure', {
     email,

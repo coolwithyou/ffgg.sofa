@@ -228,6 +228,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[LOGIN ERROR]', error);
+    // 개발 환경에서 실제 에러 메시지 반환 (디버깅용)
+    if (process.env.NODE_ENV !== 'production') {
+      return NextResponse.json({
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      }, { status: 500 });
+    }
     return errorResponse(error);
   }
 }
