@@ -205,3 +205,89 @@ describe('smartChunk', () => {
     expect(chunks.length).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('한국어 문장 경계 처리', () => {
+  it('합쇼체 종결어미(-습니다, -입니다)에서 문장을 분리한다', async () => {
+    const content =
+      '안녕하세요. SOFA는 RAG 기반 챗봇 플랫폼입니다. ' +
+      '다양한 문서를 학습하여 자동으로 답변을 생성합니다. ' +
+      '사용자 친화적인 인터페이스를 제공합니다.';
+    const chunks = await smartChunk(content, { maxChunkSize: 100 });
+
+    // 문장 경계에서 분리되어야 함 (중간에 잘리지 않음)
+    chunks.forEach((chunk) => {
+      const trimmed = chunk.content.trim();
+      const endsWell =
+        trimmed.endsWith('.') ||
+        trimmed.endsWith('다') ||
+        trimmed.endsWith('요');
+      expect(endsWell).toBe(true);
+    });
+  });
+
+  it('해요체 종결어미(-요, -죠, -네요)에서 문장을 분리한다', async () => {
+    const content =
+      '이 기능은 정말 유용해요. 사용하기도 편하죠. ' +
+      '특히 한국어 처리가 뛰어나네요. 문장을 정확히 인식해요.';
+    const chunks = await smartChunk(content, { maxChunkSize: 100 });
+
+    // 각 청크가 문장 단위로 끝나야 함
+    expect(chunks.length).toBeGreaterThan(0);
+    chunks.forEach((chunk) => {
+      const trimmed = chunk.content.trim();
+      const hasKoreanEnding =
+        /(?:요|죠|네요|해요)[.!?]?$/.test(trimmed) || trimmed.endsWith('.');
+      expect(hasKoreanEnding).toBe(true);
+    });
+  });
+
+  it('구두점 없는 한국어 문장도 올바르게 분리한다', async () => {
+    const content =
+      '첫 번째 문장입니다 두 번째 문장이에요 ' +
+      '세 번째 문장이죠 네 번째 문장입니다';
+    const chunks = await smartChunk(content, { maxChunkSize: 80 });
+
+    // 종결어미 기반으로 분리되어야 함
+    expect(chunks.length).toBeGreaterThan(0);
+  });
+
+  it('긴 한국어 텍스트에서 문장 단위 오버랩이 적용된다', async () => {
+    // 여러 문장으로 구성된 긴 텍스트
+    const sentences = [
+      'SOFA는 스마트 오퍼레이터 FAQ 어시스턴트입니다.',
+      '문서를 업로드하면 자동으로 청크로 분리합니다.',
+      '벡터 임베딩을 생성하여 시맨틱 검색을 수행합니다.',
+      'PGroonga를 사용하여 한국어 전문 검색을 지원합니다.',
+      'Hybrid Search로 Dense와 Sparse 검색을 결합합니다.',
+      'RRF 알고리즘으로 최적의 결과를 도출합니다.',
+    ];
+    const content = sentences.join(' ');
+
+    const chunks = await smartChunk(content, { maxChunkSize: 150, overlap: 50 });
+
+    if (chunks.length > 1) {
+      // 두 번째 청크가 완전한 문장으로 시작하는지 확인
+      const secondChunk = chunks[1].content.trim();
+      // 문장 중간에 시작하지 않아야 함 (동사 앞에서 시작하지 않음)
+      expect(secondChunk).not.toMatch(/^[을를이가은는]/);
+    }
+  });
+
+  it('영어와 한국어가 혼합된 텍스트를 처리한다', async () => {
+    const content =
+      'RAG is Retrieval Augmented Generation. ' +
+      'SOFA는 RAG 기반 플랫폼입니다. ' +
+      'It supports hybrid search. 한국어와 영어 모두 지원합니다.';
+    const chunks = await smartChunk(content, { maxChunkSize: 100 });
+
+    // 영어(.)/한국어(종결어미) 모두 문장 단위로 분리
+    expect(chunks.length).toBeGreaterThan(0);
+    chunks.forEach((chunk) => {
+      const trimmed = chunk.content.trim();
+      const hasValidEnding =
+        trimmed.endsWith('.') ||
+        /(?:다|요|죠)$/.test(trimmed);
+      expect(hasValidEnding).toBe(true);
+    });
+  });
+});

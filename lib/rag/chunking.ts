@@ -1,6 +1,11 @@
 /**
  * 스마트 청킹 알고리즘
  * 문서를 의미 단위로 분리하고 품질 점수 계산
+ *
+ * 주요 특징:
+ * - 한국어 종결어미 기반 문장 경계 감지
+ * - 문장 단위 오버랩으로 컨텍스트 보존
+ * - Q&A 쌍, 헤더, 테이블 구조 인식
  */
 
 export interface ChunkOptions {
@@ -35,6 +40,24 @@ const DEFAULT_OPTIONS: ChunkOptions = {
   overlap: 50,
   preserveStructure: true,
 };
+
+/**
+ * 한국어 문장 종결 패턴
+ * 종결어미 + 선택적 구두점 + 공백/줄바꿈
+ *
+ * 분류:
+ * 1. 합쇼체 (격식): 습니다, 입니다, 됩니다, 합니다, 습니까, 입니까
+ * 2. 해요체 (비격식): 요, 죠, 네요, 군요, 거든요, 잖아요, 나요, 가요, 을까요
+ * 3. 해체 (반말): 다, 냐, 니, 자, 어, 아, ㄴ다, 는다, 었다, 였다
+ * 4. 인용/나열: 고요, 며, 고
+ */
+const KOREAN_SENTENCE_END_PATTERN =
+  /(?:습니다|입니다|됩니다|합니다|습니까|입니까|네요|군요|거든요|잖아요|나요|가요|을까요|ㄹ까요|세요|어요|아요|죠|요|다|냐|니|자)[.!?。！？]?\s+/g;
+
+/**
+ * 기본 문장 종결 패턴 (영어 및 기타 언어)
+ */
+const GENERAL_SENTENCE_END_PATTERN = /[.!?。！？]\s+/g;
 
 /**
  * 스마트 청킹 수행
@@ -198,7 +221,11 @@ function splitBySemanticUnits(
 }
 
 /**
- * 크기 제한과 오버랩을 적용하여 분리
+ * 크기 제한과 문장 단위 오버랩을 적용하여 분리
+ *
+ * 개선된 오버랩 전략:
+ * - 기존: 마지막 N자를 그대로 중복 (문장 중간 잘림)
+ * - 개선: 마지막 완전한 문장을 다음 청크 시작으로 사용
  */
 function splitWithOverlap(
   content: string,
@@ -261,9 +288,25 @@ function splitWithOverlap(
       });
     }
 
-    // 다음 시작 위치 (오버랩 적용)
-    currentPos = endPos - overlap;
-    if (currentPos >= content.length - overlap) {
+    // 다음 시작 위치 (문장 단위 오버랩 적용)
+    // 현재 청크의 마지막 문장부터 시작하도록 계산
+    const { overlapStart } = calculateSentenceOverlap(
+      content.slice(currentPos, endPos),
+      overlap
+    );
+
+    // 문장 경계 기반 오버랩 적용
+    const nextStart = currentPos + overlapStart;
+
+    // 무한 루프 방지: 최소 진행 보장
+    if (nextStart <= currentPos) {
+      currentPos = endPos;
+    } else {
+      currentPos = nextStart;
+    }
+
+    // 남은 내용이 너무 짧으면 종료
+    if (currentPos >= content.length - overlap / 2) {
       break;
     }
   }
@@ -273,18 +316,88 @@ function splitWithOverlap(
 
 /**
  * 마지막 문장 끝 위치 찾기
+ * 한국어 종결어미와 일반 구두점 기반
  */
 function findLastSentenceEnd(text: string): number {
-  // 한국어/영어 문장 끝 패턴
-  const sentenceEndPattern = /[.!?。！？다요죠]\s*/g;
-  let lastMatch = 0;
-  let match;
+  // 모든 문장 경계 찾기
+  const boundaries = findSentenceBoundaries(text);
 
-  while ((match = sentenceEndPattern.exec(text)) !== null) {
-    lastMatch = match.index + match[0].length;
+  if (boundaries.length === 0) {
+    return text.length;
   }
 
-  return lastMatch || text.length;
+  // 마지막 문장 경계 반환
+  return boundaries[boundaries.length - 1];
+}
+
+/**
+ * 텍스트 내 모든 문장 경계(끝 위치) 찾기
+ * 한국어 종결어미 우선, 일반 구두점 보완
+ */
+function findSentenceBoundaries(text: string): number[] {
+  const boundaries: Set<number> = new Set();
+
+  // 1. 한국어 종결어미 패턴 매칭
+  const koreanPattern = new RegExp(KOREAN_SENTENCE_END_PATTERN.source, 'g');
+  let match;
+  while ((match = koreanPattern.exec(text)) !== null) {
+    boundaries.add(match.index + match[0].length);
+  }
+
+  // 2. 일반 문장 종결 패턴 (영어 등)
+  const generalPattern = new RegExp(GENERAL_SENTENCE_END_PATTERN.source, 'g');
+  while ((match = generalPattern.exec(text)) !== null) {
+    boundaries.add(match.index + match[0].length);
+  }
+
+  // 3. 줄바꿈 기반 단락 경계 (마크다운/텍스트)
+  const paragraphPattern = /\n\s*\n/g;
+  while ((match = paragraphPattern.exec(text)) !== null) {
+    boundaries.add(match.index + match[0].length);
+  }
+
+  // 정렬된 배열로 반환
+  return Array.from(boundaries).sort((a, b) => a - b);
+}
+
+/**
+ * 문장 단위로 오버랩 영역 계산
+ * 단순 문자 수 대신 완전한 문장을 보존
+ */
+function calculateSentenceOverlap(
+  text: string,
+  targetOverlapChars: number
+): { overlapStart: number; overlapContent: string } {
+  const boundaries = findSentenceBoundaries(text);
+
+  if (boundaries.length === 0) {
+    // 문장 경계가 없으면 기존 방식 (문자 수 기반)
+    const start = Math.max(0, text.length - targetOverlapChars);
+    return {
+      overlapStart: start,
+      overlapContent: text.slice(start),
+    };
+  }
+
+  // 끝에서 targetOverlapChars 이내의 가장 가까운 문장 경계 찾기
+  const targetStart = text.length - targetOverlapChars;
+  let overlapStart = 0;
+
+  // 마지막 1-2 문장을 오버랩으로 사용
+  for (let i = boundaries.length - 1; i >= 0; i--) {
+    const boundary = boundaries[i];
+    if (boundary <= targetStart) {
+      overlapStart = boundary;
+      break;
+    }
+    // 최소 하나의 문장은 포함
+    overlapStart = i > 0 ? boundaries[i - 1] : 0;
+  }
+
+  return {
+    overlapStart,
+    overlapContent: text.slice(overlapStart).trim(),
+  };
 }
 
 /**
@@ -332,6 +445,47 @@ export function isHeaderOrSeparatorOnly(content: string): boolean {
 }
 
 /**
+ * 청크가 완전한 문장으로 끝나는지 확인
+ * 한국어 종결어미 포함
+ */
+function endsWithCompleteSentence(content: string): boolean {
+  const trimmed = content.trim();
+
+  // 구두점으로 끝나는 경우
+  if (/[.!?。！？]$/.test(trimmed)) {
+    return true;
+  }
+
+  // 한국어 종결어미로 끝나는 경우
+  const koreanEndings = [
+    '습니다',
+    '입니다',
+    '됩니다',
+    '합니다',
+    '습니까',
+    '입니까',
+    '네요',
+    '군요',
+    '거든요',
+    '잖아요',
+    '나요',
+    '가요',
+    '을까요',
+    '세요',
+    '어요',
+    '아요',
+    '죠',
+    '요',
+    '다',
+    '냐',
+    '니',
+    '자',
+  ];
+
+  return koreanEndings.some((ending) => trimmed.endsWith(ending));
+}
+
+/**
  * 청크 품질 점수 계산 (0-100)
  */
 function calculateQualityScore(chunk: Chunk): number {
@@ -349,14 +503,7 @@ function calculateQualityScore(chunk: Chunk): number {
   }
 
   // 문장이 중간에 잘렸으면 감점
-  if (
-    !content.endsWith('.') &&
-    !content.endsWith('다') &&
-    !content.endsWith('요') &&
-    !content.endsWith('죠') &&
-    !content.endsWith('!') &&
-    !content.endsWith('?')
-  ) {
+  if (!endsWithCompleteSentence(content)) {
     score -= 15;
   }
 
