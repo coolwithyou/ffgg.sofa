@@ -155,8 +155,10 @@ function isKoreanDocument(text: string): boolean {
 /**
  * 텍스트 내 모든 문장 경계(끝 위치) 찾기
  * 한국어 종결어미 우선, 일반 구두점 보완
+ *
+ * @internal 테스트용 export
  */
-function findSentenceBoundaries(text: string): number[] {
+export function findSentenceBoundaries(text: string): number[] {
   const boundaries: Set<number> = new Set();
 
   // 1. 한국어 종결어미 패턴 매칭
@@ -183,8 +185,10 @@ function findSentenceBoundaries(text: string): number[] {
  * @param text - 분할할 텍스트
  * @param maxSize - 각 세그먼트의 최대 크기
  * @returns 분할된 세그먼트 배열
+ *
+ * @internal 테스트용 export
  */
-function splitByNaturalBoundaries(text: string, maxSize: number): string[] {
+export function splitByNaturalBoundaries(text: string, maxSize: number): string[] {
   if (text.length <= maxSize) {
     return [text.trim()].filter((s) => s.length > 0);
   }
@@ -271,13 +275,40 @@ function splitByNaturalBoundaries(text: string, maxSize: number): string[] {
 
 /**
  * 1차 규칙 기반 분할 (큰 단위)
- * 헤더와 빈 줄을 기준으로 먼저 분할하고, 여전히 큰 세그먼트는 단락 단위로 재분할
+ *
+ * 개선된 분할 전략:
+ * - 마크다운 문서: 헤더(#) 기준 분할
+ * - 일반 텍스트/PDF: 빈 줄(\n\n+) 기준 분할
+ * - 큰 세그먼트: 문장 경계 기반 재분할 (splitByNaturalBoundaries)
+ *
+ * @param content - 분할할 텍스트
+ * @param maxSize - 최대 세그먼트 크기 (기본: 2000자)
  */
 function preChunk(content: string, maxSize: number): string[] {
   const segments: string[] = [];
 
-  // 1. 먼저 큰 구분자로 분할 시도 (헤더, 빈 줄 2개 이상)
-  const majorSplits = content.split(/\n{3,}|(?=^#{1,3}\s)/gm);
+  // 마크다운 헤더 존재 여부 감지
+  const hasMarkdownHeaders = /^#{1,6}\s/m.test(content);
+
+  let majorSplits: string[];
+
+  if (hasMarkdownHeaders) {
+    // 마크다운 문서: 헤더(#) 기준 분할
+    // (?=^#{1,3}\s)는 lookahead로 헤더 앞에서 분할 (헤더 자체는 유지)
+    majorSplits = content.split(/(?=^#{1,3}\s)/gm);
+
+    logger.debug('preChunk: Detected markdown document', {
+      headerCount: majorSplits.length,
+    });
+  } else {
+    // 일반 텍스트/PDF: 빈 줄 기준 분할
+    // cleanText()가 \n{3,} → \n\n 변환하므로 \n\n+ 패턴 사용
+    majorSplits = content.split(/\n\n+/);
+
+    logger.debug('preChunk: Detected plain text document', {
+      paragraphCount: majorSplits.length,
+    });
+  }
 
   for (const split of majorSplits) {
     const trimmed = split.trim();
@@ -286,21 +317,17 @@ function preChunk(content: string, maxSize: number): string[] {
     if (trimmed.length <= maxSize) {
       segments.push(trimmed);
     } else {
-      // 큰 세그먼트는 단락 단위로 재분할
-      const paragraphs = trimmed.split(/\n{2,}/);
-      let currentSegment = '';
-
-      for (const para of paragraphs) {
-        if ((currentSegment + '\n\n' + para).length <= maxSize) {
-          currentSegment = currentSegment ? currentSegment + '\n\n' + para : para;
-        } else {
-          if (currentSegment) segments.push(currentSegment);
-          currentSegment = para;
-        }
-      }
-      if (currentSegment) segments.push(currentSegment);
+      // 큰 세그먼트는 문장 경계 기반으로 재분할
+      const subSegments = splitByNaturalBoundaries(trimmed, maxSize);
+      segments.push(...subSegments);
     }
   }
+
+  logger.debug('preChunk: Segmentation completed', {
+    inputLength: content.length,
+    outputSegments: segments.length,
+    avgSegmentSize: Math.round(content.length / Math.max(1, segments.length)),
+  });
 
   return segments.filter((s) => s.length > 0);
 }
@@ -339,6 +366,88 @@ function parseAIResponse(response: string): SemanticChunkResult[] {
       responsePreview: response.slice(0, 200),
     });
     return [];
+  }
+}
+
+/**
+ * 청크 콘텐츠에서 타입 추론
+ * AI 실패 시 폴백에서 사용
+ *
+ * @internal 테스트용 export
+ */
+export function inferChunkType(
+  content: string
+): 'qa' | 'header' | 'list' | 'table' | 'code' | 'paragraph' {
+  // Q&A 패턴 감지
+  if (
+    /(?:Q|질문|문)[:：]/i.test(content) &&
+    /(?:A|답변|답)[:：]/i.test(content)
+  ) {
+    return 'qa';
+  }
+
+  // 마크다운 헤더 감지
+  if (/^#{1,6}\s/.test(content)) {
+    return 'header';
+  }
+
+  // 코드 블록 감지
+  if (/```[\s\S]*```/.test(content) || /^\s{4,}[\w]/m.test(content)) {
+    return 'code';
+  }
+
+  // 테이블 감지
+  if (/\|.*\|.*\|/m.test(content)) {
+    return 'table';
+  }
+
+  // 목록 감지
+  if (/^[-*•]\s/m.test(content) || /^\d+[.)]\s/m.test(content)) {
+    return 'list';
+  }
+
+  return 'paragraph';
+}
+
+/**
+ * AI 실패 시 규칙 기반 청킹으로 폴백
+ *
+ * 순환 의존성을 피하기 위해 동적 import 사용
+ */
+async function fallbackToRuleBasedChunking(
+  segment: string,
+  options: Required<SemanticChunkOptions>
+): Promise<SemanticChunkResult[]> {
+  try {
+    const { smartChunk } = await import('./chunking');
+
+    const ruleBasedChunks = await smartChunk(segment, {
+      maxChunkSize: options.maxChunkSize,
+      overlap: 0, // 폴백에서는 오버랩 불필요 (후처리에서 처리)
+      preserveStructure: true,
+    });
+
+    logger.info('Fallback to rule-based chunking', {
+      inputLength: segment.length,
+      outputChunks: ruleBasedChunks.length,
+    });
+
+    return ruleBasedChunks.map((chunk) => ({
+      content: chunk.content,
+      type: inferChunkType(chunk.content),
+      topic: '',
+    }));
+  } catch (error) {
+    logger.error('Fallback chunking also failed', error as Error);
+
+    // 최후의 수단: 원본 반환
+    return [
+      {
+        content: segment,
+        type: inferChunkType(segment),
+        topic: '',
+      },
+    ];
   }
 }
 
@@ -396,19 +505,23 @@ async function chunkSegmentWithAI(
 
     const chunks = parseAIResponse(result.text);
 
-    // 빈 결과면 원본 반환
+    // 빈 결과면 규칙 기반 폴백
     if (chunks.length === 0) {
-      return [{ content: segment, type: 'paragraph', topic: '' }];
+      logger.warn('AI returned empty chunks, falling back to rule-based', {
+        segmentLength: segment.length,
+        responsePreview: result.text.slice(0, 100),
+      });
+      return await fallbackToRuleBasedChunking(segment, options);
     }
 
     return chunks;
   } catch (error) {
-    logger.error('AI semantic chunking failed', error as Error, {
+    logger.error('AI semantic chunking failed, falling back to rule-based', error as Error, {
       segmentLength: segment.length,
     });
 
-    // 에러 시 원본 세그먼트 그대로 반환 (graceful fallback)
-    return [{ content: segment, type: 'paragraph', topic: '' }];
+    // 에러 시 규칙 기반 청킹으로 폴백
+    return await fallbackToRuleBasedChunking(segment, options);
   }
 }
 
