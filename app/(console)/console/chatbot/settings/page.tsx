@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
 import { useCurrentChatbot, useTenantSettings, useConsole } from '../../hooks/use-console-state';
 import { NoChatbotState } from '../../components/no-chatbot-state';
 import {
@@ -14,9 +15,11 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { SimpleDialog } from '@/components/ui/dialog';
-import { Bot, Globe, Trash2, FlaskConical, Lock, Crown, Loader2 } from 'lucide-react';
+import { Bot, Globe, Trash2, FlaskConical, Lock, Crown, Loader2, Check, X, AlertCircle } from 'lucide-react';
 import { SlugEditor } from './components/slug-editor';
 import { toast } from 'sonner';
+
+type SlugCheckStatus = 'idle' | 'checking' | 'available' | 'unavailable';
 
 /**
  * Settings - 일반 설정 페이지
@@ -39,6 +42,86 @@ export default function SettingsPage() {
   const [showSlugDialog, setShowSlugDialog] = useState(false);
   const [slugInput, setSlugInput] = useState('');
   const [slugError, setSlugError] = useState<string | null>(null);
+  const [slugCheckStatus, setSlugCheckStatus] = useState<SlugCheckStatus>('idle');
+
+  /**
+   * 슬러그 중복/예약어 검사 (디바운스 500ms)
+   * SlugEditor와 동일한 로직
+   */
+  const checkSlugAvailability = useDebouncedCallback(
+    async (slug: string) => {
+      if (!slug) {
+        setSlugCheckStatus('idle');
+        setSlugError(null);
+        return;
+      }
+
+      // 기본 형식 검사
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+        setSlugCheckStatus('unavailable');
+        setSlugError('영문 소문자, 숫자, 하이픈만 사용 가능합니다');
+        return;
+      }
+
+      if (slug.length < 3) {
+        setSlugCheckStatus('unavailable');
+        setSlugError('3자 이상 입력해주세요');
+        return;
+      }
+
+      setSlugCheckStatus('checking');
+      setSlugError(null);
+
+      try {
+        const res = await fetch(
+          `/api/chatbots/check-slug?slug=${encodeURIComponent(slug)}`
+        );
+        const data = await res.json();
+
+        if (data.valid && data.available) {
+          setSlugCheckStatus('available');
+          setSlugError(null);
+        } else {
+          setSlugCheckStatus('unavailable');
+          setSlugError(data.error || '사용할 수 없는 키워드입니다');
+        }
+      } catch (err) {
+        console.error('Slug check error:', err);
+        setSlugCheckStatus('idle');
+        setSlugError('확인 중 오류가 발생했습니다');
+      }
+    },
+    500
+  );
+
+  /**
+   * 슬러그 입력 핸들러 - 실시간 검증 호출
+   */
+  const handleSlugInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+      setSlugInput(value);
+      setSlugError(null);
+      checkSlugAvailability(value);
+    },
+    [checkSlugAvailability]
+  );
+
+  /**
+   * 슬러그 검사 상태 아이콘 렌더링
+   */
+  const renderSlugStatusIcon = () => {
+    switch (slugCheckStatus) {
+      case 'checking':
+        return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
+      case 'available':
+        return <Check className="h-4 w-4 text-green-500" />;
+      case 'unavailable':
+        return <X className="h-4 w-4 text-destructive" />;
+      default:
+        return null;
+    }
+  };
 
   const handleAdvancedModeToggle = async (enabled: boolean) => {
     setIsUpdatingAdvancedMode(true);
@@ -65,6 +148,7 @@ export default function SettingsPage() {
     if (willEnable && !currentChatbot.slug) {
       setSlugInput('');
       setSlugError(null);
+      setSlugCheckStatus('idle');
       setShowSlugDialog(true);
       return;
     }
@@ -98,25 +182,29 @@ export default function SettingsPage() {
 
   /**
    * 슬러그 입력 후 활성화
+   * 실시간 검증이 완료된 상태(available)에서만 진행
    */
   const handleSlugSubmit = useCallback(async () => {
     if (!currentChatbot) return;
 
     const trimmedSlug = slugInput.trim().toLowerCase();
 
-    // 기본 유효성 검사
+    // 슬러그가 없거나 검증되지 않은 경우
     if (!trimmedSlug) {
       setSlugError('슬러그를 입력해주세요');
       return;
     }
 
-    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(trimmedSlug)) {
-      setSlugError('슬러그는 영문 소문자, 숫자, 하이픈(-)만 사용 가능합니다');
-      return;
-    }
-
-    if (trimmedSlug.length < 3) {
-      setSlugError('슬러그는 3자 이상이어야 합니다');
+    // 실시간 검증이 완료되지 않은 경우
+    if (slugCheckStatus !== 'available') {
+      if (slugCheckStatus === 'checking') {
+        setSlugError('검증 중입니다. 잠시 후 다시 시도해주세요');
+      } else if (slugCheckStatus === 'unavailable') {
+        // 이미 에러 메시지가 설정되어 있음
+        return;
+      } else {
+        setSlugError('슬러그 검증이 필요합니다');
+      }
       return;
     }
 
@@ -146,7 +234,7 @@ export default function SettingsPage() {
     } finally {
       setIsTogglingPublicPage(false);
     }
-  }, [currentChatbot, slugInput, reloadChatbots]);
+  }, [currentChatbot, slugInput, slugCheckStatus, reloadChatbots]);
 
   const isPremium = canEnableAdvancedMode();
   const advancedModeActive = isAdvancedModeEnabled();
@@ -261,18 +349,25 @@ export default function SettingsPage() {
                 <span className="text-sm text-muted-foreground">
                   {typeof window !== 'undefined' ? window.location.origin : ''}/
                 </span>
-                <Input
-                  value={slugInput}
-                  onChange={(e) => {
-                    setSlugInput(e.target.value);
-                    setSlugError(null);
-                  }}
-                  placeholder="my-chatbot"
-                  className="flex-1"
-                />
+                <div className="relative flex-1">
+                  <Input
+                    value={slugInput}
+                    onChange={handleSlugInputChange}
+                    placeholder="my-chatbot"
+                    className="pr-8"
+                    autoFocus
+                    disabled={isTogglingPublicPage}
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                    {renderSlugStatusIcon()}
+                  </div>
+                </div>
               </div>
               {slugError && (
-                <p className="text-sm text-destructive">{slugError}</p>
+                <div className="flex items-center gap-1.5 text-sm text-destructive">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  <span>{slugError}</span>
+                </div>
               )}
             </div>
 
@@ -286,7 +381,11 @@ export default function SettingsPage() {
               </Button>
               <Button
                 onClick={handleSlugSubmit}
-                disabled={isTogglingPublicPage}
+                disabled={
+                  isTogglingPublicPage ||
+                  slugCheckStatus !== 'available' ||
+                  !slugInput.trim()
+                }
               >
                 {isTogglingPublicPage && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
