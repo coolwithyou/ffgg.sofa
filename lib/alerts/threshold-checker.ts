@@ -142,13 +142,17 @@ export async function checkAnomalies(spikeThreshold: number = 200): Promise<Anom
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
 
+    // Note: Drizzle sql 템플릿에서 Date 객체는 ISO 문자열로 변환 필요
+    const todayStartISO = todayStart.toISOString();
+    const yesterdayStartISO = yesterdayStart.toISOString();
+
     // 테넌트별 오늘/어제 사용량 비교
     const usageComparison = await db
       .select({
         tenantId: tokenUsageLogs.tenantId,
         tenantName: tenants.name,
-        todayCost: sql<number>`COALESCE(SUM(${tokenUsageLogs.totalCostUsd}) FILTER (WHERE ${tokenUsageLogs.createdAt} >= ${todayStart}), 0)`,
-        yesterdayCost: sql<number>`COALESCE(SUM(${tokenUsageLogs.totalCostUsd}) FILTER (WHERE ${tokenUsageLogs.createdAt} >= ${yesterdayStart} AND ${tokenUsageLogs.createdAt} < ${todayStart}), 0)`,
+        todayCost: sql<number>`COALESCE(SUM(${tokenUsageLogs.totalCostUsd}) FILTER (WHERE ${tokenUsageLogs.createdAt} >= ${todayStartISO}::timestamptz), 0)`,
+        yesterdayCost: sql<number>`COALESCE(SUM(${tokenUsageLogs.totalCostUsd}) FILTER (WHERE ${tokenUsageLogs.createdAt} >= ${yesterdayStartISO}::timestamptz AND ${tokenUsageLogs.createdAt} < ${todayStartISO}::timestamptz), 0)`,
       })
       .from(tokenUsageLogs)
       .innerJoin(tenants, eq(tokenUsageLogs.tenantId, tenants.id))

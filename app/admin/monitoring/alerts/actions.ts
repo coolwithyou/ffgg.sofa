@@ -143,11 +143,14 @@ export async function getAlertsOverview(): Promise<AlertsOverview | null> {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
+    // Note: Drizzle sql 템플릿에서 Date 객체는 ISO 문자열로 변환 필요
+    const todayStartISO = todayStart.toISOString();
+
     const [stats] = await db
       .select({
         total: count(),
         unacknowledged: sql<number>`COUNT(*) FILTER (WHERE ${usageAlerts.acknowledged} = false)`,
-        today: sql<number>`COUNT(*) FILTER (WHERE ${usageAlerts.sentAt} >= ${todayStart})`,
+        today: sql<number>`COUNT(*) FILTER (WHERE ${usageAlerts.sentAt} >= ${todayStartISO}::timestamptz)`,
         budget_warning: sql<number>`COUNT(*) FILTER (WHERE ${usageAlerts.alertType} = 'budget_warning')`,
         budget_critical: sql<number>`COUNT(*) FILTER (WHERE ${usageAlerts.alertType} = 'budget_critical')`,
         budget_exceeded: sql<number>`COUNT(*) FILTER (WHERE ${usageAlerts.alertType} = 'budget_exceeded')`,

@@ -77,12 +77,16 @@ export async function getChatbotDashboardData(): Promise<ChatbotDashboardData | 
       .innerJoin(tenants, eq(chatbots.tenantId, tenants.id));
 
     // 챗봇별 대화 수 집계
+    // Note: Drizzle sql 템플릿에서 Date 객체는 ISO 문자열로 변환 필요
+    const todayStartISO = todayStart.toISOString();
+    const weekStartISO = weekStart.toISOString();
+
     const conversationCounts = await db
       .select({
         chatbotId: conversations.chatbotId,
         total: count(),
-        today: sql<number>`COUNT(*) FILTER (WHERE ${conversations.createdAt} >= ${todayStart})`,
-        weekly: sql<number>`COUNT(*) FILTER (WHERE ${conversations.createdAt} >= ${weekStart})`,
+        today: sql<number>`COUNT(*) FILTER (WHERE ${conversations.createdAt} >= ${todayStartISO}::timestamptz)`,
+        weekly: sql<number>`COUNT(*) FILTER (WHERE ${conversations.createdAt} >= ${weekStartISO}::timestamptz)`,
         lastActivityAt: sql<Date>`MAX(${conversations.updatedAt})`,
       })
       .from(conversations)
@@ -228,12 +232,17 @@ export async function getChatbotDetail(chatbotId: string) {
     const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
+    // Note: Drizzle sql 템플릿에서 Date 객체는 ISO 문자열로 변환 필요
+    const todayStartISO = todayStart.toISOString();
+    const weekStartISO = weekStart.toISOString();
+    const monthStartISO = monthStart.toISOString();
+
     const [conversationStats] = await db
       .select({
         total: count(),
-        today: sql<number>`COUNT(*) FILTER (WHERE ${conversations.createdAt} >= ${todayStart})`,
-        weekly: sql<number>`COUNT(*) FILTER (WHERE ${conversations.createdAt} >= ${weekStart})`,
-        monthly: sql<number>`COUNT(*) FILTER (WHERE ${conversations.createdAt} >= ${monthStart})`,
+        today: sql<number>`COUNT(*) FILTER (WHERE ${conversations.createdAt} >= ${todayStartISO}::timestamptz)`,
+        weekly: sql<number>`COUNT(*) FILTER (WHERE ${conversations.createdAt} >= ${weekStartISO}::timestamptz)`,
+        monthly: sql<number>`COUNT(*) FILTER (WHERE ${conversations.createdAt} >= ${monthStartISO}::timestamptz)`,
       })
       .from(conversations)
       .where(eq(conversations.chatbotId, chatbotId));
@@ -243,8 +252,8 @@ export async function getChatbotDetail(chatbotId: string) {
       .select({
         totalTokens: sql<number>`COALESCE(SUM(${tokenUsageLogs.totalTokens}), 0)`,
         totalCostUsd: sql<number>`COALESCE(SUM(${tokenUsageLogs.totalCostUsd}), 0)`,
-        monthlyTokens: sql<number>`COALESCE(SUM(${tokenUsageLogs.totalTokens}) FILTER (WHERE ${tokenUsageLogs.createdAt} >= ${monthStart}), 0)`,
-        monthlyCostUsd: sql<number>`COALESCE(SUM(${tokenUsageLogs.totalCostUsd}) FILTER (WHERE ${tokenUsageLogs.createdAt} >= ${monthStart}), 0)`,
+        monthlyTokens: sql<number>`COALESCE(SUM(${tokenUsageLogs.totalTokens}) FILTER (WHERE ${tokenUsageLogs.createdAt} >= ${monthStartISO}::timestamptz), 0)`,
+        monthlyCostUsd: sql<number>`COALESCE(SUM(${tokenUsageLogs.totalCostUsd}) FILTER (WHERE ${tokenUsageLogs.createdAt} >= ${monthStartISO}::timestamptz), 0)`,
       })
       .from(tokenUsageLogs)
       .where(eq(tokenUsageLogs.chatbotId, chatbotId));
