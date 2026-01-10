@@ -890,6 +890,53 @@ export default function AISettingsPage() {
               </p>
             </div>
 
+            {/* 청킹 전략 상세 설명 */}
+            <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+              <p className="text-sm font-medium text-foreground">청킹 방식 비교</p>
+
+              {/* Smart (규칙 기반) */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-blue-500/10 text-xs font-bold text-blue-500">S</span>
+                  <span className="text-sm font-medium text-foreground">규칙 기반 (Smart)</span>
+                  <span className="rounded bg-green-500/10 px-1.5 py-0.5 text-xs text-green-500">무료</span>
+                </div>
+                <p className="pl-7 text-xs text-muted-foreground">
+                  한국어 종결어미 패턴과 문서 구조(헤더, Q&A, 테이블)를 인식하여 분할합니다.
+                  문서 유형(FAQ, 기술문서, 법률문서)을 자동 감지하여 최적 설정을 적용합니다.
+                  빠르고 예측 가능하며 비용이 들지 않습니다.
+                </p>
+              </div>
+
+              {/* Semantic (AI 의미 기반) */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-purple-500/10 text-xs font-bold text-purple-500">A</span>
+                  <span className="text-sm font-medium text-foreground">AI 의미 기반 (Semantic)</span>
+                  <span className="rounded bg-orange-500/10 px-1.5 py-0.5 text-xs text-orange-500">포인트 사용</span>
+                </div>
+                <p className="pl-7 text-xs text-muted-foreground">
+                  Claude Haiku AI가 문맥을 이해하여 의미적으로 완결된 단위로 분할합니다.
+                  3단계 파이프라인(Pre-chunk → AI 분석 → Post-process)으로 동작하며,
+                  Q&A 쌍, 코드 블록, 테이블 등을 자동 인식합니다. 프롬프트 캐싱으로 90% 비용 절감.
+                </p>
+              </div>
+
+              {/* Late Chunking */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-cyan-500/10 text-xs font-bold text-cyan-500">L</span>
+                  <span className="text-sm font-medium text-foreground">Late Chunking</span>
+                  <span className="rounded bg-cyan-500/10 px-1.5 py-0.5 text-xs text-cyan-500">실험적</span>
+                </div>
+                <p className="pl-7 text-xs text-muted-foreground">
+                  전체 문서를 먼저 임베딩한 후 청크별로 풀링합니다 (Jina AI 연구 기반).
+                  문맥 정보가 임베딩에 보존되어 검색 품질이 향상됩니다.
+                  3가지 풀링 전략(평균/최대/가중치) 중 품질 기반 가중치 풀링이 기본값입니다.
+                </p>
+              </div>
+            </div>
+
             {/* A/B 테스트 토글 */}
             <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-4">
               <div className="flex items-center gap-3">
