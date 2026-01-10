@@ -95,6 +95,58 @@ export interface AdminDashboardData {
 /**
  * 관리자 대시보드 데이터 조회
  */
+/**
+ * 타임아웃이 있는 프로미스 래퍼
+ * 지정된 시간 내에 완료되지 않으면 기본값 반환
+ */
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  defaultValue: T
+): Promise<T> {
+  return new Promise((resolve) => {
+    const timeoutId = setTimeout(() => {
+      resolve(defaultValue);
+    }, timeoutMs);
+
+    promise
+      .then((result) => {
+        clearTimeout(timeoutId);
+        resolve(result);
+      })
+      .catch(() => {
+        clearTimeout(timeoutId);
+        resolve(defaultValue);
+      });
+  });
+}
+
+// AI 사용량 기본값 (쿼리 실패/타임아웃 시 사용)
+const DEFAULT_USAGE_OVERVIEW: UsageOverview = {
+  period: 'today',
+  totalTokens: 0,
+  totalCostUsd: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  byModel: [],
+  byFeature: [],
+};
+
+const DEFAULT_FORECAST: Forecast = {
+  currentMonthUsage: 0,
+  projectedMonthlyUsage: 0,
+  daysRemaining: 0,
+  dailyAverage: 0,
+  trend: 'stable',
+  confidenceLevel: 'low',
+};
+
+const DEFAULT_CACHE_COST: CacheCostComparison = {
+  cachedRequests: 0,
+  nonCachedRequests: 0,
+  estimatedSavings: 0,
+};
+
 export async function getAdminDashboardData(): Promise<AdminDashboardData | null> {
   const session = await validateSession();
 
@@ -108,26 +160,25 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    // 병렬로 통계 조회 (기존 5개 + AI 사용량 4개 + 포인트 5개)
+    // AI 사용량 쿼리 타임아웃 (3초) - 느린 쿼리가 페이지 로딩을 블록하지 않도록
+    const AI_QUERY_TIMEOUT_MS = 3000;
+
+    // ========================================
+    // 배치 1: 핵심 통계 + AI 사용량 (10개 쿼리)
+    // 커넥션 풀 고갈 방지를 위해 배치 분할
+    // ========================================
     const [
       tenantStats,
       documentCount,
       chunkStats,
       conversationStats,
       topTenantsData,
-      // AI 사용량 데이터
+      // AI 사용량 데이터 (타임아웃 적용)
       todayUsage,
       monthUsage,
       forecast,
       cacheCost,
       anomaliesRaw,
-      // 포인트 통계 데이터
-      pointsOverview,
-      todayPointUsage,
-      monthPointUsage,
-      todayPointCharges,
-      monthPointCharges,
-      lowBalanceTenantsData,
     ] = await Promise.all([
       // 테넌트 통계
       db
@@ -188,21 +239,38 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
           FROM conversations
           GROUP BY tenant_id
         ) cv ON cv.tenant_id = t.id
-        ORDER BY conv_count DESC
+        ORDER BY COALESCE(cv.conv_count, 0) DESC
         LIMIT 10
       `),
 
-      // AI 사용량: 오늘
-      getUsageOverview('today'),
-      // AI 사용량: 이번 달
-      getUsageOverview('month'),
-      // 월말 예측
-      getForecast(),
-      // 캐시 비용 비교
-      getCacheCostComparison('month'),
-      // 이상 징후 감지
-      detectAnomalies(2.0),
+      // AI 사용량: 오늘 (타임아웃 3초)
+      withTimeout(getUsageOverview('today'), AI_QUERY_TIMEOUT_MS, DEFAULT_USAGE_OVERVIEW),
+      // AI 사용량: 이번 달 (타임아웃 3초)
+      withTimeout(
+        getUsageOverview('month'),
+        AI_QUERY_TIMEOUT_MS,
+        { ...DEFAULT_USAGE_OVERVIEW, period: 'month' as const }
+      ),
+      // 월말 예측 (타임아웃 3초)
+      withTimeout(getForecast(), AI_QUERY_TIMEOUT_MS, DEFAULT_FORECAST),
+      // 캐시 비용 비교 (타임아웃 3초)
+      withTimeout(getCacheCostComparison('month'), AI_QUERY_TIMEOUT_MS, DEFAULT_CACHE_COST),
+      // 이상 징후 감지 (타임아웃 3초)
+      withTimeout(detectAnomalies(2.0), AI_QUERY_TIMEOUT_MS, []),
+    ]);
 
+    // ========================================
+    // 배치 2: 포인트 통계 (6개 쿼리)
+    // 배치 1 완료 후 순차 실행
+    // ========================================
+    const [
+      pointsOverview,
+      todayPointUsage,
+      monthPointUsage,
+      todayPointCharges,
+      monthPointCharges,
+      lowBalanceTenantsData,
+    ] = await Promise.all([
       // 포인트 통계: 전체 잔액 및 테넌트 수
       db
         .select({
