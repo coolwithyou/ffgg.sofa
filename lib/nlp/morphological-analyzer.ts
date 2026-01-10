@@ -10,10 +10,9 @@
  * - 결과 캐싱으로 비용 최적화
  */
 
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { generateText } from 'ai';
 import { logger } from '@/lib/logger';
 import { trackTokenUsage } from '@/lib/usage/token-tracker';
+import { generateWithCache } from '@/lib/rag/anthropic-cache';
 
 /**
  * 형태소 분석 결과
@@ -53,23 +52,28 @@ const CACHE_TTL_MS = 10 * 60 * 1000; // 10분
 // Claude 모델
 const MORPHOLOGICAL_MODEL = 'claude-3-5-haiku-20241022';
 
-// 한국어 문장 경계 분석 프롬프트
-const SENTENCE_BOUNDARY_PROMPT = `한국어 텍스트의 문장 경계를 분석하세요.
+/**
+ * 시스템 프롬프트 (Prompt Caching 적용)
+ *
+ * 이 프롬프트는 반복 호출 시 캐싱되어 90% 비용 절감 효과를 제공합니다.
+ * 분석할 텍스트는 사용자 프롬프트로 별도 전달됩니다.
+ */
+const SENTENCE_BOUNDARY_SYSTEM_PROMPT = `당신은 한국어 텍스트의 문장 경계를 분석하는 전문가입니다.
 
-입력 텍스트:
-"{{TEXT}}"
-
-다음 규칙을 따르세요:
+## 분석 규칙
 1. 완전한 문장 단위로 분리 (종결어미 -다, -요, -죠, -네요 등)
 2. 인용문 내부의 문장 끝은 분리하지 않음
 3. 괄호 () 또는 [] 내부는 문맥 유지
 4. 불완전한 문장은 다음 문장과 병합
 5. 짧은 감탄사/접속사는 다음 문장에 포함
 
-JSON 형식으로만 응답:
+## 출력 형식
+JSON 형식으로만 응답하세요. 다른 설명은 하지 마세요.
 {
   "sentences": ["문장1", "문장2", ...]
-}`;
+}
+
+사용자가 분석할 텍스트를 제공하면, 위 규칙에 따라 문장을 분리하세요.`;
 
 /**
  * 캐시 키 생성
@@ -94,35 +98,40 @@ function cleanupCache(): void {
 
 /**
  * Claude API를 사용한 문장 경계 분석
+ *
+ * Prompt Caching 적용:
+ * - 시스템 프롬프트(분석 규칙)는 캐싱되어 반복 호출 시 90% 비용 절감
+ * - 분석할 텍스트는 사용자 프롬프트로 전달되어 캐싱되지 않음
  */
 async function analyzeWithClaude(
   text: string,
   trackingContext?: { tenantId: string }
 ): Promise<MorphologicalResult> {
   const startTime = Date.now();
-  const prompt = SENTENCE_BOUNDARY_PROMPT.replace('{{TEXT}}', text);
 
   try {
-    const anthropic = createAnthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
-
-    const result = await generateText({
-      model: anthropic(MORPHOLOGICAL_MODEL),
-      prompt,
+    // Prompt Caching 적용된 API 호출
+    const result = await generateWithCache({
+      model: MORPHOLOGICAL_MODEL,
+      systemPrompt: SENTENCE_BOUNDARY_SYSTEM_PROMPT,
+      userPrompt: `다음 텍스트의 문장을 분리해주세요:\n\n"${text}"`,
       maxOutputTokens: 2048,
       temperature: 0,
     });
 
-    // 토큰 사용량 추적
+    // 토큰 사용량 추적 (캐시 정보 포함)
     if (trackingContext?.tenantId) {
       await trackTokenUsage({
         tenantId: trackingContext.tenantId,
         featureType: 'morphological_analysis',
         modelProvider: 'anthropic',
         modelId: MORPHOLOGICAL_MODEL,
-        inputTokens: result.usage?.inputTokens ?? 0,
-        outputTokens: result.usage?.outputTokens ?? 0,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        metadata: {
+          cacheCreationInputTokens: result.usage.cacheCreationInputTokens,
+          cacheReadInputTokens: result.usage.cacheReadInputTokens,
+        },
       });
     }
 

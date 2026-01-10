@@ -19,3 +19,10 @@ export {
   type LateChunkingOptions,
   type LateChunk,
 } from './late-chunking';
+export {
+  generateWithCache,
+  isCacheEffective,
+  calculateCostSavings,
+  type CachedAnthropicOptions,
+  type CachedAnthropicResult,
+} from './anthropic-cache';

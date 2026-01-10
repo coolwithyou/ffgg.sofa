@@ -10,10 +10,9 @@
  * 3. Post-processing (짧은 청크 병합)
  */
 
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { generateText } from 'ai';
 import { logger } from '@/lib/logger';
 import { trackTokenUsage } from '@/lib/usage/token-tracker';
+import { generateWithCache } from './anthropic-cache';
 
 // ============================================================
 // 타입 정의
@@ -67,11 +66,13 @@ const DEFAULT_OPTIONS: Required<SemanticChunkOptions> = {
   batchDelayMs: 100,
 };
 
-const SEMANTIC_CHUNK_PROMPT_KO = `<segment>
-{{SEGMENT}}
-</segment>
-
-위 텍스트를 의미적으로 완결된 청크들로 분할하세요.
+/**
+ * 시스템 프롬프트 (Prompt Caching 적용)
+ *
+ * 이 프롬프트는 반복 호출 시 캐싱되어 90% 비용 절감 효과를 제공합니다.
+ * 세그먼트 내용은 사용자 프롬프트로 별도 전달됩니다.
+ */
+const SEMANTIC_CHUNK_SYSTEM_PROMPT_KO = `당신은 텍스트를 의미적으로 완결된 청크들로 분할하는 전문가입니다.
 
 ## 분할 규칙
 1. 각 청크는 하나의 완결된 개념/주제를 담아야 함
@@ -95,13 +96,11 @@ JSON 배열만 출력하세요. 다른 설명은 하지 마세요.
 [
   {"content": "청크 내용", "type": "paragraph", "topic": "주제 키워드"},
   {"content": "Q: 질문\\nA: 답변", "type": "qa", "topic": "FAQ 주제"}
-]`;
+]
 
-const SEMANTIC_CHUNK_PROMPT_EN = `<segment>
-{{SEGMENT}}
-</segment>
+사용자가 <segment> 태그로 텍스트를 제공하면, 위 규칙에 따라 분할하세요.`;
 
-Split the text above into semantically complete chunks.
+const SEMANTIC_CHUNK_SYSTEM_PROMPT_EN = `You are an expert at splitting text into semantically complete chunks.
 
 ## Splitting Rules
 1. Each chunk should contain one complete concept/topic
@@ -125,7 +124,9 @@ Output only a JSON array. No other explanation.
 [
   {"content": "chunk content", "type": "paragraph", "topic": "topic keyword"},
   {"content": "Q: question\\nA: answer", "type": "qa", "topic": "FAQ topic"}
-]`;
+]
+
+When the user provides text in <segment> tags, split it according to the rules above.`;
 
 // ============================================================
 // 헬퍼 함수
@@ -218,6 +219,10 @@ function parseAIResponse(response: string): SemanticChunkResult[] {
 
 /**
  * 단일 세그먼트를 AI로 의미 단위 분할
+ *
+ * Prompt Caching 적용:
+ * - 시스템 프롬프트(분할 규칙)는 캐싱되어 반복 호출 시 90% 비용 절감
+ * - 세그먼트 내용은 사용자 프롬프트로 전달되어 캐싱되지 않음
  */
 async function chunkSegmentWithAI(
   segment: string,
@@ -225,30 +230,38 @@ async function chunkSegmentWithAI(
   trackingContext?: { tenantId: string }
 ): Promise<SemanticChunkResult[]> {
   const isKorean = isKoreanDocument(segment);
-  const promptTemplate = isKorean ? SEMANTIC_CHUNK_PROMPT_KO : SEMANTIC_CHUNK_PROMPT_EN;
-  const prompt = promptTemplate.replace('{{SEGMENT}}', segment);
+
+  // 시스템 프롬프트 (캐싱됨)
+  const systemPrompt = isKorean
+    ? SEMANTIC_CHUNK_SYSTEM_PROMPT_KO
+    : SEMANTIC_CHUNK_SYSTEM_PROMPT_EN;
+
+  // 사용자 프롬프트 (세그먼트 내용, 캐싱되지 않음)
+  const userPrompt = `<segment>\n${segment}\n</segment>`;
 
   try {
-    const anthropic = createAnthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
-
-    const result = await generateText({
-      model: anthropic(options.model),
-      prompt,
+    // Prompt Caching 적용된 API 호출
+    const result = await generateWithCache({
+      model: options.model,
+      systemPrompt,
+      userPrompt,
       maxOutputTokens: 4096,
       temperature: 0,
     });
 
-    // 토큰 사용량 추적
+    // 토큰 사용량 추적 (캐시 정보 포함)
     if (trackingContext?.tenantId) {
       await trackTokenUsage({
         tenantId: trackingContext.tenantId,
         featureType: 'semantic_chunking',
         modelProvider: 'anthropic',
         modelId: options.model,
-        inputTokens: result.usage?.inputTokens ?? 0,
-        outputTokens: result.usage?.outputTokens ?? 0,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        metadata: {
+          cacheCreationInputTokens: result.usage.cacheCreationInputTokens,
+          cacheReadInputTokens: result.usage.cacheReadInputTokens,
+        },
       });
     }
 
