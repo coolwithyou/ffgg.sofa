@@ -5,6 +5,8 @@
  * 모든 시드 데이터를 한 번에 추가합니다:
  * - LLM 모델 가격 정보
  * - 예약 슬러그 목록
+ * - 플랜(요금제) 정보 (free, pro, business)
+ * - 포인트 패키지 정보 (5000P, 10000P)
  * - 초기 관리자 계정 (ADMIN_PASSWORD 환경변수 필요)
  *
  * 사용법:
@@ -29,7 +31,7 @@ import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
 
-const { llmModels, reservedSlugs, tenants, users } = schema;
+const { llmModels, reservedSlugs, tenants, users, plans, pointPackages } = schema;
 
 // ============================================================
 // LLM Models Seed Data
@@ -74,6 +76,162 @@ const LLM_MODELS = [
     isEmbedding: false,
     isActive: true,
     isDefault: false,
+  },
+];
+
+// ============================================================
+// Plans Seed Data
+// ============================================================
+const PLANS_SEED = [
+  {
+    id: 'free',
+    name: 'Free',
+    nameKo: '무료',
+    description: '서비스를 체험해보세요. 체험 포인트 500P가 제공됩니다.',
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    featureList: [
+      '챗봇 3개',
+      '문서 30개',
+      '저장 용량 100MB',
+      '발행 불가 (미리보기만)',
+    ],
+    limits: {
+      maxChatbots: 3,
+      maxDatasets: 3,
+      maxDocumentsPerDataset: 10,
+      maxTotalDocuments: 30,
+      maxStorageBytes: 100 * 1024 * 1024, // 100MB
+      maxChunksPerDocument: 100,
+      maxMonthlyConversations: 1000,
+      apiRequestsPerMinute: 60,
+      chatRequestsPerDay: 100,
+      uploadRequestsPerHour: 10,
+      maxPublishHistory: 1,
+      maxDeployments: 0,
+      monthlyPoints: 0,
+      slugChangesPerDay: 0,
+    },
+    features: {
+      canDeploy: false,
+      customDomain: false,
+      apiAccess: false,
+      prioritySupport: false,
+      advancedAnalytics: false,
+    },
+    isActive: true,
+    sortOrder: 0,
+  },
+  {
+    id: 'pro',
+    name: 'Pro',
+    nameKo: '프로',
+    description: '개인 및 소규모 팀에 적합한 플랜입니다.',
+    monthlyPrice: 50_000,
+    yearlyPrice: 500_000,
+    featureList: [
+      '챗봇 3개',
+      '문서 100개',
+      '저장 용량 1GB',
+      '월 3,000P 제공',
+      '배포 1개',
+    ],
+    limits: {
+      maxChatbots: 3,
+      maxDatasets: 3,
+      maxDocumentsPerDataset: 34,
+      maxTotalDocuments: 100,
+      maxStorageBytes: 1024 * 1024 * 1024, // 1GB
+      maxChunksPerDocument: 500,
+      maxMonthlyConversations: 10000,
+      apiRequestsPerMinute: 300,
+      chatRequestsPerDay: 1000,
+      uploadRequestsPerHour: 50,
+      maxPublishHistory: 10,
+      maxDeployments: 1,
+      monthlyPoints: 3000,
+      slugChangesPerDay: 3,
+    },
+    features: {
+      canDeploy: true,
+      customDomain: false,
+      apiAccess: false,
+      prioritySupport: false,
+      advancedAnalytics: false,
+    },
+    isActive: true,
+    sortOrder: 1,
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    nameKo: '비즈니스',
+    description: '기업 및 대규모 팀을 위한 플랜입니다.',
+    monthlyPrice: 150_000,
+    yearlyPrice: 1_500_000,
+    featureList: [
+      '챗봇 10개',
+      '문서 500개',
+      '저장 용량 10GB',
+      '월 10,000P 제공',
+      '배포 3개',
+      '커스텀 도메인',
+      'API 액세스',
+      '우선 지원',
+    ],
+    limits: {
+      maxChatbots: 10,
+      maxDatasets: 10,
+      maxDocumentsPerDataset: 50,
+      maxTotalDocuments: 500,
+      maxStorageBytes: 10 * 1024 * 1024 * 1024, // 10GB
+      maxChunksPerDocument: 1000,
+      maxMonthlyConversations: 100000,
+      apiRequestsPerMinute: 1000,
+      chatRequestsPerDay: 10000,
+      uploadRequestsPerHour: 200,
+      maxPublishHistory: 30,
+      maxDeployments: 3,
+      monthlyPoints: 10000,
+      slugChangesPerDay: -1, // 무제한
+    },
+    features: {
+      canDeploy: true,
+      customDomain: true,
+      apiAccess: true,
+      prioritySupport: true,
+      advancedAnalytics: true,
+    },
+    isActive: true,
+    sortOrder: 2,
+  },
+];
+
+// ============================================================
+// Point Packages Seed Data
+// ============================================================
+const POINT_PACKAGES_SEED = [
+  {
+    id: 'points_5000',
+    name: '5,000 포인트',
+    description: '₩30,000 (6원/P)',
+    points: 5_000,
+    price: 30_000,
+    pricePerPoint: 6.0,
+    discountPercent: 0,
+    isActive: true,
+    sortOrder: 0,
+  },
+  {
+    id: 'points_10000',
+    name: '10,000 포인트',
+    description: '₩50,000 (5원/P) - 17% 할인',
+    points: 10_000,
+    price: 50_000,
+    pricePerPoint: 5.0,
+    discountPercent: 17,
+    isActive: true,
+    sortOrder: 1,
   },
 ];
 
@@ -181,6 +339,110 @@ async function seedReservedSlugsData(
   }
 
   console.log(`   ✅ 추가: ${stats.added}개, ⏭️ 건너뜀: ${stats.skipped}개`);
+  return stats;
+}
+
+/**
+ * 플랜(요금제) 시드
+ */
+async function seedPlans(
+  db: ReturnType<typeof drizzle>
+): Promise<SeedStats> {
+  console.log('\n💳 플랜 시드 중...');
+  const stats: SeedStats = { added: 0, skipped: 0, errors: 0 };
+
+  for (const plan of PLANS_SEED) {
+    try {
+      // Check if exists
+      const existing = await db
+        .select({ id: plans.id })
+        .from(plans)
+        .where(eq(plans.id, plan.id))
+        .limit(1);
+
+      if (existing.length > 0) {
+        // Update existing
+        await db
+          .update(plans)
+          .set({
+            name: plan.name,
+            nameKo: plan.nameKo,
+            description: plan.description,
+            monthlyPrice: plan.monthlyPrice,
+            yearlyPrice: plan.yearlyPrice,
+            featureList: plan.featureList,
+            limits: plan.limits,
+            features: plan.features,
+            isActive: plan.isActive,
+            sortOrder: plan.sortOrder,
+            updatedAt: new Date(),
+          })
+          .where(eq(plans.id, plan.id));
+        stats.skipped++;
+        console.log(`   ⏭️  ${plan.id} (업데이트)`);
+      } else {
+        // Insert new
+        await db.insert(plans).values(plan);
+        stats.added++;
+        console.log(`   ✅ ${plan.id} - ${plan.nameKo} (₩${plan.monthlyPrice.toLocaleString()}/월)`);
+      }
+    } catch (e) {
+      stats.errors++;
+      console.error(`   ❌ ${plan.id}:`, e);
+    }
+  }
+
+  return stats;
+}
+
+/**
+ * 포인트 패키지 시드
+ */
+async function seedPointPackages(
+  db: ReturnType<typeof drizzle>
+): Promise<SeedStats> {
+  console.log('\n🎁 포인트 패키지 시드 중...');
+  const stats: SeedStats = { added: 0, skipped: 0, errors: 0 };
+
+  for (const pkg of POINT_PACKAGES_SEED) {
+    try {
+      // Check if exists
+      const existing = await db
+        .select({ id: pointPackages.id })
+        .from(pointPackages)
+        .where(eq(pointPackages.id, pkg.id))
+        .limit(1);
+
+      if (existing.length > 0) {
+        // Update existing
+        await db
+          .update(pointPackages)
+          .set({
+            name: pkg.name,
+            description: pkg.description,
+            points: pkg.points,
+            price: pkg.price,
+            pricePerPoint: pkg.pricePerPoint,
+            discountPercent: pkg.discountPercent,
+            isActive: pkg.isActive,
+            sortOrder: pkg.sortOrder,
+            updatedAt: new Date(),
+          })
+          .where(eq(pointPackages.id, pkg.id));
+        stats.skipped++;
+        console.log(`   ⏭️  ${pkg.id} (업데이트)`);
+      } else {
+        // Insert new
+        await db.insert(pointPackages).values(pkg);
+        stats.added++;
+        console.log(`   ✅ ${pkg.id} - ${pkg.points.toLocaleString()}P / ₩${pkg.price.toLocaleString()}`);
+      }
+    } catch (e) {
+      stats.errors++;
+      console.error(`   ❌ ${pkg.id}:`, e);
+    }
+  }
+
   return stats;
 }
 
@@ -310,18 +572,26 @@ async function main() {
     // 2. Reserved Slugs
     results.reservedSlugs = await seedReservedSlugsData(db);
 
-    // 3. Admin (optional)
+    // 3. Plans
+    results.plans = await seedPlans(db);
+
+    // 4. Point Packages
+    results.pointPackages = await seedPointPackages(db);
+
+    // 5. Admin (optional)
     results.admin = await seedAdmin(db);
 
     // Summary
     console.log('\n');
-    console.log('╔════════════════════════════════════════════╗');
-    console.log('║              📊 시드 결과 요약              ║');
-    console.log('╠════════════════════════════════════════════╣');
-    console.log(`║ LLM 모델      : +${results.llmModels.added} / ⏭${results.llmModels.skipped} / ❌${results.llmModels.errors}`.padEnd(45) + '║');
-    console.log(`║ 예약 슬러그   : +${results.reservedSlugs.added} / ⏭${results.reservedSlugs.skipped} / ❌${results.reservedSlugs.errors}`.padEnd(45) + '║');
-    console.log(`║ 관리자 계정   : +${results.admin.added} / ⏭${results.admin.skipped} / ❌${results.admin.errors}`.padEnd(45) + '║');
-    console.log('╚════════════════════════════════════════════╝');
+    console.log('╔════════════════════════════════════════════════╗');
+    console.log('║              📊 시드 결과 요약                  ║');
+    console.log('╠════════════════════════════════════════════════╣');
+    console.log(`║ LLM 모델       : +${results.llmModels.added} / ⏭${results.llmModels.skipped} / ❌${results.llmModels.errors}`.padEnd(49) + '║');
+    console.log(`║ 예약 슬러그    : +${results.reservedSlugs.added} / ⏭${results.reservedSlugs.skipped} / ❌${results.reservedSlugs.errors}`.padEnd(49) + '║');
+    console.log(`║ 플랜(요금제)   : +${results.plans.added} / ⏭${results.plans.skipped} / ❌${results.plans.errors}`.padEnd(49) + '║');
+    console.log(`║ 포인트 패키지  : +${results.pointPackages.added} / ⏭${results.pointPackages.skipped} / ❌${results.pointPackages.errors}`.padEnd(49) + '║');
+    console.log(`║ 관리자 계정    : +${results.admin.added} / ⏭${results.admin.skipped} / ❌${results.admin.errors}`.padEnd(49) + '║');
+    console.log('╚════════════════════════════════════════════════╝');
     console.log('');
 
     const hasErrors = Object.values(results).some((r) => r.errors > 0);
