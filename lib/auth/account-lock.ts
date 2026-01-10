@@ -184,5 +184,5 @@ export async function cleanupOldLoginAttempts(): Promise<number> {
     .delete(loginAttempts)
     .where(sql`${loginAttempts.createdAt} < ${thirtyDaysAgo}`);
 
-  return result.rowCount || 0;
+  return result.count || 0;
 }

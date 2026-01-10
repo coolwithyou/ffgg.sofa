@@ -291,7 +291,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
       weeklyConversations: conversationStats[0]?.weekly ?? 0,
     };
 
-    const topTenants: TenantUsage[] = (topTenantsData.rows as Array<{
+    const topTenants: TenantUsage[] = (topTenantsData as unknown as Array<{
       id: string;
       name: string | null;
       email: string;
@@ -366,7 +366,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData | null
     };
 
     // 저잔액 테넌트 목록 처리
-    const lowBalanceTenants = (lowBalanceTenantsData.rows as Array<{
+    const lowBalanceTenants = (lowBalanceTenantsData as unknown as Array<{
       tenant_id: string;
       tenant_name: string | null;
       tier: string | null;
@@ -450,11 +450,11 @@ export async function getTenantDetails(tenantId: string): Promise<TenantUsage | 
       WHERE t.id = ${tenantId}
     `);
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return null;
     }
 
-    const row = result.rows[0] as {
+    const row = result[0] as {
       id: string;
       name: string | null;
       email: string;

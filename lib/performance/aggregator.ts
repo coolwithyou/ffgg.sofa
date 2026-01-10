@@ -436,7 +436,7 @@ export async function cleanupOldLogs(retentionDays: number = 30): Promise<number
       .delete(responseTimeLogs)
       .where(lt(responseTimeLogs.createdAt, cutoffDate));
 
-    const deletedCount = result.rowCount ?? 0;
+    const deletedCount = result.count ?? 0;
 
     logger.info('Log cleanup completed', {
       deletedCount,

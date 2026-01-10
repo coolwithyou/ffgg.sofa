@@ -78,7 +78,7 @@ export async function getTenantList(): Promise<TenantListItem[]> {
       ORDER BY t.created_at DESC
     `);
 
-    return (result.rows as Array<{
+    return (result as unknown as Array<{
       id: string;
       name: string | null;
       email: string;
@@ -229,7 +229,7 @@ export async function getTenantUsageStats(tenantId: string): Promise<
       ORDER BY date DESC
     `);
 
-    return (result.rows as Array<{
+    return (result as unknown as Array<{
       date: Date;
       conversations: string;
     }>).map((row) => ({

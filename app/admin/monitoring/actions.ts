@@ -70,7 +70,7 @@ export async function getSystemHealth(): Promise<SystemHealth | null> {
     const connectionsResult = await db.execute(sql`
       SELECT count(*) as count FROM pg_stat_activity WHERE state = 'active'
     `);
-    const connections = parseInt((connectionsResult.rows[0] as { count: string })?.count || '0');
+    const connections = parseInt((connectionsResult[0] as { count: string })?.count || '0');
 
     return {
       database: {
@@ -142,7 +142,7 @@ export async function getUsageMetrics(): Promise<UsageMetrics | null> {
     `);
 
     return {
-      hourly: (hourlyResult.rows as Array<{
+      hourly: (hourlyResult as unknown as Array<{
         hour: Date;
         conversations: string;
       }>).map((row) => ({
@@ -153,7 +153,7 @@ export async function getUsageMetrics(): Promise<UsageMetrics | null> {
         documents: 0,
         chunks: 0,
       })),
-      daily: (dailyResult.rows as Array<{
+      daily: (dailyResult as unknown as Array<{
         date: Date;
         conversations: string;
         documents: string;
@@ -214,7 +214,7 @@ export async function getRecentActivities(): Promise<RecentActivity[]> {
 
     const activities: RecentActivity[] = [];
 
-    (recentDocs.rows as Array<{
+    (recentDocs as unknown as Array<{
       id: string;
       filename: string;
       created_at: Date | string;
@@ -233,7 +233,7 @@ export async function getRecentActivities(): Promise<RecentActivity[]> {
       });
     });
 
-    (recentConvs.rows as Array<{
+    (recentConvs as unknown as Array<{
       id: string;
       session_id: string;
       created_at: Date | string;

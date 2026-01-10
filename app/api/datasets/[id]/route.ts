@@ -120,7 +120,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       WHERE d.dataset_id = ${id}
       AND (c.dataset_id IS NULL OR c.dataset_id != ${id})
     `);
-    const missingDatasetId = (orphanedChunksResult.rows[0] as any)?.count || 0;
+    const missingDatasetId = (orphanedChunksResult[0] as any)?.count || 0;
 
     // v2: 평균 청크 크기 및 토큰 수
     const [sizeStats] = await db

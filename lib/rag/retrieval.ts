@@ -179,7 +179,7 @@ async function denseSearch(
       LIMIT ${limit}
     `);
 
-    return (results.rows as Array<{
+    return (results as unknown as Array<{
       id: string;
       document_id: string;
       content: string;
@@ -237,7 +237,7 @@ async function sparseSearch(
       LIMIT ${limit}
     `);
 
-    return (results.rows as Array<{
+    return (results as unknown as Array<{
       id: string;
       document_id: string;
       content: string;
@@ -296,7 +296,7 @@ async function denseSearchMultiDataset(
       LIMIT ${limit}
     `);
 
-    return (results.rows as Array<{
+    return (results as unknown as Array<{
       id: string;
       document_id: string;
       dataset_id: string;
@@ -360,7 +360,7 @@ async function sparseSearchMultiDataset(
       LIMIT ${limit}
     `);
 
-    return (results.rows as Array<{
+    return (results as unknown as Array<{
       id: string;
       document_id: string;
       dataset_id: string;
@@ -507,7 +507,7 @@ export async function getChunksByDatasets(
       LIMIT ${limit}
     `);
 
-    return (results.rows as Array<{ content: string; document_id: string }>).map(
+    return (results as unknown as Array<{ content: string; document_id: string }>).map(
       (row) => ({
         content: row.content,
         documentId: row.document_id,

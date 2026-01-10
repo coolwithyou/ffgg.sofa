@@ -114,8 +114,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({
       issueType,
-      chunks: chunksQuery.rows,
-      count: chunksQuery.rows.length,
+      chunks: chunksQuery,
+      count: chunksQuery.length,
     });
   } catch (error) {
     console.error('Integrity check error:', error);
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       return NextResponse.json({
         message: 'datasetId 동기화가 완료되었습니다',
-        affectedRows: result.rowCount,
+        affectedRows: result.count,
       });
     }
 
@@ -171,7 +171,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ORDER BY c.created_at ASC
       `);
 
-      const chunks = chunksResult.rows as Array<{ id: string; content: string }>;
+      const chunks = chunksResult as unknown as Array<{ id: string; content: string }>;
 
       if (chunks.length === 0) {
         return NextResponse.json({

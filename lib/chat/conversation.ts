@@ -116,7 +116,7 @@ export async function deleteConversation(tenantId: string, sessionId: string): P
     .delete(conversations)
     .where(and(eq(conversations.tenantId, tenantId), eq(conversations.sessionId, sessionId)));
 
-  return (result.rowCount ?? 0) > 0;
+  return (result.count ?? 0) > 0;
 }
 
 /**

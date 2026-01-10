@@ -112,7 +112,7 @@ export async function cleanupExpiredPermissionLogs(): Promise<number> {
       .delete(permissionAuditLog)
       .where(lt(permissionAuditLog.createdAt, threeYearsAgo));
 
-    const deletedCount = result.rowCount || 0;
+    const deletedCount = result.count || 0;
 
     if (deletedCount > 0) {
       logger.info('Expired permission logs cleaned up', {

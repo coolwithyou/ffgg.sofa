@@ -375,7 +375,7 @@ export async function updateChunk(
     .set(updateData)
     .where(and(eq(chunks.id, chunkId), eq(chunks.tenantId, tenantId)));
 
-  if ((result.rowCount ?? 0) === 0) {
+  if ((result.count ?? 0) === 0) {
     logger.warn('Chunk update had no effect', { tenantId, chunkId });
     return null;
   }
@@ -413,7 +413,7 @@ export async function bulkUpdateChunks(
       })
       .where(and(eq(chunks.tenantId, tenantId), inArray(chunks.id, chunkIds)));
 
-    const updated = result.rowCount ?? 0;
+    const updated = result.count ?? 0;
     const failed = chunkIds.length - updated;
 
     logger.info('Bulk chunk update', { tenantId, status, requested: chunkIds.length, updated, failed });
@@ -449,7 +449,7 @@ export async function deleteChunk(tenantId: string, chunkId: string): Promise<bo
     })
     .where(and(eq(chunks.id, chunkId), eq(chunks.tenantId, tenantId)));
 
-  const success = (result.rowCount ?? 0) > 0;
+  const success = (result.count ?? 0) > 0;
 
   if (success) {
     logger.info('Chunk deleted (soft)', { tenantId, chunkId });
@@ -536,7 +536,7 @@ export async function applyAutoApproval(
     })
     .where(and(...conditions));
 
-  const count = result.rowCount ?? 0;
+  const count = result.count ?? 0;
 
   if (count > 0) {
     logger.info('Auto-approved chunks', {

@@ -107,7 +107,7 @@ export async function getOperatorList(): Promise<OperatorListItem[]> {
       ORDER BY u.created_at DESC
     `);
 
-    return (result.rows as Array<{
+    return (result as unknown as Array<{
       id: string;
       email: string;
       name: string | null;
@@ -173,7 +173,7 @@ export async function getOperatorStats(): Promise<OperatorStats | null> {
       WHERE is_platform_admin = true OR admin_role IS NOT NULL
     `);
 
-    const row = result.rows[0] as {
+    const row = result[0] as {
       total: string;
       super_admin_count: string;
       admin_count: string;
@@ -411,7 +411,7 @@ export async function deactivateOperator(operatorId: string): Promise<ActionResu
         SELECT COUNT(*) as count FROM users
         WHERE admin_role = 'SUPER_ADMIN' AND deleted_at IS NULL
       `);
-      const count = parseInt(String((activeSuperAdmins.rows[0] as { count: string }).count));
+      const count = parseInt(String((activeSuperAdmins[0] as { count: string }).count));
 
       if (count <= 1) {
         return { success: false, error: '최소 1명의 활성 슈퍼 관리자가 필요합니다.' };
@@ -516,7 +516,7 @@ export async function deleteOperator(operatorId: string): Promise<ActionResult> 
       const superAdminCount = await db.execute(sql`
         SELECT COUNT(*) as count FROM users WHERE admin_role = 'SUPER_ADMIN'
       `);
-      const count = parseInt(String((superAdminCount.rows[0] as { count: string }).count));
+      const count = parseInt(String((superAdminCount[0] as { count: string }).count));
 
       if (count <= 1) {
         return { success: false, error: '최소 1명의 슈퍼 관리자가 필요합니다.' };
@@ -642,7 +642,7 @@ export async function getOperatorActivityLog(operatorId: string): Promise<Array<
       LIMIT 50
     `);
 
-    return (result.rows as Array<{
+    return (result as unknown as Array<{
       id: string;
       action: string;
       details: string | null;

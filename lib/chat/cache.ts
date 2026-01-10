@@ -88,12 +88,12 @@ export async function findCachedResponse(
       LIMIT 5
     `);
 
-    if (similarResults.rows.length === 0) {
+    if (similarResults.length === 0) {
       return { hit: false };
     }
 
     // 유사도 검증
-    for (const row of similarResults.rows) {
+    for (const row of similarResults) {
       if (row.query_embedding) {
         const similarity = cosineSimilarity(queryEmbedding, row.query_embedding);
 
@@ -201,7 +201,7 @@ export async function cleanupExpiredCache(): Promise<number> {
     .delete(responseCache)
     .where(sql`expires_at < NOW()`);
 
-  const deletedCount = result.rowCount ?? 0;
+  const deletedCount = result.count ?? 0;
 
   if (deletedCount > 0) {
     logger.info('Expired cache cleaned up', { deletedCount });
@@ -218,7 +218,7 @@ export async function invalidateTenantCache(tenantId: string): Promise<number> {
     .delete(responseCache)
     .where(eq(responseCache.tenantId, tenantId));
 
-  const deletedCount = result.rowCount ?? 0;
+  const deletedCount = result.count ?? 0;
 
   logger.info('Tenant cache invalidated', {
     tenantId,
