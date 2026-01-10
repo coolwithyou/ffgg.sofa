@@ -77,6 +77,12 @@ const navItems: NavItem[] = [
     icon: ReservedSlugsIcon,
     minRole: 'SUPPORT', // SUPPORT 이상 접근 가능
   },
+  {
+    name: 'A/B 테스트',
+    href: '/admin/experiments',
+    icon: ExperimentsIcon,
+    minRole: 'VIEWER', // 모든 관리자 조회 가능
+  },
 ];
 
 export function AdminSidebar({ operatorEmail, adminRole }: AdminSidebarProps) {
@@ -239,6 +245,19 @@ function ReservedSlugsIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+      />
+    </svg>
+  );
+}
+
+function ExperimentsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
       />
     </svg>
   );

@@ -22,7 +22,16 @@ import {
   RefreshCw,
   CheckCircle2,
   XCircle,
+  FlaskConical,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react';
+import type {
+  ExperimentConfig,
+  ChunkingStrategy,
+} from '@/types/experiment';
+import { DEFAULT_EXPERIMENT_CONFIG } from '@/types/experiment';
+import { QualityDashboardCard } from './_components/quality-dashboard-card';
 
 type RagIndexStatus = 'idle' | 'generating' | 'completed' | 'failed';
 
@@ -67,6 +76,7 @@ interface ChatbotData {
     searchConfig: SearchConfig;
     personaConfig: PersonaConfig;
     ragIndexConfig: RagIndexConfig;
+    experimentConfig: ExperimentConfig | null;
     datasets: DatasetInfo[];
     updatedAt: string;
     contentUpdatedAt: string | null;
@@ -125,6 +135,11 @@ export default function AISettingsPage() {
     lastGeneratedAt: null,
     documentSampleCount: 0,
   });
+
+  // 실험 설정 상태 (Phase 5: A/B 테스트)
+  const [experimentConfig, setExperimentConfig] = useState<ExperimentConfig>(
+    DEFAULT_EXPERIMENT_CONFIG
+  );
 
   // 페르소나 업데이트 필요 여부 체크
   // contentUpdatedAt: 데이터셋 연결/해제 등 RAG에 영향을 주는 변경만 추적
@@ -193,6 +208,18 @@ export default function AISettingsPage() {
           confidence: chatbot.ragIndexConfig.confidence ?? null,
           lastGeneratedAt: chatbot.ragIndexConfig.lastGeneratedAt ?? null,
           documentSampleCount: chatbot.ragIndexConfig.documentSampleCount ?? 0,
+        });
+      }
+
+      // 실험 설정 (Phase 5: A/B 테스트)
+      if (chatbot.experimentConfig) {
+        setExperimentConfig({
+          chunkingStrategy: chatbot.experimentConfig.chunkingStrategy ?? 'auto',
+          abTestEnabled: chatbot.experimentConfig.abTestEnabled ?? false,
+          semanticTrafficPercent: chatbot.experimentConfig.semanticTrafficPercent ?? 50,
+          experimentStartedAt: chatbot.experimentConfig.experimentStartedAt,
+          experimentEndedAt: chatbot.experimentConfig.experimentEndedAt,
+          experimentNote: chatbot.experimentConfig.experimentNote,
         });
       }
     } catch (error) {
@@ -265,14 +292,17 @@ export default function AISettingsPage() {
           llmConfig,
           searchConfig,
           personaConfig,
+          experimentConfig,
         }),
       });
 
       if (!response.ok) {
         throw new Error('설정 저장에 실패했습니다');
       }
+      toast.success('설정이 저장되었습니다');
     } catch (error) {
       console.error('설정 저장 오류:', error);
+      toast.error('설정 저장에 실패했습니다');
     } finally {
       setIsSaving(false);
     }
@@ -809,6 +839,193 @@ export default function AISettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* 실험 설정 카드 (Phase 5: A/B 테스트) */}
+        <Card size="md" className="border-orange-500/20 bg-orange-500/5">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <FlaskConical className="h-5 w-5 text-orange-500" />
+              <CardTitle>청킹 실험 설정</CardTitle>
+              <span className="rounded-full bg-orange-500/10 px-2 py-0.5 text-xs text-orange-500">
+                A/B 테스트
+              </span>
+            </div>
+            <CardDescription>
+              문서 청킹 전략과 A/B 테스트 설정을 관리합니다. 새로 업로드되는 문서에 적용됩니다.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* 청킹 전략 선택 */}
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                청킹 전략
+              </label>
+              <select
+                value={experimentConfig.chunkingStrategy}
+                onChange={(e) =>
+                  setExperimentConfig((prev) => ({
+                    ...prev,
+                    chunkingStrategy: e.target.value as ChunkingStrategy,
+                  }))
+                }
+                disabled={experimentConfig.abTestEnabled}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="auto">자동 (환경 설정 따름)</option>
+                <option value="smart">규칙 기반 (Smart)</option>
+                <option value="semantic">AI 의미 기반 (Semantic)</option>
+                <option value="late">Late Chunking</option>
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {experimentConfig.abTestEnabled
+                  ? 'A/B 테스트 활성화 시 Smart vs Semantic으로 자동 분배됩니다'
+                  : '문서를 청크로 분할하는 방식을 선택합니다'}
+              </p>
+            </div>
+
+            {/* A/B 테스트 토글 */}
+            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-4">
+              <div className="flex items-center gap-3">
+                {experimentConfig.abTestEnabled ? (
+                  <ToggleRight className="h-6 w-6 text-orange-500" />
+                ) : (
+                  <ToggleLeft className="h-6 w-6 text-muted-foreground" />
+                )}
+                <div>
+                  <p className="font-medium text-foreground">A/B 테스트</p>
+                  <p className="text-xs text-muted-foreground">
+                    Smart와 Semantic 전략을 비교 테스트합니다
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant={experimentConfig.abTestEnabled ? 'default' : 'outline'}
+                size="sm"
+                onClick={() =>
+                  setExperimentConfig((prev) => ({
+                    ...prev,
+                    abTestEnabled: !prev.abTestEnabled,
+                    // A/B 테스트 활성화 시 시작일 자동 설정
+                    experimentStartedAt: !prev.abTestEnabled
+                      ? new Date().toISOString()
+                      : prev.experimentStartedAt,
+                  }))
+                }
+              >
+                {experimentConfig.abTestEnabled ? '활성화됨' : '비활성화'}
+              </Button>
+            </div>
+
+            {/* A/B 테스트 세부 설정 (활성화 시에만 표시) */}
+            {experimentConfig.abTestEnabled && (
+              <div className="space-y-4 rounded-lg border border-orange-500/20 bg-orange-500/5 p-4">
+                {/* 트래픽 비율 */}
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="text-sm font-medium text-foreground">
+                      Semantic 트래픽 비율
+                    </label>
+                    <span className="text-sm text-muted-foreground">
+                      {experimentConfig.semanticTrafficPercent ?? 50}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={experimentConfig.semanticTrafficPercent ?? 50}
+                    onChange={(e) =>
+                      setExperimentConfig((prev) => ({
+                        ...prev,
+                        semanticTrafficPercent: parseInt(e.target.value),
+                      }))
+                    }
+                    className="w-full accent-orange-500"
+                  />
+                  <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+                    <span>Smart (대조군): {100 - (experimentConfig.semanticTrafficPercent ?? 50)}%</span>
+                    <span>Semantic (처리군): {experimentConfig.semanticTrafficPercent ?? 50}%</span>
+                  </div>
+                </div>
+
+                {/* 실험 기간 */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-foreground">
+                      시작일
+                    </label>
+                    <input
+                      type="date"
+                      value={
+                        experimentConfig.experimentStartedAt
+                          ? new Date(experimentConfig.experimentStartedAt)
+                              .toISOString()
+                              .split('T')[0]
+                          : ''
+                      }
+                      onChange={(e) =>
+                        setExperimentConfig((prev) => ({
+                          ...prev,
+                          experimentStartedAt: e.target.value
+                            ? new Date(e.target.value).toISOString()
+                            : undefined,
+                        }))
+                      }
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-foreground">
+                      종료일 (선택)
+                    </label>
+                    <input
+                      type="date"
+                      value={
+                        experimentConfig.experimentEndedAt
+                          ? new Date(experimentConfig.experimentEndedAt)
+                              .toISOString()
+                              .split('T')[0]
+                          : ''
+                      }
+                      onChange={(e) =>
+                        setExperimentConfig((prev) => ({
+                          ...prev,
+                          experimentEndedAt: e.target.value
+                            ? new Date(e.target.value).toISOString()
+                            : undefined,
+                        }))
+                      }
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+
+                {/* 실험 메모 */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-foreground">
+                    실험 메모
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={experimentConfig.experimentNote ?? ''}
+                    onChange={(e) =>
+                      setExperimentConfig((prev) => ({
+                        ...prev,
+                        experimentNote: e.target.value || undefined,
+                      }))
+                    }
+                    placeholder="실험 목적이나 가설을 기록하세요"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 품질 대시보드 (Phase 5) */}
+        <QualityDashboardCard chatbotId={currentChatbot.id} />
 
         {/* 저장 버튼 */}
         <div className="flex justify-end">
