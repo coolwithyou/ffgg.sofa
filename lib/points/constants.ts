@@ -41,6 +41,8 @@ export const POINT_TRANSACTION_TYPES = {
   PURCHASE: 'purchase',
   /** AI 응답으로 인한 사용 */
   AI_RESPONSE: 'ai_response',
+  /** AI 시맨틱 청킹으로 인한 사용 */
+  SEMANTIC_CHUNKING: 'semantic_chunking',
   /** 가입 시 체험 포인트 */
   FREE_TRIAL: 'free_trial',
   /** 환불 */

@@ -1140,6 +1140,9 @@ export const pointTransactions = pgTable(
       subscriptionId?: string;
       channel?: string;
       reason?: string;
+      // 시맨틱 청킹 관련
+      segmentCount?: number;
+      segmentSize?: number;
     }>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   },

@@ -5,14 +5,18 @@
  * [Week 9] 드래그앤드롭 파일 업로드
  * [Week 13] 업로드 전 미리보기 기능 추가
  * [Week 14] 데이터셋 선택 기능 추가
+ * [Week 15] 2단계 플로우: 파싱 → AI 청킹 분리
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronDown, Database, Library } from 'lucide-react';
-import { PreviewModal } from './preview-modal';
+import { ParsePreviewModal } from './parse-preview-modal';
+import { ChunkPreviewModal } from './chunk-preview-modal';
 import { DocumentProgressModal } from '@/components/document-progress-modal';
 import { useTenantSettings } from '../../hooks/use-console-state';
+import type { ParsePreviewResponse } from '@/app/api/documents/preview/parse/route';
+import type { ChunkPreviewResponse } from '@/app/api/documents/preview/chunk/route';
 
 interface DatasetOption {
   id: string;
@@ -30,54 +34,26 @@ const ALLOWED_TYPES = [
 const ALLOWED_EXTENSIONS = ['.pdf', '.txt', '.md', '.csv', '.docx'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-interface UploadState {
-  status: 'idle' | 'previewing' | 'uploading' | 'success' | 'error';
-  progress: number;
-  message?: string;
-}
-
-interface PreviewData {
-  structure: {
-    hasQAPairs: boolean;
-    hasHeaders: boolean;
-    hasTables: boolean;
-    hasLists: boolean;
-  };
-  chunks: Array<{
-    index: number;
-    content: string;
-    contentPreview: string;
-    qualityScore: number;
-    metadata: {
-      isQAPair: boolean;
-      hasHeader: boolean;
-      isTable: boolean;
-      isList: boolean;
-    };
-    autoApproved: boolean;
-  }>;
-  summary: {
-    totalChunks: number;
-    avgQualityScore: number;
-    autoApprovedCount: number;
-    pendingCount: number;
-    warnings: Array<{
-      type: 'too_short' | 'too_long' | 'incomplete_qa' | 'low_quality';
-      count: number;
-      message: string;
-    }>;
-  };
-}
+/**
+ * 업로드 상태 타입
+ * 2단계 플로우: idle → parsing → parsed → chunking → chunked → uploading
+ */
+type UploadState =
+  | { status: 'idle' }
+  | { status: 'parsing'; message: string }
+  | { status: 'parsed' } // 1단계 완료, ParsePreviewModal 표시 중
+  | { status: 'chunking'; message: string }
+  | { status: 'chunked' } // 2단계 완료, ChunkPreviewModal 표시 중
+  | { status: 'uploading'; progress: number }
+  | { status: 'success'; message: string }
+  | { status: 'error'; message: string };
 
 export function DocumentUpload() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [uploadState, setUploadState] = useState<UploadState>({
-    status: 'idle',
-    progress: 0,
-  });
+  const [uploadState, setUploadState] = useState<UploadState>({ status: 'idle' });
 
   // 고급 모드 여부 확인
   const { isAdvancedModeEnabled } = useTenantSettings();
@@ -92,10 +68,11 @@ export function DocumentUpload() {
   const [showDatasetDropdown, setShowDatasetDropdown] = useState(false);
   const [isLoadingDatasets, setIsLoadingDatasets] = useState(true);
 
-  // 미리보기 관련 상태
+  // 파일 및 미리보기 상태
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
+  const [parseData, setParseData] = useState<ParsePreviewResponse['parse'] | null>(null);
+  const [chunkData, setChunkData] = useState<ChunkPreviewResponse | null>(null);
+  const [currentBalance, setCurrentBalance] = useState(0);
 
   // 처리 상태 모달 관련 상태
   const [uploadedDocumentId, setUploadedDocumentId] = useState<string | null>(null);
@@ -138,6 +115,22 @@ export function DocumentUpload() {
     fetchDatasets();
   }, [searchParams]);
 
+  // 포인트 잔액 로드
+  useEffect(() => {
+    async function fetchPointBalance() {
+      try {
+        const response = await fetch('/api/points/balance');
+        if (response.ok) {
+          const data = await response.json();
+          setCurrentBalance(data.balance || 0);
+        }
+      } catch (err) {
+        console.error('Failed to fetch point balance:', err);
+      }
+    }
+    fetchPointBalance();
+  }, []);
+
   const selectedDataset = datasets.find((d) => d.id === selectedDatasetId);
 
   const validateFile = (file: File): string | null => {
@@ -155,56 +148,88 @@ export function DocumentUpload() {
     return null;
   };
 
-  // 미리보기 API 호출
-  const fetchPreview = useCallback(async (file: File) => {
+  // 1단계: 파싱 API 호출
+  const fetchParsePreview = useCallback(async (file: File) => {
     const validationError = validateFile(file);
     if (validationError) {
-      setUploadState({ status: 'error', progress: 0, message: validationError });
+      setUploadState({ status: 'error', message: validationError });
       return;
     }
 
     setSelectedFile(file);
-    setUploadState({ status: 'previewing', progress: 0, message: '분석 중...' });
+    setUploadState({ status: 'parsing', message: '문서 분석 중...' });
 
     try {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/documents/preview', {
+      const response = await fetch('/api/documents/preview/parse', {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || '미리보기 생성에 실패했습니다.');
+        throw new Error(error.error || '문서 분석에 실패했습니다.');
       }
 
-      const data = await response.json();
-      setPreviewData(data.preview);
-      setShowPreview(true);
-      setUploadState({ status: 'idle', progress: 0 });
+      const data: ParsePreviewResponse = await response.json();
+      setParseData(data.parse);
+      setUploadState({ status: 'parsed' });
     } catch (error) {
       setUploadState({
         status: 'error',
-        progress: 0,
-        message: error instanceof Error ? error.message : '미리보기 생성에 실패했습니다.',
+        message: error instanceof Error ? error.message : '문서 분석에 실패했습니다.',
       });
       setSelectedFile(null);
     }
   }, []);
 
+  // 2단계: AI 청킹 API 호출
+  const fetchChunkPreview = useCallback(async () => {
+    if (!parseData?.text) return;
+
+    setUploadState({ status: 'chunking', message: 'AI 청킹 중...' });
+
+    try {
+      const response = await fetch('/api/documents/preview/chunk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: parseData.text }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        if (response.status === 402) {
+          throw new Error(error.error || '포인트가 부족합니다.');
+        }
+        throw new Error(error.error || 'AI 청킹에 실패했습니다.');
+      }
+
+      const data: ChunkPreviewResponse = await response.json();
+      setChunkData(data);
+      // 포인트 잔액 갱신
+      setCurrentBalance((prev) => prev - data.usage.pointsConsumed);
+      setUploadState({ status: 'chunked' });
+    } catch (error) {
+      setUploadState({
+        status: 'error',
+        message: error instanceof Error ? error.message : 'AI 청킹에 실패했습니다.',
+      });
+    }
+  }, [parseData?.text]);
+
   // 실제 업로드 실행
   const uploadFile = useCallback(async () => {
-    if (!selectedFile) return;
+    if (!selectedFile || !chunkData) return;
 
-    setShowPreview(false);
     setUploadState({ status: 'uploading', progress: 0 });
 
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
       formData.append('destination', destination);
+      formData.append('chunks', JSON.stringify(chunkData.chunks));
       if (destination === 'dataset' && selectedDatasetId) {
         formData.append('datasetId', selectedDatasetId);
       }
@@ -223,9 +248,7 @@ export function DocumentUpload() {
       const documentId = result.data?.id;
 
       // 상태 초기화
-      setUploadState({ status: 'idle', progress: 0 });
-      setSelectedFile(null);
-      setPreviewData(null);
+      resetState();
 
       // 문서 처리 상태 모달 표시
       if (documentId) {
@@ -238,18 +261,28 @@ export function DocumentUpload() {
     } catch (error) {
       setUploadState({
         status: 'error',
-        progress: 0,
         message: error instanceof Error ? error.message : '업로드에 실패했습니다.',
       });
     }
-  }, [selectedFile, selectedDatasetId, destination, router]);
+  }, [selectedFile, chunkData, selectedDatasetId, destination, router]);
 
-  const handleClosePreview = useCallback(() => {
-    setShowPreview(false);
+  // 상태 초기화 함수
+  const resetState = useCallback(() => {
+    setUploadState({ status: 'idle' });
     setSelectedFile(null);
-    setPreviewData(null);
-    setUploadState({ status: 'idle', progress: 0 });
+    setParseData(null);
+    setChunkData(null);
   }, []);
+
+  // 1단계 모달 닫기 (파싱 결과 닫기)
+  const handleCloseParsePreview = useCallback(() => {
+    resetState();
+  }, [resetState]);
+
+  // 2단계 모달 닫기 (청킹 결과 닫기)
+  const handleCloseChunkPreview = useCallback(() => {
+    resetState();
+  }, [resetState]);
 
   const handleCloseProgressModal = useCallback(() => {
     setShowProgressModal(false);
@@ -274,27 +307,33 @@ export function DocumentUpload() {
 
       const files = Array.from(e.dataTransfer.files);
       if (files.length > 0) {
-        fetchPreview(files[0]);
+        fetchParsePreview(files[0]);
       }
     },
-    [fetchPreview]
+    [fetchParsePreview]
   );
 
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (files && files.length > 0) {
-        fetchPreview(files[0]);
+        fetchParsePreview(files[0]);
       }
       // 같은 파일 재선택 가능하도록 초기화
       e.target.value = '';
     },
-    [fetchPreview]
+    [fetchParsePreview]
   );
 
   const handleClick = () => {
     fileInputRef.current?.click();
   };
+
+  // 업로드 가능 상태 체크
+  const isInteractive =
+    uploadState.status !== 'parsing' &&
+    uploadState.status !== 'chunking' &&
+    uploadState.status !== 'uploading';
 
   return (
     <>
@@ -440,7 +479,7 @@ export function DocumentUpload() {
         className={`
           relative mt-6 cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors
           ${isDragging ? 'border-primary bg-primary/5' : 'border-border bg-card hover:border-muted-foreground'}
-          ${uploadState.status === 'uploading' || uploadState.status === 'previewing' ? 'pointer-events-none' : ''}
+          ${!isInteractive ? 'pointer-events-none' : ''}
           ${destination === 'dataset' && datasets.length === 0 ? 'pointer-events-none opacity-50' : ''}
         `}
       >
@@ -463,17 +502,27 @@ export function DocumentUpload() {
               PDF, TXT, MD, CSV, DOCX 파일 (최대 10MB)
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              업로드 전 품질 미리보기를 제공합니다
+              AI 청킹 미리보기 후 업로드할 수 있습니다
             </p>
           </>
         )}
 
-        {uploadState.status === 'previewing' && (
+        {uploadState.status === 'parsing' && (
           <>
             <AnalyzeIcon className="mx-auto h-12 w-12 text-primary" />
-            <p className="mt-4 text-lg font-medium text-foreground">문서 분석 중...</p>
+            <p className="mt-4 text-lg font-medium text-foreground">{uploadState.message}</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              청킹 결과와 품질 점수를 계산하고 있습니다
+              문서 내용을 분석하고 있습니다
+            </p>
+          </>
+        )}
+
+        {uploadState.status === 'chunking' && (
+          <>
+            <SparkleIcon className="mx-auto h-12 w-12 animate-pulse text-primary" />
+            <p className="mt-4 text-lg font-medium text-foreground">{uploadState.message}</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              AI가 문서를 의미 단위로 분할하고 있습니다
             </p>
           </>
         )}
@@ -505,9 +554,7 @@ export function DocumentUpload() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setUploadState({ status: 'idle', progress: 0 });
-                setSelectedFile(null);
-                setPreviewData(null);
+                resetState();
               }}
               className="mt-4 text-sm text-primary hover:text-primary/80"
             >
@@ -517,12 +564,30 @@ export function DocumentUpload() {
         )}
       </div>
 
-      {/* 미리보기 모달 */}
-      <PreviewModal
-        isOpen={showPreview}
-        onClose={handleClosePreview}
+      {/* 1단계: 파싱 미리보기 모달 */}
+      <ParsePreviewModal
+        isOpen={uploadState.status === 'parsed'}
+        onClose={handleCloseParsePreview}
+        onProceed={fetchChunkPreview}
+        parseData={parseData}
+        currentBalance={currentBalance}
+        isProcessing={uploadState.status === 'chunking'}
+      />
+
+      {/* 2단계: 청킹 결과 미리보기 모달 */}
+      <ChunkPreviewModal
+        isOpen={uploadState.status === 'chunked'}
+        onClose={handleCloseChunkPreview}
         onConfirm={uploadFile}
-        previewData={previewData}
+        chunkData={
+          chunkData
+            ? {
+                chunks: chunkData.chunks,
+                summary: chunkData.summary,
+                usage: chunkData.usage,
+              }
+            : null
+        }
         filename={selectedFile?.name || ''}
         isUploading={uploadState.status === 'uploading'}
       />
@@ -561,6 +626,19 @@ function AnalyzeIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={1.5}
         d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+      />
+    </svg>
+  );
+}
+
+function SparkleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.5}
+        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
       />
     </svg>
   );
