@@ -133,11 +133,140 @@ When the user provides text in <segment> tags, split it according to the rules a
 // ============================================================
 
 /**
+ * 한국어 문장 종결 패턴 (chunking.ts에서 재사용)
+ * 종결어미 + 선택적 구두점 + 공백/줄바꿈
+ */
+const KOREAN_SENTENCE_END_PATTERN =
+  /(?:습니다|입니다|됩니다|합니다|습니까|입니까|네요|군요|거든요|잖아요|나요|가요|을까요|ㄹ까요|세요|어요|아요|죠|요|다|냐|니|자)[.!?。！？]?\s+/g;
+
+/**
+ * 기본 문장 종결 패턴 (영어 및 기타 언어)
+ */
+const GENERAL_SENTENCE_END_PATTERN = /[.!?。！？]\s+/g;
+
+/**
  * 한국어 문서인지 판별
  */
 function isKoreanDocument(text: string): boolean {
   const koreanChars = text.match(/[가-힣]/g) || [];
   return koreanChars.length > text.length * 0.1;
+}
+
+/**
+ * 텍스트 내 모든 문장 경계(끝 위치) 찾기
+ * 한국어 종결어미 우선, 일반 구두점 보완
+ */
+function findSentenceBoundaries(text: string): number[] {
+  const boundaries: Set<number> = new Set();
+
+  // 1. 한국어 종결어미 패턴 매칭
+  const koreanPattern = new RegExp(KOREAN_SENTENCE_END_PATTERN.source, 'g');
+  let match;
+  while ((match = koreanPattern.exec(text)) !== null) {
+    boundaries.add(match.index + match[0].length);
+  }
+
+  // 2. 일반 문장 종결 패턴 (영어 등)
+  const generalPattern = new RegExp(GENERAL_SENTENCE_END_PATTERN.source, 'g');
+  while ((match = generalPattern.exec(text)) !== null) {
+    boundaries.add(match.index + match[0].length);
+  }
+
+  // 정렬된 배열로 반환
+  return Array.from(boundaries).sort((a, b) => a - b);
+}
+
+/**
+ * 자연스러운 문장 경계에서 텍스트 분할
+ * maxSize 이내에서 문장 단위로 분할하여 의미 단위를 보존
+ *
+ * @param text - 분할할 텍스트
+ * @param maxSize - 각 세그먼트의 최대 크기
+ * @returns 분할된 세그먼트 배열
+ */
+function splitByNaturalBoundaries(text: string, maxSize: number): string[] {
+  if (text.length <= maxSize) {
+    return [text.trim()].filter((s) => s.length > 0);
+  }
+
+  const segments: string[] = [];
+  const boundaries = findSentenceBoundaries(text);
+
+  // 문장 경계가 없으면 단락 기준으로 폴백
+  if (boundaries.length === 0) {
+    const paragraphs = text.split(/\n\n+/);
+    let currentSegment = '';
+
+    for (const para of paragraphs) {
+      const trimmedPara = para.trim();
+      if (!trimmedPara) continue;
+
+      if ((currentSegment + '\n\n' + trimmedPara).length <= maxSize) {
+        currentSegment = currentSegment
+          ? currentSegment + '\n\n' + trimmedPara
+          : trimmedPara;
+      } else {
+        if (currentSegment) segments.push(currentSegment);
+        // 단락 자체가 maxSize보다 크면 강제 분할
+        if (trimmedPara.length > maxSize) {
+          // 문자 수 기반 강제 분할 (최후의 수단)
+          for (let i = 0; i < trimmedPara.length; i += maxSize) {
+            segments.push(trimmedPara.slice(i, i + maxSize).trim());
+          }
+          currentSegment = '';
+        } else {
+          currentSegment = trimmedPara;
+        }
+      }
+    }
+    if (currentSegment) segments.push(currentSegment);
+    return segments.filter((s) => s.length > 0);
+  }
+
+  // 문장 경계가 있으면 문장 단위로 분할
+  let currentStart = 0;
+  let currentSegment = '';
+
+  for (const boundary of boundaries) {
+    const sentence = text.slice(currentStart, boundary);
+    const potentialSegment = currentSegment ? currentSegment + sentence : sentence;
+
+    if (potentialSegment.length <= maxSize) {
+      currentSegment = potentialSegment;
+    } else {
+      // 현재 세그먼트가 있으면 저장
+      if (currentSegment.trim()) {
+        segments.push(currentSegment.trim());
+      }
+      // 새 문장이 maxSize보다 크면 강제 분할
+      if (sentence.length > maxSize) {
+        for (let i = 0; i < sentence.length; i += maxSize) {
+          segments.push(sentence.slice(i, i + maxSize).trim());
+        }
+        currentSegment = '';
+      } else {
+        currentSegment = sentence;
+      }
+    }
+    currentStart = boundary;
+  }
+
+  // 남은 텍스트 처리
+  const remaining = text.slice(currentStart).trim();
+  if (remaining) {
+    if ((currentSegment + remaining).length <= maxSize) {
+      currentSegment += remaining;
+    } else {
+      if (currentSegment.trim()) segments.push(currentSegment.trim());
+      currentSegment = remaining;
+    }
+  }
+
+  if (currentSegment.trim()) {
+    segments.push(currentSegment.trim());
+  }
+
+  return segments.filter((s) => s.length > 0);
 }
 
 /**

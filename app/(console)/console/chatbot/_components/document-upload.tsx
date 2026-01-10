@@ -11,8 +11,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronDown, Database, Library } from 'lucide-react';
-import { ParsePreviewModal } from './parse-preview-modal';
-import { ChunkPreviewModal } from './chunk-preview-modal';
+import { DocumentPreviewModal, type UploadState } from './document-preview-modal';
 import { DocumentProgressModal } from '@/components/document-progress-modal';
 import { useTenantSettings } from '../../hooks/use-console-state';
 import type { ParsePreviewResponse } from '@/app/api/documents/preview/parse/route';
@@ -34,19 +33,7 @@ const ALLOWED_TYPES = [
 const ALLOWED_EXTENSIONS = ['.pdf', '.txt', '.md', '.csv', '.docx'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-/**
- * 업로드 상태 타입
- * 2단계 플로우: idle → parsing → parsed → chunking → chunked → uploading
- */
-type UploadState =
-  | { status: 'idle' }
-  | { status: 'parsing'; message: string }
-  | { status: 'parsed' } // 1단계 완료, ParsePreviewModal 표시 중
-  | { status: 'chunking'; message: string }
-  | { status: 'chunked' } // 2단계 완료, ChunkPreviewModal 표시 중
-  | { status: 'uploading'; progress: number }
-  | { status: 'success'; message: string }
-  | { status: 'error'; message: string };
+// UploadState는 document-preview-modal.tsx에서 import
 
 export function DocumentUpload() {
   const router = useRouter();
@@ -70,9 +57,9 @@ export function DocumentUpload() {
 
   // 파일 및 미리보기 상태
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [parseData, setParseData] = useState<ParsePreviewResponse['parse'] | null>(null);
-  const [chunkData, setChunkData] = useState<ChunkPreviewResponse | null>(null);
   const [currentBalance, setCurrentBalance] = useState(0);
+  // 청킹 진행 중 인터벌 참조 (취소용)
+  const chunkingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // 처리 상태 모달 관련 상태
   const [uploadedDocumentId, setUploadedDocumentId] = useState<string | null>(null);
@@ -175,8 +162,7 @@ export function DocumentUpload() {
       }
 
       const data: ParsePreviewResponse = await response.json();
-      setParseData(data.parse);
-      setUploadState({ status: 'parsed' });
+      setUploadState({ status: 'parsed', parseData: data.parse });
     } catch (error) {
       setUploadState({
         status: 'error',
@@ -186,11 +172,37 @@ export function DocumentUpload() {
     }
   }, []);
 
-  // 2단계: AI 청킹 API 호출
+  // 2단계: AI 청킹 API 호출 (프로그레스 시뮬레이션 포함)
   const fetchChunkPreview = useCallback(async () => {
+    // parsed 상태에서 parseData 추출
+    if (uploadState.status !== 'parsed') return;
+    const { parseData } = uploadState;
     if (!parseData?.text) return;
 
-    setUploadState({ status: 'chunking', message: 'AI 청킹 중...' });
+    // 예상 세그먼트 수와 처리 시간
+    const { segmentCount, estimatedTime } = parseData.estimation;
+
+    // 청킹 시작 (0%)
+    setUploadState({
+      status: 'chunking',
+      progress: 0,
+      message: '청킹 시작 중...',
+    });
+
+    // 프로그레스 시뮬레이션 시작
+    let currentProgress = 0;
+    const intervalTime = Math.max(500, (estimatedTime * 1000) / (segmentCount * 2));
+    const progressStep = 100 / (segmentCount * 2);
+
+    chunkingIntervalRef.current = setInterval(() => {
+      currentProgress = Math.min(currentProgress + progressStep, 95);
+      const currentSegment = Math.ceil((currentProgress / 100) * segmentCount);
+      setUploadState({
+        status: 'chunking',
+        progress: currentProgress,
+        message: `세그먼트 ${currentSegment}/${segmentCount} 처리 중...`,
+      });
+    }, intervalTime);
 
     try {
       const response = await fetch('/api/documents/preview/chunk', {
@@ -198,6 +210,12 @@ export function DocumentUpload() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: parseData.text }),
       });
+
+      // 시뮬레이션 중지
+      if (chunkingIntervalRef.current) {
+        clearInterval(chunkingIntervalRef.current);
+        chunkingIntervalRef.current = null;
+      }
 
       if (!response.ok) {
         const error = await response.json();
@@ -208,21 +226,27 @@ export function DocumentUpload() {
       }
 
       const data: ChunkPreviewResponse = await response.json();
-      setChunkData(data);
       // 포인트 잔액 갱신
       setCurrentBalance((prev) => prev - data.usage.pointsConsumed);
-      setUploadState({ status: 'chunked' });
+      setUploadState({ status: 'chunked', chunkData: data });
     } catch (error) {
+      // 시뮬레이션 중지
+      if (chunkingIntervalRef.current) {
+        clearInterval(chunkingIntervalRef.current);
+        chunkingIntervalRef.current = null;
+      }
       setUploadState({
         status: 'error',
         message: error instanceof Error ? error.message : 'AI 청킹에 실패했습니다.',
       });
     }
-  }, [parseData?.text]);
+  }, [uploadState]);
 
   // 실제 업로드 실행
   const uploadFile = useCallback(async () => {
-    if (!selectedFile || !chunkData) return;
+    // chunked 상태에서 chunkData 추출
+    if (uploadState.status !== 'chunked' || !selectedFile) return;
+    const { chunkData } = uploadState;
 
     setUploadState({ status: 'uploading', progress: 0 });
 
@@ -265,23 +289,21 @@ export function DocumentUpload() {
         message: error instanceof Error ? error.message : '업로드에 실패했습니다.',
       });
     }
-  }, [selectedFile, chunkData, selectedDatasetId, destination, router]);
+  }, [uploadState, selectedFile, selectedDatasetId, destination, router]);
 
   // 상태 초기화 함수
   const resetState = useCallback(() => {
+    // 청킹 진행 중이면 인터벌 정리
+    if (chunkingIntervalRef.current) {
+      clearInterval(chunkingIntervalRef.current);
+      chunkingIntervalRef.current = null;
+    }
     setUploadState({ status: 'idle' });
     setSelectedFile(null);
-    setParseData(null);
-    setChunkData(null);
   }, []);
 
-  // 1단계 모달 닫기 (파싱 결과 닫기)
-  const handleCloseParsePreview = useCallback(() => {
-    resetState();
-  }, [resetState]);
-
-  // 2단계 모달 닫기 (청킹 결과 닫기)
-  const handleCloseChunkPreview = useCallback(() => {
+  // 통합 모달 닫기
+  const handleClosePreviewModal = useCallback(() => {
     resetState();
   }, [resetState]);
 
@@ -565,31 +587,15 @@ export function DocumentUpload() {
         )}
       </div>
 
-      {/* 1단계: 파싱 미리보기 모달 */}
-      <ParsePreviewModal
-        isOpen={uploadState.status === 'parsed'}
-        onClose={handleCloseParsePreview}
-        onProceed={fetchChunkPreview}
-        parseData={parseData}
-        currentBalance={currentBalance}
-        isProcessing={uploadState.status === 'chunking'}
-      />
-
-      {/* 2단계: 청킹 결과 미리보기 모달 */}
-      <ChunkPreviewModal
-        isOpen={uploadState.status === 'chunked'}
-        onClose={handleCloseChunkPreview}
-        onConfirm={uploadFile}
-        chunkData={
-          chunkData
-            ? {
-                chunks: chunkData.chunks,
-                summary: chunkData.summary,
-                usage: chunkData.usage,
-              }
-            : null
-        }
+      {/* 통합 문서 미리보기 모달 (parsed/chunking/chunked 상태에서 표시) */}
+      <DocumentPreviewModal
+        isOpen={['parsed', 'chunking', 'chunked', 'uploading'].includes(uploadState.status)}
+        onClose={handleClosePreviewModal}
+        onConfirmUpload={uploadFile}
+        uploadState={uploadState}
+        onStartChunking={fetchChunkPreview}
         filename={selectedFile?.name || ''}
+        currentBalance={currentBalance}
         isUploading={uploadState.status === 'uploading'}
       />
 
