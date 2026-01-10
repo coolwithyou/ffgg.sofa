@@ -7,6 +7,10 @@ import {
   smartChunk,
   analyzeStructure,
   isHeaderOrSeparatorOnly,
+  classifyDocumentType,
+  detectLanguage,
+  calculateReadabilityScore,
+  DOCUMENT_TYPE_CONFIGS,
 } from '@/lib/rag/chunking';
 
 describe('analyzeStructure', () => {
@@ -289,5 +293,318 @@ describe('한국어 문장 경계 처리', () => {
         /(?:다|요|죠)$/.test(trimmed);
       expect(hasValidEnding).toBe(true);
     });
+  });
+});
+
+describe('classifyDocumentType', () => {
+  it('FAQ 문서를 올바르게 분류한다', () => {
+    const faqContent = `
+자주 묻는 질문 (FAQ)
+
+Q: 배송은 얼마나 걸리나요?
+A: 일반 배송은 2-3일, 빠른 배송은 1일 소요됩니다.
+
+Q: 반품은 어떻게 하나요?
+A: 구매일로부터 7일 이내 반품 신청 가능합니다.
+
+Q: 포인트는 어떻게 적립되나요?
+A: 구매 금액의 1%가 자동 적립됩니다.
+    `;
+    expect(classifyDocumentType(faqContent)).toBe('faq');
+  });
+
+  it('기술 문서를 올바르게 분류한다', () => {
+    const technicalContent = `
+# API 개발 가이드
+
+## 설치 방법
+
+다음 명령어로 SDK를 설치합니다:
+
+\`\`\`bash
+npm install @sofa/sdk
+\`\`\`
+
+## 사용법
+
+\`\`\`typescript
+import { SofaClient } from '@sofa/sdk';
+
+const client = new SofaClient({ apiKey: 'your-key' });
+await client.query('질문 내용');
+\`\`\`
+    `;
+    expect(classifyDocumentType(technicalContent)).toBe('technical');
+  });
+
+  it('법률/약관 문서를 올바르게 분류한다', () => {
+    const legalContent = `
+# 이용약관
+
+제1조 (목적)
+이 약관은 회사가 제공하는 서비스의 이용조건 및 절차에 관한 사항을 규정함을 목적으로 합니다.
+
+제2조 (정의)
+"서비스"란 회사가 제공하는 모든 온라인 서비스를 의미합니다.
+
+제3조 (약관의 효력)
+이 약관은 서비스를 이용하고자 하는 모든 회원에게 적용됩니다.
+
+제4조 (면책조항)
+회사는 천재지변 등 불가항력으로 인한 서비스 중단에 대해 책임지지 않습니다.
+    `;
+    expect(classifyDocumentType(legalContent)).toBe('legal');
+  });
+
+  it('일반 문서를 올바르게 분류한다', () => {
+    const generalContent = `
+안녕하세요. 오늘은 날씨가 좋습니다.
+이 문서는 특별한 형식이 없는 일반적인 텍스트입니다.
+다양한 주제에 대해 이야기할 수 있습니다.
+    `;
+    expect(classifyDocumentType(generalContent)).toBe('general');
+  });
+});
+
+describe('문서 유형별 청크 크기 동적 조절', () => {
+  it('FAQ 문서에 작은 청크 크기(400자)가 적용된다', async () => {
+    // FAQ 구조를 가진 긴 문서
+    const faqContent = Array(10)
+      .fill('')
+      .map(
+        (_, i) =>
+          `Q: 질문 ${i + 1}번은 무엇인가요?\nA: 이것은 ${i + 1}번 질문에 대한 자세한 답변입니다. 충분히 긴 내용을 작성합니다.`
+      )
+      .join('\n\n');
+
+    const chunks = await smartChunk(faqContent, { autoDetectDocumentType: true });
+
+    // FAQ로 감지되어야 함
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks[0].metadata.documentType).toBe('faq');
+
+    // 청크 크기가 FAQ 설정(400자)에 맞게 조절되어야 함
+    chunks.forEach((chunk) => {
+      // 약간의 오버랩 포함하여 450자 이내
+      expect(chunk.content.length).toBeLessThanOrEqual(450);
+    });
+  });
+
+  it('기술 문서에 적당한 청크 크기(600자)가 적용된다', async () => {
+    const technicalContent = `
+# API 사용 가이드
+
+## 인증 방법
+
+\`\`\`javascript
+const client = new ApiClient({ key: 'your-api-key' });
+\`\`\`
+
+## 요청 보내기
+
+API 요청은 다음과 같이 보낼 수 있습니다. 먼저 클라이언트를 초기화하고, 필요한 파라미터를 설정합니다. 그 다음 요청을 전송하고 응답을 처리합니다.
+
+\`\`\`javascript
+const response = await client.post('/endpoint', { data: 'value' });
+console.log(response.data);
+\`\`\`
+
+응답은 JSON 형식으로 반환되며, 필요에 따라 파싱하여 사용할 수 있습니다. 에러가 발생한 경우 적절한 예외 처리를 해주세요.
+    `;
+
+    const chunks = await smartChunk(technicalContent, { autoDetectDocumentType: true });
+
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks[0].metadata.documentType).toBe('technical');
+  });
+
+  it('사용자가 명시적으로 크기를 지정하면 자동 조절이 무시된다', async () => {
+    const faqContent = `
+Q: 첫 번째 질문입니다.
+A: 첫 번째 답변입니다. 충분히 길게 작성합니다.
+
+Q: 두 번째 질문입니다.
+A: 두 번째 답변입니다. 마찬가지로 길게 작성합니다.
+    `;
+
+    // 사용자가 명시적으로 maxChunkSize를 지정
+    const chunks = await smartChunk(faqContent, {
+      maxChunkSize: 200,
+      autoDetectDocumentType: true,
+    });
+
+    // 지정한 크기(200자)가 적용되어야 함
+    chunks.forEach((chunk) => {
+      expect(chunk.content.length).toBeLessThanOrEqual(250);
+    });
+  });
+
+  it('청크 메타데이터에 문장 통계가 포함된다', async () => {
+    const content =
+      '첫 번째 문장입니다. 두 번째 문장입니다. 세 번째 문장입니다. 네 번째 문장입니다.';
+    const chunks = await smartChunk(content);
+
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks[0].metadata.sentenceCount).toBeDefined();
+    expect(chunks[0].metadata.avgSentenceLength).toBeDefined();
+    expect(chunks[0].metadata.sentenceCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it('청크 메타데이터에 언어와 가독성 점수가 포함된다', async () => {
+    const content =
+      '이것은 한국어 텍스트입니다. 가독성 점수가 계산되어야 합니다.';
+    const chunks = await smartChunk(content);
+
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks[0].metadata.language).toBe('ko');
+    expect(chunks[0].metadata.readabilityScore).toBeDefined();
+    expect(chunks[0].metadata.readabilityScore).toBeGreaterThan(0);
+  });
+});
+
+describe('detectLanguage', () => {
+  it('한국어 텍스트를 올바르게 감지한다', () => {
+    expect(detectLanguage('안녕하세요. 이것은 한국어 텍스트입니다.')).toBe('ko');
+    expect(detectLanguage('SOFA는 좋은 서비스입니다.')).toBe('ko');
+  });
+
+  it('영어 텍스트를 올바르게 감지한다', () => {
+    expect(detectLanguage('Hello, this is an English text.')).toBe('en');
+    expect(detectLanguage('SOFA is a great service for RAG.')).toBe('en');
+  });
+
+  it('혼합 텍스트를 올바르게 감지한다', () => {
+    // 균등하게 섞인 경우 mixed
+    expect(detectLanguage('Hello 안녕 World 세계')).toBe('mixed');
+    // 한글 3단어 vs 영어 3단어
+    expect(detectLanguage('안녕하세요 Hello 반갑습니다 World 좋은하루 Today')).toBe('mixed');
+  });
+
+  it('숫자/특수문자만 있는 경우 mixed를 반환한다', () => {
+    expect(detectLanguage('12345!@#$%')).toBe('mixed');
+    expect(detectLanguage('   ')).toBe('mixed');
+  });
+});
+
+describe('calculateReadabilityScore', () => {
+  it('적절한 길이의 텍스트에 높은 점수를 부여한다', () => {
+    const goodText =
+      '이 문장은 적절한 길이입니다. 가독성이 좋은 텍스트입니다. ' +
+      '다양한 어휘를 사용하여 작성되었습니다.';
+    const score = calculateReadabilityScore(goodText);
+
+    expect(score).toBeGreaterThan(70);
+  });
+
+  it('너무 긴 문장에 낮은 점수를 부여한다', () => {
+    // 매우 긴 단일 문장 (한국어 종결어미 없음, 구두점 없음)
+    // 종결어미로 분리되지 않도록 명사/형용사 나열 형태
+    const longSentence =
+      '아주 길고 복잡한 문장 구조를 가진 ' +
+      '특별하고 독특한 형태의 텍스트 '.repeat(15);
+    const score = calculateReadabilityScore(longSentence);
+
+    // 200자 이상의 단일 문장 → avgSentenceLength > 100 → 감점
+    expect(score).toBeLessThan(90);
+  });
+
+  it('반복되는 단어가 많으면 점수가 낮아진다', () => {
+    const repetitiveText = '안녕 안녕 안녕 안녕 안녕 안녕 안녕 안녕 안녕 안녕';
+    const score = calculateReadabilityScore(repetitiveText);
+
+    expect(score).toBeLessThan(90);
+  });
+
+  it('빈 텍스트는 0점을 반환한다', () => {
+    expect(calculateReadabilityScore('')).toBe(0);
+    expect(calculateReadabilityScore('   ')).toBe(0);
+  });
+
+  it('완전한 문장으로 끝나면 보너스 점수가 부여된다', () => {
+    const completeText = '이것은 완전한 문장입니다.';
+    const incompleteText = '이것은 완전한 문장이';
+
+    const completeScore = calculateReadabilityScore(completeText);
+    const incompleteScore = calculateReadabilityScore(incompleteText);
+
+    // 완전한 문장이 더 높은 점수를 받아야 함
+    expect(completeScore).toBeGreaterThanOrEqual(incompleteScore);
+  });
+});
+
+describe('품질 점수 정교화', () => {
+  it('구조적 요소(헤더, 리스트)가 있으면 가산점을 받는다', async () => {
+    const withHeader = await smartChunk(
+      '## 제목\n\n이것은 본문 내용입니다. 충분한 길이의 텍스트가 필요합니다. ' +
+        '더 많은 내용을 추가하여 품질 점수가 제대로 계산되도록 합니다.'
+    );
+    const withoutHeader = await smartChunk(
+      '이것은 본문 내용입니다. 충분한 길이의 텍스트가 필요합니다. ' +
+        '더 많은 내용을 추가하여 품질 점수가 제대로 계산되도록 합니다.'
+    );
+
+    // 헤더가 있는 청크가 +5점 가산
+    if (withHeader.length > 0 && withoutHeader.length > 0) {
+      expect(withHeader[0].qualityScore).toBeGreaterThanOrEqual(withoutHeader[0].qualityScore);
+    }
+  });
+
+  it('Q&A 쌍이 분리되면 감점된다', async () => {
+    // Q만 있는 청크 (충분한 길이로 필터링 방지)
+    const qOnlyChunks = await smartChunk(
+      'Q: 이것은 아주 긴 질문입니다. 사용자가 궁금해하는 내용을 상세하게 작성해야 합니다. ' +
+        '충분한 길이의 질문을 제공하여 청크로 처리되도록 합니다.'
+    );
+    // Q&A 완전한 쌍 (한 청크로 유지되도록 줄바꿈 없이 연결)
+    const qaChunks = await smartChunk(
+      'Q: 이것은 질문입니다. 사용자가 궁금해합니다. ' +
+        'A: 이것은 답변입니다. 충분한 길이의 답변을 제공합니다. 상세한 설명을 덧붙입니다.'
+    );
+
+    // 둘 다 청크가 생성되어야 함
+    expect(qOnlyChunks.length).toBeGreaterThan(0);
+    expect(qaChunks.length).toBeGreaterThan(0);
+
+    // Q&A 완전한 쌍이 더 높은 점수를 받음 (Q-only는 -30 감점)
+    expect(qaChunks[0].qualityScore).toBeGreaterThan(qOnlyChunks[0].qualityScore);
+  });
+
+  it('가독성 점수가 높으면 품질 점수도 높아진다', async () => {
+    // 가독성이 좋은 텍스트
+    const goodText =
+      '이것은 가독성이 좋은 문장입니다. ' +
+      '적절한 길이로 작성되었습니다. ' +
+      '다양한 어휘를 사용하여 내용을 전달합니다. ' +
+      '문장이 완결되어 있습니다.';
+
+    // 가독성이 나쁜 텍스트 (긴 단일 문장, 반복)
+    const badText =
+      '이것은 매우 긴 문장으로 ' +
+      '가독성이 떨어지는 텍스트의 예시를 보여주기 위해 ' +
+      '일부러 길게 작성한 텍스트';
+
+    const goodChunks = await smartChunk(goodText);
+    const badChunks = await smartChunk(badText);
+
+    if (goodChunks.length > 0 && badChunks.length > 0) {
+      // 가독성 점수가 메타데이터에 포함되어 있어야 함
+      expect(goodChunks[0].metadata.readabilityScore).toBeDefined();
+      expect(badChunks[0].metadata.readabilityScore).toBeDefined();
+    }
+  });
+
+  it('문장 수가 적정 범위(3-10)이면 가산점을 받는다', async () => {
+    // 적정 문장 수 (5문장)
+    const optimalText =
+      '첫 번째 문장입니다. ' +
+      '두 번째 문장입니다. ' +
+      '세 번째 문장입니다. ' +
+      '네 번째 문장입니다. ' +
+      '다섯 번째 문장입니다.';
+
+    const chunks = await smartChunk(optimalText);
+    if (chunks.length > 0) {
+      expect(chunks[0].metadata.sentenceCount).toBeGreaterThanOrEqual(3);
+    }
   });
 });

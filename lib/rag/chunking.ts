@@ -8,11 +8,46 @@
  * - Q&A 쌍, 헤더, 테이블 구조 인식
  */
 
+/**
+ * 문서 유형
+ */
+export type DocumentType = 'faq' | 'technical' | 'legal' | 'general';
+
+/**
+ * 문서 유형별 청킹 설정
+ */
+export interface DocumentTypeConfig {
+  maxChunkSize: number;
+  overlap: number;
+  description: string;
+}
+
+/**
+ * 문서 유형별 최적 청킹 설정
+ * - faq: 짧은 Q&A 단위, 오버랩 최소화
+ * - technical: 맥락 중요, 적당한 오버랩
+ * - legal: 조항/절 단위, 큰 오버랩으로 맥락 보존
+ * - general: 균형 잡힌 기본값
+ */
+export const DOCUMENT_TYPE_CONFIGS: Record<DocumentType, DocumentTypeConfig> = {
+  faq: { maxChunkSize: 400, overlap: 30, description: '짧은 Q&A 단위' },
+  technical: { maxChunkSize: 600, overlap: 80, description: '기술 문서, 맥락 중요' },
+  legal: { maxChunkSize: 800, overlap: 100, description: '법률/계약, 조항 단위' },
+  general: { maxChunkSize: 500, overlap: 50, description: '일반 문서 기본값' },
+};
+
 export interface ChunkOptions {
   maxChunkSize: number;
   overlap: number;
   preserveStructure: boolean;
+  /** 문서 유형 자동 감지 여부 (true시 maxChunkSize/overlap 자동 조절) */
+  autoDetectDocumentType?: boolean;
 }
+
+/**
+ * 언어 유형
+ */
+export type Language = 'ko' | 'en' | 'mixed';
 
 export interface Chunk {
   content: string;
@@ -25,6 +60,16 @@ export interface Chunk {
     isQAPair: boolean;
     isTable: boolean;
     isList: boolean;
+    /** 감지된 문서 유형 */
+    documentType?: DocumentType;
+    /** 문장 수 (품질 지표) */
+    sentenceCount?: number;
+    /** 평균 문장 길이 (품질 지표) */
+    avgSentenceLength?: number;
+    /** 감지된 언어 */
+    language?: Language;
+    /** 가독성 점수 (0-100) */
+    readabilityScore?: number;
   };
 }
 
@@ -39,6 +84,7 @@ const DEFAULT_OPTIONS: ChunkOptions = {
   maxChunkSize: 500,
   overlap: 50,
   preserveStructure: true,
+  autoDetectDocumentType: true, // 기본적으로 문서 유형 자동 감지 활성화
 };
 
 /**
@@ -60,13 +106,215 @@ const KOREAN_SENTENCE_END_PATTERN =
 const GENERAL_SENTENCE_END_PATTERN = /[.!?。！？]\s+/g;
 
 /**
+ * 텍스트 언어 감지
+ * 단어 기반 비율에 따라 ko/en/mixed 반환
+ *
+ * 글자 기반이 아닌 단어 기반으로 계산하는 이유:
+ * - 영어 'Hello'는 5글자, 한글 '안녕'은 2글자이지만 둘 다 1단어
+ * - 단어 기반이 다국어 혼합 텍스트에서 더 공정한 판단 제공
+ */
+export function detectLanguage(text: string): Language {
+  // 단어 단위로 분리
+  const words = text.split(/\s+/).filter((w) => w.length > 0);
+
+  if (words.length === 0) return 'mixed';
+
+  let koreanWords = 0;
+  let englishWords = 0;
+
+  for (const word of words) {
+    // 단어에서 문자 유형 분석
+    const koreanChars = (word.match(/[가-힣ㄱ-ㅎㅏ-ㅣ]/g) || []).length;
+    const englishChars = (word.match(/[a-zA-Z]/g) || []).length;
+
+    // 단어의 주요 언어 판단 (더 많은 문자 유형 기준)
+    if (koreanChars > 0 && koreanChars >= englishChars) {
+      koreanWords++;
+    } else if (englishChars > 0) {
+      englishWords++;
+    }
+    // 숫자만 있는 단어는 무시
+  }
+
+  const totalLangWords = koreanWords + englishWords;
+  if (totalLangWords === 0) return 'mixed';
+
+  const koreanRatio = koreanWords / totalLangWords;
+  const englishRatio = englishWords / totalLangWords;
+
+  // 60% 이상이면 해당 언어로 판단 (단어 기반이므로 임계값 낮춤)
+  if (koreanRatio >= 0.6) return 'ko';
+  if (englishRatio >= 0.6) return 'en';
+
+  return 'mixed';
+}
+
+/**
+ * 텍스트 가독성 점수 계산 (0-100)
+ *
+ * 평가 기준:
+ * - 평균 문장 길이: 15-40자가 최적
+ * - 어휘 다양성: 중복 단어 비율이 낮을수록 좋음
+ * - 문장 완결성: 종결어미로 끝나는 비율
+ */
+export function calculateReadabilityScore(text: string): number {
+  if (!text.trim()) return 0;
+
+  let score = 100;
+
+  // 1. 문장 분리
+  const boundaries = findSentenceBoundaries(text);
+  const sentenceCount = Math.max(1, boundaries.length);
+  const avgSentenceLength = text.length / sentenceCount;
+
+  // 평균 문장 길이 평가 (15-40자 최적)
+  if (avgSentenceLength < 10) {
+    score -= 15; // 너무 짧음
+  } else if (avgSentenceLength > 100) {
+    score -= 30; // 매우 긺 (문장 분리 없음)
+  } else if (avgSentenceLength > 80) {
+    score -= 20; // 너무 긺
+  } else if (avgSentenceLength > 50) {
+    score -= 10;
+  }
+
+  // 2. 어휘 다양성 (단어 중복 비율)
+  const words = text.split(/\s+/).filter((w) => w.length > 1);
+  if (words.length > 5) {
+    const uniqueWords = new Set(words.map((w) => w.toLowerCase()));
+    const diversityRatio = uniqueWords.size / words.length;
+
+    if (diversityRatio < 0.3) {
+      score -= 15; // 중복이 많음
+    } else if (diversityRatio < 0.5) {
+      score -= 5;
+    }
+  }
+
+  // 3. 특수문자/숫자 과다 여부
+  const alphanumericRatio =
+    (text.match(/[a-zA-Z가-힣ㄱ-ㅎㅏ-ㅣ0-9]/g)?.length || 0) / text.length;
+  if (alphanumericRatio < 0.5) {
+    score -= 15; // 특수문자가 너무 많음
+  }
+
+  // 4. 문장 완결성 보너스
+  if (endsWithCompleteSentence(text)) {
+    score += 5;
+  }
+
+  return Math.max(0, Math.min(100, score));
+}
+
+/**
+ * 문서 유형별 키워드 패턴
+ */
+const DOCUMENT_TYPE_PATTERNS = {
+  faq: {
+    // Q&A, FAQ, 자주 묻는 질문 등
+    keywords:
+      /(?:FAQ|Q\s*&\s*A|자주\s*묻는\s*질문|질문\s*답변|문의\s*답변|질의\s*응답)/i,
+    structure: /(?:Q[:：]|A[:：]|질문[:：]|답변[:：]|문[:：]|답[:：])/,
+  },
+  technical: {
+    // API, 기술 문서, 개발 가이드 등
+    keywords:
+      /(?:API|SDK|개발\s*가이드|기술\s*문서|사용\s*설명서|매뉴얼|레퍼런스|설치\s*방법|사용법)/i,
+    structure: /```[\s\S]*?```|<code>[\s\S]*?<\/code>/,
+  },
+  legal: {
+    // 법률, 계약, 약관 등
+    keywords:
+      /(?:약관|이용약관|개인정보|계약서|조항|법률|규정|조례|동의서|면책|보증)/i,
+    structure: /제\s*\d+\s*조|제\s*\d+\s*항|제\s*\d+\s*호|Article\s+\d+/i,
+  },
+};
+
+/**
+ * 문서 유형 자동 분류
+ * 키워드 패턴 + 구조적 특성을 기반으로 판단
+ */
+export function classifyDocumentType(content: string): DocumentType {
+  // 점수 기반 분류
+  const scores: Record<DocumentType, number> = {
+    faq: 0,
+    technical: 0,
+    legal: 0,
+    general: 0,
+  };
+
+  // FAQ 판단
+  if (DOCUMENT_TYPE_PATTERNS.faq.keywords.test(content)) {
+    scores.faq += 30;
+  }
+  if (DOCUMENT_TYPE_PATTERNS.faq.structure.test(content)) {
+    scores.faq += 40;
+  }
+  // Q&A 쌍 개수에 따른 가산점
+  const qaMatches = content.match(/(?:Q|질문|문)[:：]/gi);
+  if (qaMatches && qaMatches.length >= 3) {
+    scores.faq += 20;
+  }
+
+  // Technical 판단
+  if (DOCUMENT_TYPE_PATTERNS.technical.keywords.test(content)) {
+    scores.technical += 30;
+  }
+  if (DOCUMENT_TYPE_PATTERNS.technical.structure.test(content)) {
+    scores.technical += 30;
+  }
+  // 코드 블록 개수
+  const codeBlocks = content.match(/```[\s\S]*?```/g);
+  if (codeBlocks && codeBlocks.length >= 2) {
+    scores.technical += 20;
+  }
+
+  // Legal 판단
+  if (DOCUMENT_TYPE_PATTERNS.legal.keywords.test(content)) {
+    scores.legal += 30;
+  }
+  if (DOCUMENT_TYPE_PATTERNS.legal.structure.test(content)) {
+    scores.legal += 40;
+  }
+  // 조항 형식 개수
+  const articleMatches = content.match(/제\s*\d+\s*[조항호]/g);
+  if (articleMatches && articleMatches.length >= 3) {
+    scores.legal += 20;
+  }
+
+  // 가장 높은 점수의 유형 선택 (최소 30점 이상이어야 적용)
+  const maxScore = Math.max(scores.faq, scores.technical, scores.legal);
+
+  if (maxScore >= 30) {
+    if (scores.faq === maxScore) return 'faq';
+    if (scores.technical === maxScore) return 'technical';
+    if (scores.legal === maxScore) return 'legal';
+  }
+
+  return 'general';
+}
+
+/**
  * 스마트 청킹 수행
  */
 export async function smartChunk(
   content: string,
   options: Partial<ChunkOptions> = {}
 ): Promise<Chunk[]> {
-  const opts = { ...DEFAULT_OPTIONS, ...options };
+  let opts = { ...DEFAULT_OPTIONS, ...options };
+
+  // 0. 문서 유형 자동 감지 및 설정 조절
+  let detectedDocumentType: DocumentType = 'general';
+  if (opts.autoDetectDocumentType && !options.maxChunkSize && !options.overlap) {
+    // 사용자가 명시적으로 크기를 지정하지 않은 경우에만 자동 조절
+    detectedDocumentType = classifyDocumentType(content);
+    const typeConfig = DOCUMENT_TYPE_CONFIGS[detectedDocumentType];
+    opts = {
+      ...opts,
+      maxChunkSize: typeConfig.maxChunkSize,
+      overlap: typeConfig.overlap,
+    };
+  }
 
   // 1. 문서 구조 분석
   const structure = analyzeStructure(content);
@@ -105,11 +353,30 @@ export async function smartChunk(
     (chunk) => !isHeaderOrSeparatorOnly(chunk.content)
   );
 
-  // 6. 인덱스 재정렬
-  return filteredChunks.map((chunk, idx) => ({
-    ...chunk,
-    index: idx,
-  }));
+  // 6. 인덱스 재정렬 및 메타데이터 강화
+  return filteredChunks.map((chunk, idx) => {
+    // 문장 수 및 평균 길이 계산
+    const boundaries = findSentenceBoundaries(chunk.content);
+    const sentenceCount = Math.max(1, boundaries.length);
+    const avgSentenceLength = Math.round(chunk.content.length / sentenceCount);
+
+    // 언어 감지 및 가독성 점수 계산
+    const language = detectLanguage(chunk.content);
+    const readabilityScore = calculateReadabilityScore(chunk.content);
+
+    return {
+      ...chunk,
+      index: idx,
+      metadata: {
+        ...chunk.metadata,
+        documentType: detectedDocumentType,
+        sentenceCount,
+        avgSentenceLength,
+        language,
+        readabilityScore,
+      },
+    };
+  });
 }
 
 /**
@@ -487,48 +754,122 @@ function endsWithCompleteSentence(content: string): boolean {
 
 /**
  * 청크 품질 점수 계산 (0-100)
+ *
+ * 품질 평가 기준:
+ * 1. 길이 적정성 (100-800자)
+ * 2. 문장 완결성 (종결어미로 끝남)
+ * 3. Q&A 쌍 무결성
+ * 4. 의미 있는 콘텐츠 비율
+ * 5. 구조적 요소 (헤더, 리스트, 테이블)
+ * 6. 가독성 점수 반영 (새 메타데이터)
+ * 7. 문장 수 적정성 (새 메타데이터)
  */
 function calculateQualityScore(chunk: Chunk): number {
   let score = 100;
   const content = chunk.content;
+  const meta = chunk.metadata;
 
-  // 너무 짧으면 감점 (100자 미만)
-  if (content.length < 100) {
-    score -= 20;
+  // ========================================
+  // 1. 길이 기반 평가
+  // ========================================
+  if (content.length < 50) {
+    score -= 30; // 매우 짧음 (50자 미만)
+  } else if (content.length < 100) {
+    score -= 20; // 짧음 (100자 미만)
   }
 
-  // 너무 길면 감점 (800자 초과)
-  if (content.length > 800) {
-    score -= 10;
+  if (content.length > 1000) {
+    score -= 15; // 매우 긺 (1000자 초과)
+  } else if (content.length > 800) {
+    score -= 10; // 긺 (800자 초과)
   }
 
-  // 문장이 중간에 잘렸으면 감점
+  // ========================================
+  // 2. 문장 완결성 평가
+  // ========================================
   if (!endsWithCompleteSentence(content)) {
     score -= 15;
   }
 
-  // Q&A 쌍이 분리됐으면 감점
-  if (
-    (content.includes('Q:') || content.includes('질문:')) &&
-    !(content.includes('A:') || content.includes('답변:'))
-  ) {
-    score -= 30;
+  // ========================================
+  // 3. Q&A 쌍 무결성 평가
+  // ========================================
+  const hasQuestion = content.includes('Q:') || content.includes('질문:') || content.includes('문:');
+  const hasAnswer = content.includes('A:') || content.includes('답변:') || content.includes('답:');
+
+  if (hasQuestion && !hasAnswer) {
+    score -= 30; // Q만 있고 A 없음
+  } else if (!hasQuestion && hasAnswer) {
+    score -= 20; // A만 있고 Q 없음
   }
 
-  // 의미 없는 내용이면 감점 (숫자/특수문자만)
-  const meaningfulChars = content.replace(/[\d\s\W]/g, '');
-  if (meaningfulChars.length < content.length * 0.3) {
-    score -= 25;
+  // ========================================
+  // 4. 의미 있는 콘텐츠 비율
+  // ========================================
+  // 한국어(가-힣), 영어(a-zA-Z)를 의미 있는 문자로 포함
+  // Note: \W는 영어 단어 문자만 인식하므로 한국어가 제외되는 버그 수정
+  const meaningfulChars = content.match(/[가-힣a-zA-Z]/g)?.join('') || '';
+  const meaningfulRatio = content.length > 0 ? meaningfulChars.length / content.length : 0;
+
+  if (meaningfulRatio < 0.2) {
+    score -= 30; // 의미 있는 문자 20% 미만
+  } else if (meaningfulRatio < 0.3) {
+    score -= 25; // 의미 있는 문자 30% 미만
   }
 
-  // Q&A 쌍이면 가산점
-  if (chunk.metadata.isQAPair) {
-    score += 10;
+  // ========================================
+  // 5. 구조적 요소 가산점
+  // ========================================
+  if (meta.isQAPair) {
+    score += 10; // 완전한 Q&A 쌍
   }
 
-  // 헤더가 있으면 가산점
-  if (chunk.metadata.hasHeader) {
-    score += 5;
+  if (meta.hasHeader) {
+    score += 5; // 섹션 헤더 포함
+  }
+
+  if (meta.isList) {
+    score += 3; // 리스트 구조 포함
+  }
+
+  if (meta.isTable) {
+    score += 3; // 테이블 구조 포함
+  }
+
+  // ========================================
+  // 6. 가독성 점수 반영 (새 메타데이터)
+  // ========================================
+  if (meta.readabilityScore !== undefined) {
+    // 가독성 점수가 낮으면 감점
+    if (meta.readabilityScore < 50) {
+      score -= 10; // 가독성 매우 낮음
+    } else if (meta.readabilityScore < 70) {
+      score -= 5; // 가독성 낮음
+    } else if (meta.readabilityScore >= 90) {
+      score += 5; // 가독성 우수
+    }
+  }
+
+  // ========================================
+  // 7. 문장 수 적정성 (새 메타데이터)
+  // ========================================
+  if (meta.sentenceCount !== undefined) {
+    if (meta.sentenceCount === 1 && content.length > 200) {
+      score -= 10; // 긴 단일 문장 (읽기 어려움)
+    } else if (meta.sentenceCount >= 3 && meta.sentenceCount <= 10) {
+      score += 3; // 적정 문장 수
+    }
+  }
+
+  // ========================================
+  // 8. 평균 문장 길이 적정성 (새 메타데이터)
+  // ========================================
+  if (meta.avgSentenceLength !== undefined) {
+    if (meta.avgSentenceLength > 100) {
+      score -= 5; // 문장이 너무 긺
+    } else if (meta.avgSentenceLength < 10 && meta.sentenceCount && meta.sentenceCount > 1) {
+      score -= 5; // 문장이 너무 짧음 (단어 나열)
+    }
   }
 
   return Math.max(0, Math.min(100, score));
