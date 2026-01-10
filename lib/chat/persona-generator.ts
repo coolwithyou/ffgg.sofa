@@ -12,6 +12,10 @@ import type { PersonaConfig } from './intent-classifier';
 export interface GeneratedPersona extends PersonaConfig {
   keywords: string[];
   confidence: number;
+  /** 분석에 사용된 청크 수 */
+  analyzedChunkCount: number;
+  /** 분석에 포함된 고유 문서 수 */
+  analyzedDocumentCount: number;
 }
 
 export interface GeneratePersonaOptions {
@@ -127,9 +131,14 @@ export async function generatePersonaFromDocuments(
       ? parsed.excludedTopics.slice(0, 20)
       : [];
 
+    // 고유 문서 수 계산
+    const uniqueDocumentIds = new Set(chunks.map((c) => c.documentId));
+    const analyzedDocumentCount = uniqueDocumentIds.size;
+
     logger.info('Persona generated from documents', {
       chatbotId,
       chunksAnalyzed: chunks.length,
+      documentsAnalyzed: analyzedDocumentCount,
       keywords: parsed.keywords,
       includedTopics: includedTopics.length,
       excludedTopics: excludedTopics.length,
@@ -145,6 +154,8 @@ export async function generatePersonaFromDocuments(
       tone: parsed.tone,
       keywords: parsed.keywords || [],
       confidence: parsed.confidence || 0.7,
+      analyzedChunkCount: chunks.length,
+      analyzedDocumentCount,
     };
   } catch (error) {
     logger.error('Persona generation failed', error as Error, { chatbotId });

@@ -76,7 +76,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       excludedTopics: generatedPersona.excludedTopics,
       confidence: generatedPersona.confidence,
       lastGeneratedAt: now,
-      documentSampleCount: 50, // sampleSize와 동일
+      // 실제 분석된 청크/문서 수 저장
+      chunkSampleCount: generatedPersona.analyzedChunkCount,
+      documentSampleCount: generatedPersona.analyzedDocumentCount,
     };
 
     await db

@@ -61,6 +61,9 @@ interface RagIndexConfig {
   excludedTopics: string[];
   confidence: number | null;
   lastGeneratedAt: string | null;
+  /** 분석에 사용된 청크 수 */
+  chunkSampleCount?: number;
+  /** 분석에 포함된 고유 문서 수 */
   documentSampleCount: number;
 }
 
@@ -207,6 +210,7 @@ export default function AISettingsPage() {
           excludedTopics: chatbot.ragIndexConfig.excludedTopics ?? [],
           confidence: chatbot.ragIndexConfig.confidence ?? null,
           lastGeneratedAt: chatbot.ragIndexConfig.lastGeneratedAt ?? null,
+          chunkSampleCount: chatbot.ragIndexConfig.chunkSampleCount,
           documentSampleCount: chatbot.ragIndexConfig.documentSampleCount ?? 0,
         });
       }
@@ -567,7 +571,10 @@ export default function AISettingsPage() {
             {ragIndexConfig.lastGeneratedAt && (
               <div className="flex items-center gap-4 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
                 <span>마지막 생성: {new Date(ragIndexConfig.lastGeneratedAt).toLocaleString('ko-KR')}</span>
-                <span>분석 문서: {ragIndexConfig.documentSampleCount}개</span>
+                <span>
+                  분석: {ragIndexConfig.documentSampleCount}개 문서
+                  {ragIndexConfig.chunkSampleCount && ` (${ragIndexConfig.chunkSampleCount}개 청크)`}
+                </span>
               </div>
             )}
           </CardContent>

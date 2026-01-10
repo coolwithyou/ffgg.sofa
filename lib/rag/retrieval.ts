@@ -598,8 +598,12 @@ export async function getChunksByDocument(
 }
 
 /**
- * 다중 데이터셋에서 승인된 청크 랜덤 샘플링
+ * 다중 데이터셋에서 승인된 청크를 문서별 균등 샘플링
  * 페르소나 자동 생성용으로 문서 청크를 샘플링합니다.
+ *
+ * 중요: 단순 RANDOM() 샘플링은 청크 수가 많은 문서에 편중됩니다.
+ * 이 함수는 각 문서에서 균등하게 청크를 추출하여 모든 문서가
+ * RAG 인덱스에 공평하게 반영되도록 합니다.
  */
 export async function getChunksByDatasets(
   tenantId: string,
@@ -611,13 +615,33 @@ export async function getChunksByDatasets(
   try {
     const datasetIdsArray = `{${datasetIds.join(',')}}`;
 
+    // 문서별 균등 샘플링 (Stratified Sampling)
+    // 1. 각 문서에 ROW_NUMBER 부여 (문서 내 랜덤 정렬)
+    // 2. 문서당 최소 3개, 최대 (limit / 문서수) 만큼 추출
+    // 3. 전체 결과를 다시 랜덤 정렬하여 limit 만큼 반환
     const results = await db.execute(sql`
-      SELECT content, document_id
-      FROM chunks
-      WHERE tenant_id = ${tenantId}
-        AND dataset_id = ANY(${datasetIdsArray}::uuid[])
-        AND status = 'approved'
-        AND is_active = true
+      WITH doc_stats AS (
+        SELECT COUNT(DISTINCT document_id)::int as doc_count
+        FROM chunks
+        WHERE tenant_id = ${tenantId}
+          AND dataset_id = ANY(${datasetIdsArray}::uuid[])
+          AND status = 'approved'
+          AND is_active = true
+      ),
+      ranked_chunks AS (
+        SELECT
+          content,
+          document_id,
+          ROW_NUMBER() OVER (PARTITION BY document_id ORDER BY RANDOM()) as rn
+        FROM chunks
+        WHERE tenant_id = ${tenantId}
+          AND dataset_id = ANY(${datasetIdsArray}::uuid[])
+          AND status = 'approved'
+          AND is_active = true
+      )
+      SELECT rc.content, rc.document_id
+      FROM ranked_chunks rc, doc_stats ds
+      WHERE rc.rn <= GREATEST(3, CEIL(${limit}::float / GREATEST(1, ds.doc_count)))
       ORDER BY RANDOM()
       LIMIT ${limit}
     `);
