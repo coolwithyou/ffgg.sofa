@@ -5,8 +5,8 @@
  *
  * 문서 업로드의 전체 플로우를 하나의 모달에서 처리합니다.
  * - Step 1 (parse): 파싱 결과 + 텍스트 미리보기
- * - Step 2 (chunking): AI 청킹 진행 중 (프로그레스바)
- * - Step 3 (chunked): 청킹 결과 미리보기
+ * - Step 2 (chunking): AI 문서 분석 진행 중 (프로그레스바)
+ * - Step 3 (chunked): 분석 결과 미리보기
  *
  * 다이얼로그가 닫히지 않고 연속적인 UX를 제공합니다.
  */
@@ -300,10 +300,10 @@ function ParseStep({
         <div className="mt-6 rounded-lg border border-primary/30 bg-primary/5 p-4">
           <div className="flex items-center gap-2 text-primary">
             <SparkleIcon className="h-5 w-5" />
-            <h3 className="font-medium">AI 청킹 비용 안내</h3>
+            <h3 className="font-medium">AI 분석 비용 안내</h3>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            이 문서를 AI로 분석하여 의미 단위로 청크를 생성합니다.
+            AI가 문서를 분석하여 챗봇이 정확하게 답변할 수 있도록 준비합니다.
           </p>
           <div className="mt-4 grid grid-cols-3 gap-4">
             <div className="rounded-lg bg-card p-3 text-center">
@@ -329,7 +329,7 @@ function ParseStep({
           </div>
           {!hasEnoughPoints && (
             <div className="mt-3 rounded-md bg-destructive/10 p-2 text-center text-sm text-destructive">
-              포인트가 부족합니다. 청킹을 진행하려면 포인트를 충전해주세요.
+              포인트가 부족합니다. AI 분석을 진행하려면 포인트를 충전해주세요.
             </div>
           )}
         </div>
@@ -351,7 +351,7 @@ function ParseStep({
             className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
             <SparkleIcon className="h-4 w-4" />
-            AI 청킹 진행 ({estimation.estimatedPoints}P)
+            AI 분석 시작 ({estimation.estimatedPoints}P)
           </button>
         </div>
       </div>
@@ -371,9 +371,6 @@ interface ChunkingStepProps {
 }
 
 function ChunkingStep({ progress, message, filename, onCancel }: ChunkingStepProps) {
-  // 예상 남은 시간 계산 (대략적)
-  const estimatedRemainingSeconds = progress > 0 ? Math.ceil(((100 - progress) / progress) * 2) : null;
-
   return (
     <>
       {/* 헤더 */}
@@ -383,7 +380,7 @@ function ChunkingStep({ progress, message, filename, onCancel }: ChunkingStepPro
             <SparkleIcon className="h-5 w-5 animate-pulse text-primary" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-foreground">AI 청킹 진행 중</h2>
+            <h2 className="text-lg font-semibold text-foreground">AI 문서 분석 중</h2>
             <p className="text-sm text-muted-foreground">{filename}</p>
           </div>
         </div>
@@ -413,11 +410,8 @@ function ChunkingStep({ progress, message, filename, onCancel }: ChunkingStepPro
                 style={{ width: `${Math.min(100, progress)}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center justify-center text-sm">
               <span className="font-medium text-foreground">{Math.round(progress)}%</span>
-              {estimatedRemainingSeconds !== null && estimatedRemainingSeconds > 0 && (
-                <span className="text-muted-foreground">~{estimatedRemainingSeconds}초 남음</span>
-              )}
             </div>
           </div>
 
@@ -427,7 +421,7 @@ function ChunkingStep({ progress, message, filename, onCancel }: ChunkingStepPro
 
         {/* 안내 텍스트 */}
         <p className="mt-6 max-w-sm text-center text-sm text-muted-foreground">
-          💡 AI가 문서를 의미 단위로 분석하고 있습니다. 각 청크의 품질 점수도 함께 계산됩니다.
+          💡 AI가 문서 내용을 이해하고 구조화하고 있습니다. 챗봇이 정확하게 답변할 수 있도록 준비합니다.
         </p>
       </div>
 
@@ -437,7 +431,7 @@ function ChunkingStep({ progress, message, filename, onCancel }: ChunkingStepPro
           onClick={onCancel}
           className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
         >
-          청킹 취소
+          분석 취소
         </button>
       </div>
     </>
@@ -496,7 +490,7 @@ function ChunkedStep({
             <CheckIcon className="h-5 w-5 text-green-500" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-foreground">청킹 완료</h2>
+            <h2 className="text-lg font-semibold text-foreground">분석 완료</h2>
             <p className="text-sm text-muted-foreground">{filename}</p>
           </div>
         </div>

@@ -5,7 +5,7 @@
  * [Week 9] 드래그앤드롭 파일 업로드
  * [Week 13] 업로드 전 미리보기 기능 추가
  * [Week 14] 데이터셋 선택 기능 추가
- * [Week 15] 2단계 플로우: 파싱 → AI 청킹 분리
+ * [Week 15] 2단계 플로우: 파싱 → AI 문서 분석 분리
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -182,11 +182,11 @@ export function DocumentUpload() {
     // 예상 세그먼트 수와 처리 시간
     const { segmentCount, estimatedTime } = parseData.estimation;
 
-    // 청킹 시작 (0%)
+    // 분석 시작 (0%)
     setUploadState({
       status: 'chunking',
       progress: 0,
-      message: '청킹 시작 중...',
+      message: '분석 시작 중...',
     });
 
     // 프로그레스 시뮬레이션 시작
@@ -200,7 +200,7 @@ export function DocumentUpload() {
       setUploadState({
         status: 'chunking',
         progress: currentProgress,
-        message: `세그먼트 ${currentSegment}/${segmentCount} 처리 중...`,
+        message: '문서를 분석하고 있습니다...',
       });
     }, intervalTime);
 
@@ -222,7 +222,7 @@ export function DocumentUpload() {
         if (response.status === 402) {
           throw new Error(error.error || '포인트가 부족합니다.');
         }
-        throw new Error(error.error || 'AI 청킹에 실패했습니다.');
+        throw new Error(error.error || 'AI 분석에 실패했습니다.');
       }
 
       const data: ChunkPreviewResponse = await response.json();
@@ -237,7 +237,7 @@ export function DocumentUpload() {
       }
       setUploadState({
         status: 'error',
-        message: error instanceof Error ? error.message : 'AI 청킹에 실패했습니다.',
+        message: error instanceof Error ? error.message : 'AI 분석에 실패했습니다.',
       });
     }
   }, [uploadState]);
@@ -525,7 +525,7 @@ export function DocumentUpload() {
               PDF, TXT, MD, CSV, DOCX 파일 (최대 10MB)
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              AI 청킹 미리보기 후 업로드할 수 있습니다
+              AI 분석 미리보기 후 업로드할 수 있습니다
             </p>
           </>
         )}
