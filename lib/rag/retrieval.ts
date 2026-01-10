@@ -1,6 +1,14 @@
 /**
  * Hybrid Retrieval 모듈
- * Dense (BGE-m3-ko) + Sparse (Nori BM25) 검색
+ * Dense (OpenAI text-embedding-3-small) + Sparse (PGroonga FTS) 검색
+ *
+ * 검색 방식:
+ * - Dense: pgvector HNSW 인덱스, 코사인 유사도
+ * - Sparse: PGroonga 전문 검색, 한국어 자동 토큰화
+ * - Hybrid: RRF (Reciprocal Rank Fusion, k=60) 결합
+ *
+ * Fallback:
+ * - PGroonga 미설치 시 ILIKE 기반 폴백
  */
 
 import { db } from '@/lib/db';
@@ -205,10 +213,14 @@ async function denseSearch(
 }
 
 /**
- * Sparse Search (BM25 전문 검색)
+ * Sparse Search (PGroonga 전문 검색)
  *
- * PostgreSQL의 'simple' 설정을 사용하여 텍스트 검색 수행
- * 한국어의 경우 tsvector보다 ILIKE 폴백이 더 효과적일 수 있음
+ * PGroonga 확장을 사용한 한국어 전문 검색
+ * - &@~ 연산자: 웹 검색 스타일 쿼리 (AND/OR/NOT 지원)
+ * - pgroonga_score: Term Frequency 기반 관련성 점수
+ * - 자동 한국어 토큰화 지원
+ *
+ * Fallback: PGroonga 인덱스가 없으면 ILIKE로 폴백
  */
 async function sparseSearch(
   tenantId: string,
@@ -216,23 +228,20 @@ async function sparseSearch(
   limit: number
 ): Promise<SearchResult[]> {
   try {
-    // 'simple' 설정으로 전문 검색 (한국어 토큰화 미지원이지만 오류 방지)
-    // ILIKE 폴백으로 한국어 부분 문자열 매칭 지원
+    // PGroonga 전문 검색 (한국어 자동 토큰화)
+    // pgroonga_score()는 관련성 점수 반환 (Term Frequency 기반)
     const results = await db.execute(sql`
       SELECT
         id,
         document_id,
         content,
         metadata,
-        CASE
-          WHEN content ILIKE ${'%' + query + '%'} THEN 1.0
-          ELSE 0.5
-        END as score
+        pgroonga_score(tableoid, ctid) as score
       FROM chunks
       WHERE tenant_id = ${tenantId}
         AND status = 'approved'
         AND is_active = true
-        AND content ILIKE ${'%' + query + '%'}
+        AND content &@~ ${query}
       ORDER BY score DESC
       LIMIT ${limit}
     `);
@@ -253,8 +262,59 @@ async function sparseSearch(
       source: 'sparse' as const,
     }));
   } catch (error) {
+    // PGroonga 미설치 시 ILIKE 폴백
+    logger.warn(
+      'PGroonga search failed, falling back to ILIKE',
+      { tenantId, error: error instanceof Error ? error.message : 'Unknown' }
+    );
+    return sparseSearchFallback(tenantId, query, limit);
+  }
+}
+
+/**
+ * Sparse Search Fallback (ILIKE 기반)
+ * PGroonga 인덱스가 없는 환경에서 사용
+ */
+async function sparseSearchFallback(
+  tenantId: string,
+  query: string,
+  limit: number
+): Promise<SearchResult[]> {
+  try {
+    const results = await db.execute(sql`
+      SELECT
+        id,
+        document_id,
+        content,
+        metadata,
+        1.0 as score
+      FROM chunks
+      WHERE tenant_id = ${tenantId}
+        AND status = 'approved'
+        AND is_active = true
+        AND content ILIKE ${'%' + query + '%'}
+      ORDER BY LENGTH(content) ASC
+      LIMIT ${limit}
+    `);
+
+    return (results as unknown as Array<{
+      id: string;
+      document_id: string;
+      content: string;
+      metadata: Record<string, unknown>;
+      score: number;
+    }>).map((row) => ({
+      id: row.id,
+      chunkId: row.id,
+      documentId: row.document_id,
+      content: row.content,
+      score: Number(row.score),
+      metadata: row.metadata || {},
+      source: 'sparse' as const,
+    }));
+  } catch (error) {
     logger.error(
-      'Sparse search failed',
+      'Sparse search fallback failed',
       error instanceof Error ? error : undefined,
       { tenantId }
     );
@@ -324,10 +384,10 @@ async function denseSearchMultiDataset(
 }
 
 /**
- * 다중 데이터셋 Sparse Search (BM25 전문 검색)
+ * 다중 데이터셋 Sparse Search (PGroonga 전문 검색)
  *
- * PostgreSQL 'simple' 설정 대신 ILIKE 기반 검색 사용
- * 한국어에서 tsvector 기반 검색보다 ILIKE가 더 효과적임
+ * PGroonga 확장을 사용한 다중 데이터셋 한국어 전문 검색
+ * Fallback: PGroonga 미설치 시 ILIKE로 폴백
  */
 async function sparseSearchMultiDataset(
   tenantId: string,
@@ -338,7 +398,7 @@ async function sparseSearchMultiDataset(
   try {
     const datasetIdsArray = `{${datasetIds.join(',')}}`;
 
-    // ILIKE 기반 한국어 부분 문자열 매칭 (다중 데이터셋)
+    // PGroonga 전문 검색 (다중 데이터셋)
     const results = await db.execute(sql`
       SELECT
         id,
@@ -346,16 +406,13 @@ async function sparseSearchMultiDataset(
         dataset_id,
         content,
         metadata,
-        CASE
-          WHEN content ILIKE ${'%' + query + '%'} THEN 1.0
-          ELSE 0.5
-        END as score
+        pgroonga_score(tableoid, ctid) as score
       FROM chunks
       WHERE tenant_id = ${tenantId}
         AND dataset_id = ANY(${datasetIdsArray}::uuid[])
         AND status = 'approved'
         AND is_active = true
-        AND content ILIKE ${'%' + query + '%'}
+        AND content &@~ ${query}
       ORDER BY score DESC
       LIMIT ${limit}
     `);
@@ -378,8 +435,66 @@ async function sparseSearchMultiDataset(
       source: 'sparse' as const,
     }));
   } catch (error) {
+    // PGroonga 미설치 시 ILIKE 폴백
+    logger.warn(
+      'PGroonga multi-dataset search failed, falling back to ILIKE',
+      { tenantId, datasetIds, error: error instanceof Error ? error.message : 'Unknown' }
+    );
+    return sparseSearchMultiDatasetFallback(tenantId, datasetIds, query, limit);
+  }
+}
+
+/**
+ * 다중 데이터셋 Sparse Search Fallback (ILIKE 기반)
+ * PGroonga 인덱스가 없는 환경에서 사용
+ */
+async function sparseSearchMultiDatasetFallback(
+  tenantId: string,
+  datasetIds: string[],
+  query: string,
+  limit: number
+): Promise<SearchResult[]> {
+  try {
+    const datasetIdsArray = `{${datasetIds.join(',')}}`;
+
+    const results = await db.execute(sql`
+      SELECT
+        id,
+        document_id,
+        dataset_id,
+        content,
+        metadata,
+        1.0 as score
+      FROM chunks
+      WHERE tenant_id = ${tenantId}
+        AND dataset_id = ANY(${datasetIdsArray}::uuid[])
+        AND status = 'approved'
+        AND is_active = true
+        AND content ILIKE ${'%' + query + '%'}
+      ORDER BY LENGTH(content) ASC
+      LIMIT ${limit}
+    `);
+
+    return (results as unknown as Array<{
+      id: string;
+      document_id: string;
+      dataset_id: string;
+      content: string;
+      metadata: Record<string, unknown>;
+      score: number;
+    }>).map((row) => ({
+      id: row.id,
+      chunkId: row.id,
+      documentId: row.document_id,
+      datasetId: row.dataset_id,
+      content: row.content,
+      score: Number(row.score),
+      metadata: row.metadata || {},
+      source: 'sparse' as const,
+    }));
+  } catch (error) {
     logger.error(
-      'Multi-dataset sparse search failed',
+      'Multi-dataset sparse search fallback failed',
       error instanceof Error ? error : undefined,
       { tenantId, datasetIds }
     );
