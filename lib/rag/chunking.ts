@@ -6,7 +6,10 @@
  * - 한국어 종결어미 기반 문장 경계 감지
  * - 문장 단위 오버랩으로 컨텍스트 보존
  * - Q&A 쌍, 헤더, 테이블 구조 인식
+ * - NLP 기반 형태소 분석 지원 (선택적)
  */
+
+import { findSentenceBoundariesWithNLP, type MorphologicalOptions } from '@/lib/nlp';
 
 /**
  * 문서 유형
@@ -42,6 +45,10 @@ export interface ChunkOptions {
   preserveStructure: boolean;
   /** 문서 유형 자동 감지 여부 (true시 maxChunkSize/overlap 자동 조절) */
   autoDetectDocumentType?: boolean;
+  /** NLP 기반 형태소 분석 사용 여부 (문장 경계 정확도 향상) */
+  useMorphologicalAnalysis?: boolean;
+  /** NLP 분석 토큰 추적 컨텍스트 */
+  nlpTrackingContext?: { tenantId: string };
 }
 
 /**
@@ -354,29 +361,47 @@ export async function smartChunk(
   );
 
   // 6. 인덱스 재정렬 및 메타데이터 강화
-  return filteredChunks.map((chunk, idx) => {
-    // 문장 수 및 평균 길이 계산
-    const boundaries = findSentenceBoundaries(chunk.content);
-    const sentenceCount = Math.max(1, boundaries.length);
-    const avgSentenceLength = Math.round(chunk.content.length / sentenceCount);
+  const { useMorphologicalAnalysis, nlpTrackingContext } = opts as ChunkOptions;
 
-    // 언어 감지 및 가독성 점수 계산
-    const language = detectLanguage(chunk.content);
-    const readabilityScore = calculateReadabilityScore(chunk.content);
+  const enhancedChunks = await Promise.all(
+    filteredChunks.map(async (chunk, idx) => {
+      // 문장 수 및 평균 길이 계산
+      let boundaries: number[];
+      if (useMorphologicalAnalysis) {
+        // NLP 기반 형태소 분석 사용
+        boundaries = await findSentenceBoundariesWithNLP(chunk.content, {
+          provider: 'claude',
+          useCache: true,
+          trackingContext: nlpTrackingContext,
+        });
+      } else {
+        // 규칙 기반 분석 (기본)
+        boundaries = findSentenceBoundaries(chunk.content);
+      }
 
-    return {
-      ...chunk,
-      index: idx,
-      metadata: {
-        ...chunk.metadata,
-        documentType: detectedDocumentType,
-        sentenceCount,
-        avgSentenceLength,
-        language,
-        readabilityScore,
-      },
-    };
-  });
+      const sentenceCount = Math.max(1, boundaries.length);
+      const avgSentenceLength = Math.round(chunk.content.length / sentenceCount);
+
+      // 언어 감지 및 가독성 점수 계산
+      const language = detectLanguage(chunk.content);
+      const readabilityScore = calculateReadabilityScore(chunk.content);
+
+      return {
+        ...chunk,
+        index: idx,
+        metadata: {
+          ...chunk.metadata,
+          documentType: detectedDocumentType,
+          sentenceCount,
+          avgSentenceLength,
+          language,
+          readabilityScore,
+        },
+      };
+    })
+  );
+
+  return enhancedChunks;
 }
 
 /**

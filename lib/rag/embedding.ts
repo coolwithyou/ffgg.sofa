@@ -24,6 +24,107 @@ const OPENAI_EMBEDDING_DIMENSION = 1536; // OpenAI text-embedding-3-small 차원
 const BGE_BATCH_SIZE = 32; // BGE 배치 처리 크기
 const OPENAI_BATCH_SIZE = 100; // OpenAI 배치 크기
 
+// 토큰 추정 상수 (OpenAI tiktoken 근사치)
+const CHARS_PER_TOKEN_KOREAN = 1.5; // 한글: 약 1.5자/토큰
+const CHARS_PER_TOKEN_ENGLISH = 4; // 영어: 약 4자/토큰
+const MAX_TOKENS_PER_EMBEDDING = 8191; // OpenAI 임베딩 최대 토큰
+
+/**
+ * 텍스트의 토큰 수 추정 (tiktoken 근사)
+ * 한글과 영어의 토큰화 특성을 반영하여 추정
+ *
+ * @param text - 토큰 수를 추정할 텍스트
+ * @returns 추정 토큰 수
+ */
+export function estimateTokenCount(text: string): number {
+  if (!text) return 0;
+
+  // 한글 문자 수
+  const koreanChars = (text.match(/[가-힣]/g) || []).length;
+  // 영어 문자 수
+  const englishChars = (text.match(/[a-zA-Z]/g) || []).length;
+  // 기타 문자 (숫자, 특수문자, 공백)
+  const otherChars = text.length - koreanChars - englishChars;
+
+  // 각 언어별 토큰 추정
+  const koreanTokens = koreanChars / CHARS_PER_TOKEN_KOREAN;
+  const englishTokens = englishChars / CHARS_PER_TOKEN_ENGLISH;
+  const otherTokens = otherChars / 3; // 기타 문자는 약 3자/토큰
+
+  return Math.ceil(koreanTokens + englishTokens + otherTokens);
+}
+
+/**
+ * 텍스트가 임베딩 토큰 제한을 초과하는지 확인
+ */
+export function exceedsTokenLimit(text: string): boolean {
+  return estimateTokenCount(text) > MAX_TOKENS_PER_EMBEDDING;
+}
+
+/**
+ * 토큰 제한에 맞게 텍스트를 분할
+ * 문장 경계를 존중하며 분할
+ */
+export function splitByTokenLimit(
+  text: string,
+  maxTokens: number = MAX_TOKENS_PER_EMBEDDING
+): string[] {
+  if (estimateTokenCount(text) <= maxTokens) {
+    return [text];
+  }
+
+  const segments: string[] = [];
+  // 단락 단위로 먼저 분할 시도
+  const paragraphs = text.split(/\n\n+/);
+  let currentSegment = '';
+
+  for (const paragraph of paragraphs) {
+    const testSegment = currentSegment ? `${currentSegment}\n\n${paragraph}` : paragraph;
+
+    if (estimateTokenCount(testSegment) <= maxTokens) {
+      currentSegment = testSegment;
+    } else {
+      // 현재 세그먼트 저장
+      if (currentSegment) {
+        segments.push(currentSegment);
+      }
+
+      // 단락 자체가 너무 길면 문장 단위로 분할
+      if (estimateTokenCount(paragraph) > maxTokens) {
+        const sentences = paragraph.split(/(?<=[.!?。！？다요죠])\s+/);
+        currentSegment = '';
+
+        for (const sentence of sentences) {
+          const testSentence = currentSegment ? `${currentSegment} ${sentence}` : sentence;
+          if (estimateTokenCount(testSentence) <= maxTokens) {
+            currentSegment = testSentence;
+          } else {
+            if (currentSegment) segments.push(currentSegment);
+            // 문장도 너무 길면 강제 분할
+            if (estimateTokenCount(sentence) > maxTokens) {
+              const charLimit = Math.floor(maxTokens * CHARS_PER_TOKEN_KOREAN);
+              for (let i = 0; i < sentence.length; i += charLimit) {
+                segments.push(sentence.slice(i, i + charLimit));
+              }
+              currentSegment = '';
+            } else {
+              currentSegment = sentence;
+            }
+          }
+        }
+      } else {
+        currentSegment = paragraph;
+      }
+    }
+  }
+
+  if (currentSegment) {
+    segments.push(currentSegment);
+  }
+
+  return segments;
+}
+
 /**
  * 현재 임베딩 차원 반환 (DB 스키마와 일치해야 함)
  */

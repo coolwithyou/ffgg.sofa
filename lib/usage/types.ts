@@ -18,7 +18,8 @@ export type FeatureType =
   | 'rewrite'
   | 'context_generation'
   | 'rerank'
-  | 'semantic_chunking';
+  | 'semantic_chunking'
+  | 'morphological_analysis';
 
 export interface TokenUsageParams {
   tenantId: string;
