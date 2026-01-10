@@ -83,12 +83,13 @@ export default function LoginPage() {
         }
 
         // 역할에 따라 리다이렉트 (플랫폼 관리자 우선 체크)
+        // Note: startTransition 내부에서 router.push() 사용 시 서버 컴포넌트 렌더링 완료까지
+        // isPending이 유지되어 "로그인 중..." 상태가 멈출 수 있음. 하드 리다이렉트 사용.
         if (data.user?.isPlatformAdmin || data.user?.role === 'internal_operator') {
-          router.push('/admin/dashboard');
+          window.location.href = '/admin/dashboard';
         } else {
-          router.push('/console');
+          window.location.href = '/console';
         }
-        router.refresh();
       } catch {
         setError('서버 연결에 실패했습니다.');
       }
@@ -125,12 +126,13 @@ export default function LoginPage() {
         }
 
         // 역할에 따라 리다이렉트 (플랫폼 관리자 우선 체크)
+        // Note: startTransition 내부에서 router.push() 사용 시 서버 컴포넌트 렌더링 완료까지
+        // isPending이 유지되어 "로그인 중..." 상태가 멈출 수 있음. 하드 리다이렉트 사용.
         if (data.user?.isPlatformAdmin || data.user?.role === 'internal_operator') {
-          router.push('/admin/dashboard');
+          window.location.href = '/admin/dashboard';
         } else {
-          router.push('/console');
+          window.location.href = '/console';
         }
-        router.refresh();
       } catch {
         setError('서버 연결에 실패했습니다.');
       }
