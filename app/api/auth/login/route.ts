@@ -220,6 +220,8 @@ export async function POST(request: NextRequest) {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId,
+        isPlatformAdmin: user.isPlatformAdmin ?? false,
+        adminRole: user.adminRole ?? null,
       },
       passwordChangeRequired,
       accountReactivated, // 삭제 예정이었던 계정이 재활성화된 경우 true

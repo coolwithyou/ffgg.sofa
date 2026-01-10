@@ -80,35 +80,54 @@ async function createAdmin() {
     const client = postgres(process.env.DATABASE_URL!, { ssl: 'require' });
     const db = drizzle(client, { schema });
 
-    // 이메일 중복 확인
+    // 이메일 중복 확인 (사용자)
     const existingUser = await db.query.users.findFirst({
       where: (users, { eq }) => eq(users.email, email),
     });
 
     if (existingUser) {
       console.error(`ERROR: 이미 ${email} 이메일로 등록된 사용자가 있습니다.`);
-      console.error('       다른 이메일을 사용하거나 기존 계정으로 로그인하세요.');
+      console.error('');
+      console.error('기존 계정의 비밀번호를 변경하려면:');
+      console.error('  pnpm admin:reset-password');
+      console.error('');
+      console.error('다른 이메일로 새 어드민을 생성하려면:');
+      console.error('  ADMIN_EMAIL=new@example.com ADMIN_PASSWORD=... pnpm admin:create');
       process.exit(1);
     }
 
-    // 테넌트 생성
-    const tenantId = uuidv4();
+    // 이메일 중복 확인 (테넌트)
+    const existingTenant = await db.query.tenants.findFirst({
+      where: (tenants, { eq }) => eq(tenants.email, email),
+    });
+
+    // 테넌트 ID 결정 (기존 테넌트 사용 또는 새로 생성)
+    let tenantId: string;
     const userId = uuidv4();
 
-    console.log('1. 테넌트 생성 중...');
-    await db.insert(tenants).values({
-      id: tenantId,
-      name: companyName,
-      email: email,
-      tier: 'premium', // 어드민은 premium 티어
-      usageLimits: { monthlyConversations: -1, documents: -1 }, // 무제한
-      settings: {
-        contactName: 'Administrator',
-        isInternal: true,
-      },
-      status: 'active',
-    });
-    console.log(`   ✓ 테넌트 생성 완료 (ID: ${tenantId})`);
+    if (existingTenant) {
+      // 기존 테넌트가 있으면 재사용
+      tenantId = existingTenant.id;
+      console.log('1. 기존 테넌트 사용...');
+      console.log(`   ✓ 테넌트 발견 (ID: ${tenantId}, 이름: ${existingTenant.name})`);
+    } else {
+      // 새 테넌트 생성
+      tenantId = uuidv4();
+      console.log('1. 테넌트 생성 중...');
+      await db.insert(tenants).values({
+        id: tenantId,
+        name: companyName,
+        email: email,
+        tier: 'premium', // 어드민은 premium 티어
+        usageLimits: { monthlyConversations: -1, documents: -1 }, // 무제한
+        settings: {
+          contactName: 'Administrator',
+          isInternal: true,
+        },
+        status: 'active',
+      });
+      console.log(`   ✓ 테넌트 생성 완료 (ID: ${tenantId})`);
+    }
 
     // 비밀번호 해시
     console.log('2. 사용자 생성 중...');
@@ -119,9 +138,12 @@ async function createAdmin() {
       email,
       passwordHash,
       tenantId,
-      role: 'internal_operator', // 내부 운영자 권한
+      role: 'internal_operator', // 플랫폼 관리자 역할
       emailVerified: true, // 이메일 인증 완료 상태
       passwordChangedAt: new Date(),
+      // 플랫폼 관리자 설정
+      isPlatformAdmin: true,
+      adminRole: 'SUPER_ADMIN', // 최고 관리자 권한
     });
     console.log(`   ✓ 사용자 생성 완료 (ID: ${userId})`);
 
@@ -134,15 +156,20 @@ async function createAdmin() {
     console.log(`  이메일: ${email}`);
     console.log(`  비밀번호: (설정한 비밀번호)`);
     console.log('');
-    console.log('권한: internal_operator (내부 운영자)');
-    console.log('  - 모든 테넌트 관리 가능');
-    console.log('  - 시스템 설정 변경 가능');
-    console.log('  - 사용자 관리 가능');
+    console.log('권한:');
+    console.log('  - 테넌트 역할: internal_operator (내부 운영자)');
+    console.log('  - 플랫폼 역할: SUPER_ADMIN (최고 관리자)');
+    console.log('  - isPlatformAdmin: true');
+    console.log('');
+    console.log('접근 가능 영역:');
+    console.log('  - /console - 테넌트 콘솔 (챗봇 관리)');
+    console.log('  - /admin - 플랫폼 관리자 대시보드');
+    console.log('  - 모든 테넌트/사용자 관리 가능');
     console.log('');
     console.log('다음 단계:');
     console.log('  1. pnpm dev 로 개발 서버 실행');
-    console.log('  2. http://localhost:3000/login 에서 로그인');
-    console.log('  3. http://localhost:3000/admin/dashboard 에서 관리');
+    console.log('  2. http://localhost:3060/login 에서 로그인');
+    console.log('  3. http://localhost:3060/admin 에서 플랫폼 관리');
     console.log('');
   } catch (error) {
     console.error('어드민 생성 중 오류 발생:', error);

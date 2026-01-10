@@ -29,8 +29,8 @@ export default function LoginPage() {
         const response = await fetch('/api/auth/me');
         if (response.ok) {
           const data = await response.json();
-          // 역할에 따라 리다이렉트
-          if (data.user?.role === 'internal_operator') {
+          // 역할에 따라 리다이렉트 (플랫폼 관리자 우선 체크)
+          if (data.user?.isPlatformAdmin || data.user?.role === 'internal_operator') {
             router.replace('/admin/dashboard');
           } else {
             router.replace('/console');
@@ -82,8 +82,8 @@ export default function LoginPage() {
           return;
         }
 
-        // 역할에 따라 리다이렉트
-        if (data.user?.role === 'internal_operator') {
+        // 역할에 따라 리다이렉트 (플랫폼 관리자 우선 체크)
+        if (data.user?.isPlatformAdmin || data.user?.role === 'internal_operator') {
           router.push('/admin/dashboard');
         } else {
           router.push('/console');
@@ -124,8 +124,8 @@ export default function LoginPage() {
           return;
         }
 
-        // 역할에 따라 리다이렉트
-        if (data.user?.role === 'internal_operator') {
+        // 역할에 따라 리다이렉트 (플랫폼 관리자 우선 체크)
+        if (data.user?.isPlatformAdmin || data.user?.role === 'internal_operator') {
           router.push('/admin/dashboard');
         } else {
           router.push('/console');

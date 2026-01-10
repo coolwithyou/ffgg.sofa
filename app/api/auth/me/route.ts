@@ -35,6 +35,8 @@ export async function GET() {
         emailVerified: true,
         passwordChangedAt: true,
         createdAt: true,
+        isPlatformAdmin: true,
+        adminRole: true,
       },
     });
 
@@ -56,6 +58,8 @@ export async function GET() {
         tenantId: user.tenantId,
         emailVerified: user.emailVerified,
         createdAt: user.createdAt,
+        isPlatformAdmin: user.isPlatformAdmin ?? false,
+        adminRole: user.adminRole ?? null,
       },
       session: {
         expiresIn: 30 * 60, // 30분 (초)
