@@ -1270,3 +1270,70 @@ export const slugChangeLogs = pgTable(
 
 export type SlugChangeLog = typeof slugChangeLogs.$inferSelect;
 export type NewSlugChangeLog = typeof slugChangeLogs.$inferInsert;
+
+// ============================================
+// Knowledge Pages (마이크로 블로그/RAG 페이지)
+// ============================================
+/**
+ * Knowledge Pages: 1 Page = 1 Chunk = 1 읽을 수 있는 문서
+ *
+ * 사람이 읽을 수 있는 페이지 형태로 지식을 관리하며,
+ * 각 페이지가 독립적인 RAG 청크로 기능함.
+ *
+ * 계층 구조:
+ * - parentId로 부모-자식 관계 표현
+ * - path로 전체 경로 저장 (예: "/회사소개/팀원/개발팀")
+ * - depth로 깊이 저장 (0 = 루트)
+ */
+export const knowledgePages = pgTable(
+  'knowledge_pages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    chatbotId: uuid('chatbot_id')
+      .notNull()
+      .references(() => chatbots.id, { onDelete: 'cascade' }),
+
+    // 계층 구조
+    parentId: uuid('parent_id'), // self-reference (null이면 루트)
+    path: text('path').notNull(), // 예: "/회사소개/팀원"
+    depth: integer('depth').notNull().default(0),
+    sortOrder: integer('sort_order').notNull().default(0),
+
+    // 콘텐츠
+    title: text('title').notNull(),
+    content: text('content').notNull(), // 마크다운
+    summary: text('summary'), // AI 생성 요약 (검색용)
+
+    // 상태
+    status: text('status').notNull().default('draft'), // 'draft' | 'published' | 'archived'
+    isIndexed: boolean('is_indexed').notNull().default(false),
+
+    // 벡터 (pgvector)
+    embedding: vector('embedding', { dimensions: 1536 }),
+
+    // 출처 추적
+    sourceDocumentId: uuid('source_document_id').references(() => documents.id, {
+      onDelete: 'set null',
+    }), // 원본 문서 참조 (있는 경우)
+
+    // 타임스탬프
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('idx_knowledge_pages_tenant').on(table.tenantId),
+    index('idx_knowledge_pages_chatbot').on(table.chatbotId),
+    index('idx_knowledge_pages_parent').on(table.parentId),
+    index('idx_knowledge_pages_path').on(table.path),
+    index('idx_knowledge_pages_status').on(table.status),
+    index('idx_knowledge_pages_chatbot_status').on(table.chatbotId, table.status),
+  ]
+);
+
+// Knowledge Pages 타입 추론용
+export type KnowledgePage = typeof knowledgePages.$inferSelect;
+export type NewKnowledgePage = typeof knowledgePages.$inferInsert;

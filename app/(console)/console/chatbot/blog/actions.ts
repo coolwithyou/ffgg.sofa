@@ -1,0 +1,464 @@
+'use server';
+
+/**
+ * Knowledge Pages (블로그) 서버 액션
+ *
+ * Knowledge Pages는 RAG 청킹 단위를 사람이 읽을 수 있는 페이지 형태로 관리하는 기능입니다.
+ * 핵심 컨셉: 1 Page = 1 Chunk = 1 읽을 수 있는 문서
+ */
+
+import { db, knowledgePages, type KnowledgePage, type NewKnowledgePage } from '@/lib/db';
+import { eq, and, desc, asc, isNull } from 'drizzle-orm';
+import { getSession } from '@/lib/auth/session';
+import { revalidatePath } from 'next/cache';
+import { embedText } from '@/lib/rag/embedding';
+
+// ========================================
+// 타입 정의
+// ========================================
+
+export interface KnowledgePageTreeNode {
+  id: string;
+  title: string;
+  path: string;
+  depth: number;
+  status: string;
+  isIndexed: boolean;
+  children: KnowledgePageTreeNode[];
+}
+
+export interface CreateKnowledgePageInput {
+  chatbotId: string;
+  parentId?: string | null;
+  title: string;
+  content?: string;
+}
+
+export interface UpdateKnowledgePageInput {
+  title?: string;
+  content?: string;
+  status?: 'draft' | 'published' | 'archived';
+  parentId?: string | null;
+  sortOrder?: number;
+}
+
+// ========================================
+// 조회
+// ========================================
+
+/**
+ * 페이지 목록 조회 (플랫 리스트)
+ */
+export async function getKnowledgePages(chatbotId: string): Promise<KnowledgePage[]> {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    throw new Error('인증이 필요합니다.');
+  }
+
+  const pages = await db
+    .select()
+    .from(knowledgePages)
+    .where(
+      and(
+        eq(knowledgePages.tenantId, session.tenantId),
+        eq(knowledgePages.chatbotId, chatbotId)
+      )
+    )
+    .orderBy(asc(knowledgePages.depth), asc(knowledgePages.sortOrder), asc(knowledgePages.createdAt));
+
+  return pages;
+}
+
+/**
+ * 페이지 목록을 트리 구조로 변환
+ */
+export async function getKnowledgePagesTree(chatbotId: string): Promise<KnowledgePageTreeNode[]> {
+  const pages = await getKnowledgePages(chatbotId);
+  return buildTree(pages);
+}
+
+/**
+ * 단일 페이지 조회
+ */
+export async function getKnowledgePage(pageId: string): Promise<KnowledgePage | null> {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    throw new Error('인증이 필요합니다.');
+  }
+
+  const [page] = await db
+    .select()
+    .from(knowledgePages)
+    .where(
+      and(
+        eq(knowledgePages.id, pageId),
+        eq(knowledgePages.tenantId, session.tenantId)
+      )
+    )
+    .limit(1);
+
+  return page ?? null;
+}
+
+// ========================================
+// 생성/수정/삭제
+// ========================================
+
+/**
+ * 새 페이지 생성
+ */
+export async function createKnowledgePage(
+  input: CreateKnowledgePageInput
+): Promise<{ success: boolean; page?: KnowledgePage; error?: string }> {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  try {
+    // 부모 페이지 정보 조회 (있는 경우)
+    let parentPath = '';
+    let depth = 0;
+    let sortOrder = 0;
+
+    if (input.parentId) {
+      const parent = await getKnowledgePage(input.parentId);
+      if (parent) {
+        parentPath = parent.path;
+        depth = parent.depth + 1;
+      }
+    }
+
+    // 같은 부모 아래 마지막 sortOrder 조회
+    const siblings = await db
+      .select({ sortOrder: knowledgePages.sortOrder })
+      .from(knowledgePages)
+      .where(
+        and(
+          eq(knowledgePages.chatbotId, input.chatbotId),
+          eq(knowledgePages.tenantId, session.tenantId),
+          input.parentId ? eq(knowledgePages.parentId, input.parentId) : isNull(knowledgePages.parentId)
+        )
+      )
+      .orderBy(desc(knowledgePages.sortOrder))
+      .limit(1);
+
+    if (siblings.length > 0) {
+      sortOrder = siblings[0].sortOrder + 1;
+    }
+
+    // 경로 생성 (예: /회사소개/팀원)
+    const path = parentPath
+      ? `${parentPath}/${input.title}`
+      : `/${input.title}`;
+
+    const newPage: NewKnowledgePage = {
+      tenantId: session.tenantId,
+      chatbotId: input.chatbotId,
+      parentId: input.parentId ?? null,
+      path,
+      depth,
+      sortOrder,
+      title: input.title,
+      content: input.content ?? '',
+      status: 'draft',
+      isIndexed: false,
+    };
+
+    const [created] = await db
+      .insert(knowledgePages)
+      .values(newPage)
+      .returning();
+
+    revalidatePath('/console/chatbot/blog');
+
+    return { success: true, page: created };
+  } catch (error) {
+    console.error('페이지 생성 실패:', error);
+    return { success: false, error: '페이지 생성에 실패했습니다.' };
+  }
+}
+
+/**
+ * 페이지 수정
+ */
+export async function updateKnowledgePage(
+  pageId: string,
+  input: UpdateKnowledgePageInput
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  try {
+    // 페이지 소유권 확인
+    const existing = await getKnowledgePage(pageId);
+    if (!existing) {
+      return { success: false, error: '페이지를 찾을 수 없습니다.' };
+    }
+
+    // 콘텐츠가 변경되면 인덱스 무효화
+    const shouldReindex = input.content !== undefined && input.content !== existing.content;
+
+    await db
+      .update(knowledgePages)
+      .set({
+        ...input,
+        isIndexed: shouldReindex ? false : existing.isIndexed,
+        updatedAt: new Date(),
+      })
+      .where(eq(knowledgePages.id, pageId));
+
+    revalidatePath('/console/chatbot/blog');
+    revalidatePath(`/console/chatbot/blog/${pageId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error('페이지 수정 실패:', error);
+    return { success: false, error: '페이지 수정에 실패했습니다.' };
+  }
+}
+
+/**
+ * 페이지 삭제 (하위 페이지도 함께 삭제)
+ */
+export async function deleteKnowledgePage(
+  pageId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  try {
+    // 페이지 소유권 확인
+    const existing = await getKnowledgePage(pageId);
+    if (!existing) {
+      return { success: false, error: '페이지를 찾을 수 없습니다.' };
+    }
+
+    // 하위 페이지들도 모두 삭제 (path prefix로 찾기)
+    const pathPrefix = existing.path;
+
+    // 재귀적으로 모든 하위 페이지 삭제
+    await deleteDescendants(pageId, session.tenantId);
+
+    // 현재 페이지 삭제
+    await db
+      .delete(knowledgePages)
+      .where(
+        and(
+          eq(knowledgePages.id, pageId),
+          eq(knowledgePages.tenantId, session.tenantId)
+        )
+      );
+
+    revalidatePath('/console/chatbot/blog');
+
+    return { success: true };
+  } catch (error) {
+    console.error('페이지 삭제 실패:', error);
+    return { success: false, error: '페이지 삭제에 실패했습니다.' };
+  }
+}
+
+// ========================================
+// 인덱싱 (발행)
+// ========================================
+
+/**
+ * 페이지 발행 (인덱싱)
+ *
+ * 페이지 콘텐츠를 임베딩하여 RAG 검색 가능하게 함
+ */
+export async function publishKnowledgePage(
+  pageId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  try {
+    const page = await getKnowledgePage(pageId);
+    if (!page) {
+      return { success: false, error: '페이지를 찾을 수 없습니다.' };
+    }
+
+    if (!page.content || page.content.trim().length === 0) {
+      return { success: false, error: '콘텐츠가 비어있습니다.' };
+    }
+
+    // 임베딩 생성 (경로 + 제목 + 콘텐츠를 합쳐서 임베딩)
+    const textForEmbedding = `${page.path}\n${page.title}\n\n${page.content}`;
+    const embedding = await embedText(textForEmbedding, {
+      tenantId: session.tenantId,
+      chatbotId: page.chatbotId,
+    });
+
+    // 요약은 나중에 추가 (MVP에서는 생략)
+    await db
+      .update(knowledgePages)
+      .set({
+        embedding,
+        isIndexed: true,
+        status: 'published',
+        publishedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(knowledgePages.id, pageId));
+
+    revalidatePath('/console/chatbot/blog');
+    revalidatePath(`/console/chatbot/blog/${pageId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error('페이지 발행 실패:', error);
+    return { success: false, error: '페이지 발행에 실패했습니다.' };
+  }
+}
+
+/**
+ * 페이지 발행 취소 (인덱스 제거)
+ */
+export async function unpublishKnowledgePage(
+  pageId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  try {
+    await db
+      .update(knowledgePages)
+      .set({
+        embedding: null,
+        isIndexed: false,
+        status: 'draft',
+        updatedAt: new Date(),
+      })
+      .where(eq(knowledgePages.id, pageId));
+
+    revalidatePath('/console/chatbot/blog');
+    revalidatePath(`/console/chatbot/blog/${pageId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error('페이지 발행 취소 실패:', error);
+    return { success: false, error: '페이지 발행 취소에 실패했습니다.' };
+  }
+}
+
+// ========================================
+// 순서 변경
+// ========================================
+
+/**
+ * 페이지 순서/부모 변경 (드래그앤드롭)
+ */
+export async function reorderKnowledgePage(
+  pageId: string,
+  newParentId: string | null,
+  newSortOrder: number
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  try {
+    const page = await getKnowledgePage(pageId);
+    if (!page) {
+      return { success: false, error: '페이지를 찾을 수 없습니다.' };
+    }
+
+    // 새 부모 경로 계산
+    let newPath = `/${page.title}`;
+    let newDepth = 0;
+
+    if (newParentId) {
+      const newParent = await getKnowledgePage(newParentId);
+      if (newParent) {
+        newPath = `${newParent.path}/${page.title}`;
+        newDepth = newParent.depth + 1;
+      }
+    }
+
+    await db
+      .update(knowledgePages)
+      .set({
+        parentId: newParentId,
+        path: newPath,
+        depth: newDepth,
+        sortOrder: newSortOrder,
+        updatedAt: new Date(),
+      })
+      .where(eq(knowledgePages.id, pageId));
+
+    revalidatePath('/console/chatbot/blog');
+
+    return { success: true };
+  } catch (error) {
+    console.error('페이지 순서 변경 실패:', error);
+    return { success: false, error: '페이지 순서 변경에 실패했습니다.' };
+  }
+}
+
+// ========================================
+// 헬퍼 함수
+// ========================================
+
+/**
+ * 플랫 리스트를 트리 구조로 변환
+ */
+function buildTree(pages: KnowledgePage[]): KnowledgePageTreeNode[] {
+  const map = new Map<string, KnowledgePageTreeNode>();
+  const roots: KnowledgePageTreeNode[] = [];
+
+  // 모든 페이지를 맵에 추가
+  for (const page of pages) {
+    map.set(page.id, {
+      id: page.id,
+      title: page.title,
+      path: page.path,
+      depth: page.depth,
+      status: page.status,
+      isIndexed: page.isIndexed,
+      children: [],
+    });
+  }
+
+  // 부모-자식 관계 설정
+  for (const page of pages) {
+    const node = map.get(page.id)!;
+    if (page.parentId && map.has(page.parentId)) {
+      map.get(page.parentId)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  return roots;
+}
+
+/**
+ * 하위 페이지들 재귀 삭제
+ */
+async function deleteDescendants(parentId: string, tenantId: string): Promise<void> {
+  const children = await db
+    .select({ id: knowledgePages.id })
+    .from(knowledgePages)
+    .where(
+      and(
+        eq(knowledgePages.parentId, parentId),
+        eq(knowledgePages.tenantId, tenantId)
+      )
+    );
+
+  for (const child of children) {
+    await deleteDescendants(child.id, tenantId);
+    await db.delete(knowledgePages).where(eq(knowledgePages.id, child.id));
+  }
+}

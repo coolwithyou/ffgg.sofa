@@ -176,6 +176,13 @@
       "when": 1768023620745,
       "tag": "0024_slim_talon",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1768086684762,
+      "tag": "0025_secret_toro",
+      "breakpoints": true
     }
   ]
 }
