@@ -12,7 +12,7 @@
  */
 
 import { db } from '@/lib/db';
-import { chunks, knowledgePages } from '@/drizzle/schema';
+import { chunks } from '@/drizzle/schema';
 import { sql, eq, and } from 'drizzle-orm';
 import { embedText, type EmbeddingTrackingContext } from './embedding';
 import { logger } from '@/lib/logger';
@@ -810,6 +810,53 @@ export async function searchWithKnowledgePages(
       { tenantId, chatbotId }
     );
     throw error;
+  }
+}
+
+/**
+ * 챗봇에 연결된 인덱싱된 Knowledge Pages 조회 (샘플링)
+ *
+ * 페르소나 자동 생성 등 분석 용도로 Knowledge Pages를 가져옵니다.
+ * - 발행된 페이지만 조회 (isIndexed: true, status: 'published')
+ * - 랜덤 샘플링으로 다양한 페이지 포함
+ *
+ * @param chatbotId - 챗봇 ID
+ * @param limit - 반환할 최대 결과 수
+ */
+export async function getIndexedKnowledgePagesByChatbot(
+  chatbotId: string,
+  limit: number = 20
+): Promise<Array<{ content: string; title: string; pageId: string }>> {
+  try {
+    const results = await db.execute(sql`
+      SELECT
+        id,
+        title,
+        content
+      FROM knowledge_pages
+      WHERE chatbot_id = ${chatbotId}::uuid
+        AND is_indexed = true
+        AND status = 'published'
+      ORDER BY RANDOM()
+      LIMIT ${limit}
+    `);
+
+    return (results as unknown as Array<{
+      id: string;
+      title: string;
+      content: string;
+    }>).map((row) => ({
+      content: row.content,
+      title: row.title,
+      pageId: row.id,
+    }));
+  } catch (error) {
+    logger.error(
+      'Get indexed knowledge pages failed',
+      error instanceof Error ? error : undefined,
+      { chatbotId }
+    );
+    return [];
   }
 }
 

@@ -4,7 +4,7 @@
  */
 
 import { generateWithFallback } from '@/lib/rag/generator';
-import { getChunksByDatasets } from '@/lib/rag/retrieval';
+import { getChunksByDatasets, getIndexedKnowledgePagesByChatbot } from '@/lib/rag/retrieval';
 import { getChatbotDatasetIds } from './chatbot';
 import { logger } from '@/lib/logger';
 import type { PersonaConfig } from './intent-classifier';
@@ -70,22 +70,43 @@ export async function generatePersonaFromDocuments(
 
   // 1. 챗봇에 연결된 데이터셋 조회
   const datasetIds = await getChatbotDatasetIds(chatbotId);
-  if (datasetIds.length === 0) {
-    throw new Error('연결된 데이터셋이 없습니다. 먼저 데이터셋을 연결해주세요.');
-  }
 
-  // 2. 청크 샘플링
-  const chunks = await getChunksByDatasets(tenantId, datasetIds, sampleSize);
-  if (chunks.length === 0) {
+  // 2. 청크 및 Knowledge Pages 병렬 조회
+  // Knowledge Pages는 문서 청크와 독립적으로 샘플링 (페이지당 1개 = 1청크)
+  const knowledgePagesSampleSize = Math.ceil(sampleSize * 0.4); // 전체의 40%
+  const chunksSampleSize = sampleSize - knowledgePagesSampleSize;
+
+  const [chunks, knowledgePages] = await Promise.all([
+    datasetIds.length > 0
+      ? getChunksByDatasets(tenantId, datasetIds, chunksSampleSize)
+      : Promise.resolve([]),
+    getIndexedKnowledgePagesByChatbot(chatbotId, knowledgePagesSampleSize),
+  ]);
+
+  // 문서 청크도 없고 Knowledge Pages도 없으면 에러
+  if (chunks.length === 0 && knowledgePages.length === 0) {
     throw new Error(
-      '분석할 문서 청크가 없습니다. 문서를 먼저 업로드하고 승인해주세요.'
+      '분석할 콘텐츠가 없습니다. 문서를 업로드하거나 블로그 페이지를 발행해주세요.'
     );
   }
 
-  // 3. 청크 내용 결합 (토큰 제한 고려하여 앞부분만)
-  const chunksText = chunks
-    .map((c, i) => `[${i + 1}] ${c.content.slice(0, 500)}`)
-    .join('\n\n');
+  // 3. 청크 + Knowledge Pages 내용 결합 (토큰 제한 고려하여 앞부분만)
+  let contentIndex = 0;
+  const contentParts: string[] = [];
+
+  // 문서 청크 추가
+  for (const c of chunks) {
+    contentIndex++;
+    contentParts.push(`[${contentIndex}] ${c.content.slice(0, 500)}`);
+  }
+
+  // Knowledge Pages 추가 (제목 포함)
+  for (const page of knowledgePages) {
+    contentIndex++;
+    contentParts.push(`[${contentIndex}] [블로그: ${page.title}] ${page.content.slice(0, 500)}`);
+  }
+
+  const chunksText = contentParts.join('\n\n');
 
   const prompt = PERSONA_GENERATION_PROMPT.replace('{chunks}', chunksText);
 
@@ -131,13 +152,17 @@ export async function generatePersonaFromDocuments(
       ? parsed.excludedTopics.slice(0, 20)
       : [];
 
-    // 고유 문서 수 계산
+    // 고유 문서/페이지 수 계산
     const uniqueDocumentIds = new Set(chunks.map((c) => c.documentId));
-    const analyzedDocumentCount = uniqueDocumentIds.size;
+    // Knowledge Pages는 각각이 하나의 문서 단위
+    const analyzedDocumentCount = uniqueDocumentIds.size + knowledgePages.length;
+    const totalChunksAnalyzed = chunks.length + knowledgePages.length;
 
     logger.info('Persona generated from documents', {
       chatbotId,
       chunksAnalyzed: chunks.length,
+      knowledgePagesAnalyzed: knowledgePages.length,
+      totalAnalyzed: totalChunksAnalyzed,
       documentsAnalyzed: analyzedDocumentCount,
       keywords: parsed.keywords,
       includedTopics: includedTopics.length,
@@ -154,7 +179,7 @@ export async function generatePersonaFromDocuments(
       tone: parsed.tone,
       keywords: parsed.keywords || [],
       confidence: parsed.confidence || 0.7,
-      analyzedChunkCount: chunks.length,
+      analyzedChunkCount: totalChunksAnalyzed,
       analyzedDocumentCount,
     };
   } catch (error) {

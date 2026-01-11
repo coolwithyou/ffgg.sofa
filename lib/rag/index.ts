@@ -15,6 +15,7 @@ export {
   hybridSearchMultiDataset,
   searchKnowledgePages,
   searchWithKnowledgePages,
+  getIndexedKnowledgePagesByChatbot,
   type SearchResult,
 } from './retrieval';
 export { generateResponse, generateWithFallback, type GenerateOptions } from './generator';
