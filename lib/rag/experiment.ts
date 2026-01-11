@@ -17,7 +17,7 @@ import type {
 /**
  * 전략 결정 사유
  */
-export type StrategyReason = 'global_setting' | 'ab_test' | 'fixed_strategy';
+export type StrategyReason = 'global_setting' | 'ab_test' | 'fixed_strategy' | 'user_selected';
 
 /**
  * 청킹 전략 결정 결과

@@ -177,6 +177,20 @@ export interface QualityMetricsResponse {
 }
 
 /**
+ * 전략 결정 사유
+ *
+ * - global_setting: 환경변수 또는 기본 설정
+ * - ab_test: A/B 테스트에 의한 분배
+ * - fixed_strategy: 챗봇에 고정된 전략
+ * - user_selected: 사용자가 UI에서 직접 선택
+ */
+export type ChunkingStrategyReason =
+  | 'global_setting'
+  | 'ab_test'
+  | 'fixed_strategy'
+  | 'user_selected';
+
+/**
  * 청크 메타데이터에 포함되는 실험 정보
  */
 export interface ChunkExperimentMetadata {
@@ -187,5 +201,5 @@ export interface ChunkExperimentMetadata {
   experimentVariant: ExperimentVariant | null;
 
   /** 전략 결정 사유 */
-  strategyReason: 'global_setting' | 'ab_test' | 'fixed_strategy';
+  strategyReason: ChunkingStrategyReason;
 }
