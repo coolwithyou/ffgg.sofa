@@ -37,10 +37,24 @@ function createEditorTheme(isDark: boolean) {
         backgroundColor: isDark ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.2)',
       },
       '.cm-activeLine': {
-        backgroundColor: 'transparent',
+        backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)',
+      },
+      '.cm-activeLineGutter': {
+        backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)',
+        color: isDark ? 'hsl(210 100% 80%)' : 'hsl(210 100% 40%)',
       },
       '.cm-gutters': {
-        display: 'none',
+        backgroundColor: isDark ? 'hsl(240 3.7% 15.9%)' : 'hsl(240 4.8% 95.9%)',
+        color: isDark ? 'hsl(240 5% 50%)' : 'hsl(240 5% 60%)',
+        border: 'none',
+        borderRight: `1px solid ${isDark ? 'hsl(240 3.7% 20%)' : 'hsl(240 5.9% 90%)'}`,
+        paddingRight: '8px',
+      },
+      '.cm-lineNumbers .cm-gutterElement': {
+        paddingLeft: '12px',
+        paddingRight: '8px',
+        minWidth: '40px',
+        fontSize: '12px',
       },
       '.cm-scroller': {
         overflow: 'auto',
@@ -193,10 +207,10 @@ export function MarkdownEditor({
         placeholder={placeholder}
         readOnly={readOnly}
         basicSetup={{
-          lineNumbers: false,
+          lineNumbers: true,
           foldGutter: false,
-          highlightActiveLine: false,
-          highlightActiveLineGutter: false,
+          highlightActiveLine: true,
+          highlightActiveLineGutter: true,
           indentOnInput: true,
           bracketMatching: true,
           closeBrackets: true,

@@ -277,7 +277,7 @@ export function PageEditor({ page, onUpdate, onDelete }: PageEditorProps) {
           </div>
           {/* 우측: 실시간 미리보기 */}
           <div className="flex-1 overflow-auto bg-muted/20 p-6">
-            <article className="prose prose-sm max-w-none dark:prose-invert">
+            <article className="prose prose-neutral max-w-none dark:prose-invert prose-headings:font-semibold prose-h1:text-2xl prose-h1:border-b prose-h1:border-border prose-h1:pb-2 prose-h2:text-xl prose-h3:text-lg prose-p:text-muted-foreground prose-p:leading-relaxed">
               <h1>{title || '제목 없음'}</h1>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {content || '*내용을 입력하면 여기에 미리보기가 표시됩니다.*'}
@@ -290,7 +290,7 @@ export function PageEditor({ page, onUpdate, onDelete }: PageEditorProps) {
         <div className="h-full md:hidden">
           {showPreview ? (
             <div className="h-full overflow-auto p-6">
-              <article className="prose prose-sm max-w-none dark:prose-invert">
+              <article className="prose prose-neutral max-w-none dark:prose-invert prose-headings:font-semibold prose-h1:text-2xl prose-h1:border-b prose-h1:border-border prose-h1:pb-2 prose-h2:text-xl prose-h3:text-lg prose-p:text-muted-foreground prose-p:leading-relaxed">
                 <h1>{title || '제목 없음'}</h1>
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {content || '*내용을 입력하면 여기에 미리보기가 표시됩니다.*'}
