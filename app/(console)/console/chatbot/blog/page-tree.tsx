@@ -57,12 +57,23 @@ function TreeNode({ node, selectedPageId, onSelectPage, depth = 0 }: TreeNodePro
   const hasChildren = node.children.length > 0;
   const isSelected = selectedPageId === node.id;
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onSelectPage(node.id);
+    }
+  };
+
   return (
     <div>
-      <button
+      {/* div로 변경하여 내부 button 중첩 방지 */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onSelectPage(node.id)}
+        onKeyDown={handleKeyDown}
         className={cn(
-          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+          'flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
           'hover:bg-muted',
           isSelected && 'bg-primary/10 text-primary'
         )}
@@ -71,11 +82,13 @@ function TreeNode({ node, selectedPageId, onSelectPage, depth = 0 }: TreeNodePro
         {/* 접기/펼치기 버튼 */}
         {hasChildren ? (
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               setIsExpanded(!isExpanded);
             }}
             className="rounded p-0.5 hover:bg-muted-foreground/20"
+            aria-label={isExpanded ? '접기' : '펼치기'}
           >
             <ChevronRight
               className={cn(
@@ -104,7 +117,7 @@ function TreeNode({ node, selectedPageId, onSelectPage, depth = 0 }: TreeNodePro
         ) : (
           <Circle className="h-3.5 w-3.5 text-muted-foreground/50" />
         )}
-      </button>
+      </div>
 
       {/* 하위 페이지 */}
       {hasChildren && isExpanded && (
