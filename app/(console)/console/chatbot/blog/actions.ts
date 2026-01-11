@@ -605,6 +605,59 @@ export async function restoreVersion(
   }
 }
 
+/**
+ * 현재 발행된 버전 조회 (Draft와 비교용)
+ *
+ * 페이지가 발행된 상태인 경우, 현재 발행 버전의 title/content를 반환
+ * Draft와 비교하여 변경 여부를 확인하는데 사용
+ */
+export async function getPublishedVersion(pageId: string): Promise<{
+  success: boolean;
+  version?: { id: string; title: string; content: string };
+  error?: string;
+}> {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  try {
+    // 페이지 소유권 확인 및 publishedVersionId 조회
+    const page = await getKnowledgePage(pageId);
+    if (!page) {
+      return { success: false, error: '페이지를 찾을 수 없습니다.' };
+    }
+
+    // 발행된 버전이 없는 경우
+    if (!page.publishedVersionId) {
+      return { success: true, version: undefined };
+    }
+
+    // 현재 발행 버전 조회
+    const [publishedVersion] = await db
+      .select({
+        id: knowledgePageVersions.id,
+        title: knowledgePageVersions.title,
+        content: knowledgePageVersions.content,
+      })
+      .from(knowledgePageVersions)
+      .where(eq(knowledgePageVersions.id, page.publishedVersionId))
+      .limit(1);
+
+    if (!publishedVersion) {
+      return { success: true, version: undefined };
+    }
+
+    return {
+      success: true,
+      version: publishedVersion,
+    };
+  } catch (error) {
+    console.error('발행 버전 조회 실패:', error);
+    return { success: false, error: '발행 버전을 불러오는데 실패했습니다.' };
+  }
+}
+
 // ========================================
 // 헬퍼 함수
 // ========================================

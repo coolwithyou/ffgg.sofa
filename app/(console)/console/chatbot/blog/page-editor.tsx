@@ -16,6 +16,8 @@ import {
   Globe,
   GlobeLock,
   PenLine,
+  AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +39,7 @@ import {
   deleteKnowledgePage,
   publishKnowledgePage,
   unpublishKnowledgePage,
+  getPublishedVersion,
 } from './actions';
 import { MarkdownHelpModal } from './_components/markdown-help-modal';
 import { VersionHistoryModal } from './_components/version-history-modal';
@@ -53,15 +56,39 @@ export function PageEditor({ page, onUpdate, onDelete }: PageEditorProps) {
   const [showPreview, setShowPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [publishedVersion, setPublishedVersion] = useState<{
+    id: string;
+    title: string;
+    content: string;
+  } | null>(null);
   const { confirm } = useAlertDialog();
 
-  // 페이지 변경 시 로컬 상태 동기화
+  // 페이지 변경 시 로컬 상태 동기화 + 발행 버전 로드
   useEffect(() => {
     setTitle(page.title);
     setContent(page.content);
-  }, [page.id, page.title, page.content]);
+
+    // 발행 버전 로드 (발행된 페이지인 경우만)
+    if (page.publishedVersionId) {
+      getPublishedVersion(page.id).then((result) => {
+        if (result.success && result.version) {
+          setPublishedVersion(result.version);
+        } else {
+          setPublishedVersion(null);
+        }
+      });
+    } else {
+      setPublishedVersion(null);
+    }
+  }, [page.id, page.title, page.content, page.publishedVersionId]);
 
   const hasChanges = title !== page.title || content !== page.content;
+
+  // 현재 Draft가 발행 버전과 다른지 확인
+  const isDifferentFromPublished =
+    publishedVersion &&
+    (title !== publishedVersion.title || content !== publishedVersion.content);
 
   const handleSave = useCallback(async () => {
     if (!hasChanges) return;
@@ -141,6 +168,21 @@ export function PageEditor({ page, onUpdate, onDelete }: PageEditorProps) {
       },
     });
   }, [page.id, page.title, confirm, onDelete]);
+
+  // 발행 버전으로 되돌리기
+  const handleRestoreToPublished = useCallback(async () => {
+    if (!publishedVersion) return;
+
+    setIsRestoring(true);
+    try {
+      // 발행 버전의 내용을 로컬 상태에 적용
+      setTitle(publishedVersion.title);
+      setContent(publishedVersion.content);
+      toast.success('발행 버전으로 되돌렸습니다. 저장하면 변경사항이 적용됩니다.');
+    } finally {
+      setIsRestoring(false);
+    }
+  }, [publishedVersion]);
 
   // 키보드 단축키 (Cmd/Ctrl + S)
   useEffect(() => {
@@ -272,6 +314,26 @@ export function PageEditor({ page, onUpdate, onDelete }: PageEditorProps) {
       <div className="border-b border-border bg-muted/30 px-4 py-1.5">
         <span className="text-xs text-muted-foreground">{page.path}</span>
       </div>
+
+      {/* 발행 버전과 다를 때 경고 배너 */}
+      {isDifferentFromPublished && (
+        <div className="flex items-center justify-between border-b border-yellow-500/30 bg-yellow-500/10 px-4 py-2">
+          <div className="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-500">
+            <AlertTriangle className="h-4 w-4" />
+            <span>현재 편집본이 발행 버전과 다릅니다. 챗봇은 발행된 버전을 검색합니다.</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRestoreToPublished}
+            disabled={isRestoring}
+            className="h-7 border-yellow-500/50 text-yellow-600 hover:bg-yellow-500/20 dark:text-yellow-500"
+          >
+            <RotateCcw className="mr-1 h-3 w-3" />
+            {isRestoring ? '되돌리는 중...' : '발행 버전으로 되돌리기'}
+          </Button>
+        </div>
+      )}
 
       {/* 에디터/미리보기 영역 */}
       <div className="flex-1 overflow-hidden">
