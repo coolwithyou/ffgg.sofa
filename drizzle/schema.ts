@@ -1598,3 +1598,75 @@ export const sourceSpans = pgTable(
 // SourceSpan 타입 추론용
 export type SourceSpan = typeof sourceSpans.$inferSelect;
 export type NewSourceSpan = typeof sourceSpans.$inferInsert;
+
+/**
+ * ValidationAuditLog 테이블
+ *
+ * 검증 과정의 모든 액션을 기록하는 감사 로그입니다.
+ * 누가, 언제, 어떤 검증 액션을 수행했는지 추적합니다.
+ * 컴플라이언스 및 감사 추적용입니다.
+ */
+export const validationAuditLogs = pgTable(
+  'validation_audit_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => validationSessions.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+
+    // 액션 유형
+    action: text('action', {
+      enum: [
+        'session_viewed', // 세션 열람
+        'session_approved', // 세션 승인
+        'session_rejected', // 세션 거부
+        'claim_reviewed', // Claim 검토
+        'claim_approved', // Claim 승인
+        'claim_rejected', // Claim 거부
+        'claim_modified', // Claim 수정
+        'markdown_edited', // 마크다운 수정
+        'masking_applied', // 마스킹 적용
+        'masking_revealed', // 마스킹 해제
+        'export_generated', // 리포트 생성
+      ],
+    }).notNull(),
+
+    // 대상 (Claim ID 등)
+    targetType: text('target_type', {
+      enum: ['session', 'claim', 'markdown'],
+    }),
+    targetId: text('target_id'),
+
+    // 변경 내역
+    previousValue: text('previous_value'),
+    newValue: text('new_value'),
+
+    // 추가 메타데이터
+    metadata: jsonb('metadata').$type<{
+      reason?: string;
+      claimText?: string;
+      verdict?: string;
+      [key: string]: unknown;
+    }>(),
+
+    // 클라이언트 정보
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+
+    // 타임스탬프
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_audit_logs_session').on(table.sessionId),
+    index('idx_audit_logs_user').on(table.userId),
+    index('idx_audit_logs_action').on(table.action),
+    index('idx_audit_logs_created').on(table.createdAt),
+  ]
+);
+
+// ValidationAuditLog 타입 추론용
+export type ValidationAuditLog = typeof validationAuditLogs.$inferSelect;
+export type NewValidationAuditLog = typeof validationAuditLogs.$inferInsert;
