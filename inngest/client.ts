@@ -204,6 +204,49 @@ export interface DocumentConvertToPagesEvent {
   };
 }
 
+// ============================================
+// Human-in-the-loop 검증 이벤트
+// ============================================
+
+/**
+ * 문서 검증 요청 이벤트
+ * 문서 → Knowledge Pages 변환 시 자동 발송
+ * 3단계 검증: Regex → LLM → Human
+ */
+export interface KnowledgePagesValidateDocumentEvent {
+  name: 'knowledge-pages/validate-document';
+  data: {
+    /** 검증 세션 ID */
+    sessionId: string;
+    /** 챗봇 ID */
+    chatbotId: string;
+    /** 테넌트 ID */
+    tenantId: string;
+    /** 상위 페이지 ID (있는 경우) */
+    parentPageId?: string;
+  };
+}
+
+/**
+ * 검증 완료 후 페이지 생성 이벤트
+ * 사용자가 검증 세션을 승인한 후 발송
+ */
+export interface KnowledgePagesGenerateFromSessionEvent {
+  name: 'knowledge-pages/generate-from-session';
+  data: {
+    /** 검증 세션 ID */
+    sessionId: string;
+    /** 챗봇 ID */
+    chatbotId: string;
+    /** 테넌트 ID */
+    tenantId: string;
+    /** 승인한 사용자 ID */
+    approvedBy: string;
+    /** 상위 페이지 ID (있는 경우) */
+    parentPageId?: string;
+  };
+}
+
 // 모든 이벤트 타입
 export type InngestEvents =
   | DocumentUploadedEvent
@@ -214,4 +257,6 @@ export type InngestEvents =
   | BillingPaymentCompletedEvent
   | BillingPaymentFailedEvent
   | BillingSubscriptionExpiredEvent
-  | DocumentConvertToPagesEvent;
+  | DocumentConvertToPagesEvent
+  | KnowledgePagesValidateDocumentEvent
+  | KnowledgePagesGenerateFromSessionEvent;
