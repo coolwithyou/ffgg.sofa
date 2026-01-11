@@ -85,6 +85,8 @@ export interface DocumentUploadedEvent {
     filename: string;
     fileType: string;
     filePath: string;
+    /** 사용자가 UI에서 선택한 청킹 전략 (선택적) */
+    chunkingStrategy?: 'semantic' | 'smart' | 'late';
   };
 }
 
@@ -177,6 +179,31 @@ export interface BillingSubscriptionExpiredEvent {
   };
 }
 
+// ============================================
+// 문서 → Knowledge Pages 변환 이벤트
+// ============================================
+
+/**
+ * 문서를 Knowledge Pages로 변환 요청 이벤트
+ * UI에서 "페이지로 변환" 버튼 클릭 시 발송
+ */
+export interface DocumentConvertToPagesEvent {
+  name: 'document/convert-to-pages';
+  data: {
+    /** 원본 문서 ID */
+    documentId: string;
+    /** 챗봇 ID */
+    chatbotId: string;
+    /** 테넌트 ID */
+    tenantId: string;
+    /** 변환 옵션 */
+    options?: {
+      /** 특정 페이지 하위에 생성할 경우 */
+      parentPageId?: string;
+    };
+  };
+}
+
 // 모든 이벤트 타입
 export type InngestEvents =
   | DocumentUploadedEvent
@@ -186,4 +213,5 @@ export type InngestEvents =
   | BillingPaymentRequestedEvent
   | BillingPaymentCompletedEvent
   | BillingPaymentFailedEvent
-  | BillingSubscriptionExpiredEvent;
+  | BillingSubscriptionExpiredEvent
+  | DocumentConvertToPagesEvent;

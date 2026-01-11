@@ -15,6 +15,7 @@ import { NoChatbotState } from '../../components/no-chatbot-state';
 import { PageTree } from './page-tree';
 import { PageEditor } from './page-editor';
 import { CreatePageDialog } from './create-page-dialog';
+import { ImportDocumentDialog } from './import-document-dialog';
 import {
   getKnowledgePagesTree,
   getKnowledgePage,
@@ -141,6 +142,11 @@ export default function BlogPage() {
             />
             새로고침
           </Button>
+          <ImportDocumentDialog
+            chatbotId={currentChatbot.id}
+            pages={pages}
+            onImportStarted={loadPages}
+          />
           <CreatePageDialog
             chatbotId={currentChatbot.id}
             pages={pages}

@@ -1,0 +1,355 @@
+/**
+ * Document → Knowledge Pages 변환 파이프라인
+ *
+ * 업로드된 문서를 LLM을 사용하여 계층적인 Knowledge Pages로 자동 변환합니다.
+ *
+ * 처리 흐름:
+ * 1. 문서 텍스트 입력
+ * 2. LLM으로 구조 분석 → 페이지 트리 JSON 생성
+ * 3. 각 페이지별 LLM 콘텐츠 생성
+ * 4. Knowledge Pages DB 저장 (Draft 상태)
+ */
+
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { generateText } from 'ai';
+import { createKnowledgePage } from '@/app/(console)/console/chatbot/blog/actions';
+import { logger } from '@/lib/logger';
+import {
+  STRUCTURE_ANALYSIS_SYSTEM_PROMPT,
+  createStructureAnalysisPrompt,
+} from './prompts/structure-analysis';
+import {
+  CONTENT_GENERATION_SYSTEM_PROMPT,
+  createContentGenerationPrompt,
+} from './prompts/content-generation';
+import type {
+  DocumentStructure,
+  PageNode,
+  GeneratedPage,
+  ConversionOptions,
+  ConversionProgress,
+  ConversionResult,
+} from './types';
+
+// Anthropic 클라이언트 생성
+const anthropic = createAnthropic();
+
+/**
+ * 문서 → Knowledge Pages 변환 메인 함수
+ *
+ * @param documentText - 파싱된 문서 텍스트
+ * @param options - 변환 옵션
+ * @param onProgress - 진행 상태 콜백 (선택)
+ * @returns 변환 결과
+ *
+ * @example
+ * ```typescript
+ * const result = await convertDocumentToPages(
+ *   documentText,
+ *   { chatbotId: 'xxx', documentId: 'yyy' },
+ *   (progress) => console.log(progress.currentStep)
+ * );
+ * ```
+ */
+export async function convertDocumentToPages(
+  documentText: string,
+  options: ConversionOptions,
+  onProgress?: (progress: ConversionProgress) => void
+): Promise<ConversionResult> {
+  const { chatbotId, documentId, parentPageId } = options;
+
+  try {
+    // Step 1: 구조 분석
+    onProgress?.({
+      status: 'analyzing',
+      currentStep: '문서 구조 분석 중...',
+      totalPages: 0,
+      completedPages: 0,
+    });
+
+    logger.info('[DocumentToPages] Starting structure analysis', {
+      chatbotId,
+      documentId,
+      textLength: documentText.length,
+    });
+
+    const structure = await analyzeDocumentStructure(documentText);
+    const totalPages = countPages(structure.pages);
+
+    logger.info('[DocumentToPages] Structure analysis completed', {
+      title: structure.title,
+      totalPages,
+    });
+
+    // Step 2: 페이지별 콘텐츠 생성
+    onProgress?.({
+      status: 'generating',
+      currentStep: '페이지 콘텐츠 생성 중...',
+      totalPages,
+      completedPages: 0,
+    });
+
+    let completedPages = 0;
+    const generatedPages = await generatePagesContent(
+      structure.pages,
+      documentText,
+      '',
+      () => {
+        completedPages++;
+        onProgress?.({
+          status: 'generating',
+          currentStep: `페이지 생성 중 (${completedPages}/${totalPages})`,
+          totalPages,
+          completedPages,
+        });
+      }
+    );
+
+    // Step 3: Knowledge Pages DB 저장
+    onProgress?.({
+      status: 'saving',
+      currentStep: 'Knowledge Pages 저장 중...',
+      totalPages,
+      completedPages: totalPages,
+    });
+
+    logger.info('[DocumentToPages] Saving pages to database', {
+      chatbotId,
+      totalPages,
+    });
+
+    await savePagesToDatabase(generatedPages, chatbotId, documentId, parentPageId || null);
+
+    onProgress?.({
+      status: 'completed',
+      currentStep: '변환 완료',
+      totalPages,
+      completedPages: totalPages,
+    });
+
+    logger.info('[DocumentToPages] Conversion completed successfully', {
+      chatbotId,
+      documentId,
+      totalPages,
+    });
+
+    return {
+      success: true,
+      pages: generatedPages,
+      totalPageCount: totalPages,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
+
+    logger.error('[DocumentToPages] Conversion failed', {
+      chatbotId,
+      documentId,
+      error: errorMessage,
+    });
+
+    onProgress?.({
+      status: 'failed',
+      currentStep: '변환 실패',
+      totalPages: 0,
+      completedPages: 0,
+      error: errorMessage,
+    });
+
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Step 1: LLM으로 문서 구조 분석
+ */
+async function analyzeDocumentStructure(documentText: string): Promise<DocumentStructure> {
+  // 문서가 너무 길면 처음 부분만 사용 (토큰 제한)
+  const maxChars = 100000; // 약 25k 토큰
+  const truncatedText =
+    documentText.length > maxChars ? documentText.slice(0, maxChars) + '\n\n[문서가 너무 길어 일부만 분석합니다...]' : documentText;
+
+  const { text } = await generateText({
+    model: anthropic('claude-3-5-haiku-latest'),
+    system: STRUCTURE_ANALYSIS_SYSTEM_PROMPT,
+    prompt: createStructureAnalysisPrompt(truncatedText),
+    maxTokens: 4096,
+    temperature: 0,
+  });
+
+  // JSON 파싱 (코드 블록 제거)
+  const cleanJson = text.replace(/```(?:json)?\n?|\n?```/g, '').trim();
+
+  try {
+    const structure = JSON.parse(cleanJson) as DocumentStructure;
+
+    // 유효성 검증
+    if (!structure.pages || !Array.isArray(structure.pages)) {
+      throw new Error('Invalid structure: pages array is missing');
+    }
+
+    return structure;
+  } catch (parseError) {
+    logger.error('[DocumentToPages] Failed to parse structure JSON', {
+      error: parseError instanceof Error ? parseError.message : String(parseError),
+      rawText: text.slice(0, 500),
+    });
+
+    // 폴백: 단일 페이지로 변환
+    return {
+      title: '문서',
+      pages: [
+        {
+          id: 'content',
+          title: '전체 내용',
+          sourcePages: [0],
+          contentSummary: '문서 전체 내용',
+          children: [],
+        },
+      ],
+    };
+  }
+}
+
+/**
+ * Step 2: 페이지별 콘텐츠 생성 (재귀)
+ */
+async function generatePagesContent(
+  nodes: PageNode[],
+  fullDocumentText: string,
+  breadcrumb: string,
+  onPageComplete: () => void
+): Promise<GeneratedPage[]> {
+  const results: GeneratedPage[] = [];
+
+  for (const node of nodes) {
+    const currentBreadcrumb = breadcrumb ? `${breadcrumb} > ${node.title}` : node.title;
+
+    // 해당 페이지의 소스 텍스트 추출
+    // MVP에서는 전체 텍스트 사용, 추후 페이지 매핑 구현 필요
+    const sourceText = extractSourceText(fullDocumentText, node.sourcePages);
+
+    // LLM으로 콘텐츠 생성
+    const { text } = await generateText({
+      model: anthropic('claude-3-5-haiku-latest'),
+      system: CONTENT_GENERATION_SYSTEM_PROMPT,
+      prompt: createContentGenerationPrompt(
+        node.title,
+        currentBreadcrumb,
+        node.contentSummary,
+        sourceText,
+        node.sourcePages
+      ),
+      maxTokens: 4096,
+      temperature: 0,
+    });
+
+    // 마크다운 코드 블록 제거
+    const content = text.replace(/```(?:markdown)?\n?|\n?```/g, '').trim();
+
+    // 하위 페이지 재귀 처리
+    const children =
+      node.children.length > 0 ? await generatePagesContent(node.children, fullDocumentText, currentBreadcrumb, onPageComplete) : [];
+
+    results.push({
+      id: node.id,
+      title: node.title,
+      content,
+      sourcePages: node.sourcePages,
+      confidence: calculateConfidence(content, sourceText),
+      children,
+    });
+
+    onPageComplete();
+  }
+
+  return results;
+}
+
+/**
+ * Step 3: Knowledge Pages DB 저장 (재귀)
+ */
+async function savePagesToDatabase(
+  pages: GeneratedPage[],
+  chatbotId: string,
+  documentId: string | undefined,
+  parentId: string | null
+): Promise<void> {
+  for (const page of pages) {
+    const result = await createKnowledgePage({
+      chatbotId,
+      parentId,
+      title: page.title,
+      content: page.content,
+      sourceDocumentId: documentId,
+    });
+
+    if (result.success && result.page && page.children.length > 0) {
+      // 하위 페이지 재귀 저장
+      await savePagesToDatabase(page.children, chatbotId, documentId, result.page.id);
+    } else if (!result.success) {
+      logger.error('[DocumentToPages] Failed to create page', {
+        title: page.title,
+        error: result.error,
+      });
+    }
+  }
+}
+
+/**
+ * 헬퍼: 전체 페이지 수 계산
+ */
+function countPages(nodes: PageNode[]): number {
+  return nodes.reduce((sum, node) => sum + 1 + countPages(node.children), 0);
+}
+
+/**
+ * 헬퍼: 소스 텍스트 추출
+ *
+ * MVP에서는 전체 텍스트 반환
+ * TODO: PDF 페이지 매핑 구현 시 개선 필요
+ */
+function extractSourceText(fullText: string, _sourcePages: number[]): string {
+  // 토큰 제한을 위해 최대 길이 설정
+  const maxChars = 50000; // 약 12.5k 토큰
+  return fullText.length > maxChars ? fullText.slice(0, maxChars) + '\n\n[텍스트가 너무 길어 일부만 사용합니다...]' : fullText;
+}
+
+/**
+ * 헬퍼: 콘텐츠 신뢰도 계산
+ *
+ * 생성된 콘텐츠와 원본 텍스트의 유사도를 기반으로 신뢰도 산출
+ * MVP에서는 간단한 휴리스틱 사용
+ */
+function calculateConfidence(generatedContent: string, sourceText: string): number {
+  // 기본 신뢰도
+  let confidence = 0.8;
+
+  // 콘텐츠 길이가 너무 짧으면 신뢰도 감소
+  if (generatedContent.length < 100) {
+    confidence -= 0.1;
+  }
+
+  // 콘텐츠 길이가 원본 대비 너무 짧으면 신뢰도 감소
+  if (sourceText.length > 0 && generatedContent.length / sourceText.length < 0.1) {
+    confidence -= 0.1;
+  }
+
+  // 숫자나 URL이 원본에 있는데 생성물에 없으면 신뢰도 감소
+  const sourceNumbers = sourceText.match(/\d+/g) || [];
+  const contentNumbers = generatedContent.match(/\d+/g) || [];
+  if (sourceNumbers.length > 0 && contentNumbers.length === 0) {
+    confidence -= 0.1;
+  }
+
+  return Math.max(0.5, Math.min(1, confidence));
+}
+
+/**
+ * 페이지 총 수 계산 (외부 export용)
+ */
+export function countAllPages(pages: GeneratedPage[]): number {
+  return pages.reduce((sum, page) => sum + 1 + countAllPages(page.children || []), 0);
+}

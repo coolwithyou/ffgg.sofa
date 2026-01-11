@@ -15,3 +15,6 @@ export {
 
 // 계정 관리 함수
 export { processScheduledDeletions } from './account-deletion';
+
+// Knowledge Pages 변환 함수
+export { convertDocumentToPagesFunction } from './convert-document-to-pages';

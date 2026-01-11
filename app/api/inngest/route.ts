@@ -15,6 +15,8 @@ import {
   handlePaymentCompleted,
   // 계정 관리 함수
   processScheduledDeletions,
+  // Knowledge Pages 변환 함수
+  convertDocumentToPagesFunction,
 } from '@/inngest/functions';
 
 // Inngest 함수들을 서빙 (실제 클라이언트 사용)
@@ -31,5 +33,7 @@ export const { GET, POST, PUT } = serve({
     handlePaymentCompleted,
     // 계정 관리
     processScheduledDeletions,
+    // Knowledge Pages 변환
+    convertDocumentToPagesFunction,
   ],
 });

@@ -11,6 +11,8 @@ import {
   db,
   knowledgePages,
   knowledgePageVersions,
+  documents,
+  chatbots,
   type KnowledgePage,
   type NewKnowledgePage,
   type NewKnowledgePageVersion,
@@ -19,6 +21,9 @@ import { eq, and, desc, asc, isNull, sql } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 import { revalidatePath } from 'next/cache';
 import { embedText } from '@/lib/rag/embedding';
+import { validateFile, uploadFile, type AllowedMimeType } from '@/lib/upload';
+import { inngestClient } from '@/inngest/client';
+import { logger } from '@/lib/logger';
 
 // ========================================
 // 타입 정의
@@ -39,6 +44,8 @@ export interface CreateKnowledgePageInput {
   parentId?: string | null;
   title: string;
   content?: string;
+  /** 원본 문서 ID (문서 → 페이지 자동 변환 시 사용) */
+  sourceDocumentId?: string;
 }
 
 export interface UpdateKnowledgePageInput {
@@ -47,6 +54,157 @@ export interface UpdateKnowledgePageInput {
   status?: 'draft' | 'published' | 'archived';
   parentId?: string | null;
   sortOrder?: number;
+}
+
+// 문서 → 페이지 변환에 허용된 파일 타입
+const DOCUMENT_TO_PAGES_ALLOWED_TYPES: AllowedMimeType[] = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'text/markdown',
+];
+
+// ========================================
+// 문서 업로드 → 페이지 변환
+// ========================================
+
+/**
+ * 문서를 업로드하고 Knowledge Pages로 변환
+ *
+ * 일반 문서 업로드와 다른 점:
+ * - RAG 청킹 파이프라인을 거치지 않음
+ * - 바로 LLM을 통해 Knowledge Pages로 변환
+ * - 변환된 페이지는 Draft 상태로 생성
+ *
+ * @param formData - file: File, chatbotId: string, parentPageId?: string
+ */
+export async function uploadAndConvertDocument(
+  formData: FormData
+): Promise<{ success: boolean; documentId?: string; error?: string }> {
+  const session = await getSession();
+  if (!session?.tenantId || !session?.userId) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  try {
+    // 1. FormData 파싱
+    const file = formData.get('file') as File | null;
+    const chatbotId = formData.get('chatbotId') as string | null;
+    const parentPageId = formData.get('parentPageId') as string | null;
+
+    if (!file) {
+      return { success: false, error: '파일이 필요합니다.' };
+    }
+
+    if (!chatbotId) {
+      return { success: false, error: 'chatbotId가 필요합니다.' };
+    }
+
+    // 2. 챗봇 소유권 확인
+    const [chatbot] = await db
+      .select({ id: chatbots.id })
+      .from(chatbots)
+      .where(
+        and(
+          eq(chatbots.id, chatbotId),
+          eq(chatbots.tenantId, session.tenantId)
+        )
+      )
+      .limit(1);
+
+    if (!chatbot) {
+      return { success: false, error: '챗봇을 찾을 수 없습니다.' };
+    }
+
+    // 3. 파일 검증 (확장자 + Magic Number)
+    const validationResult = await validateFile(file, {
+      allowedTypes: DOCUMENT_TO_PAGES_ALLOWED_TYPES,
+    });
+
+    if (!validationResult.valid) {
+      logger.warn('[Blog] File validation failed for page conversion', {
+        filename: file.name,
+        errors: validationResult.errors,
+        userId: session.userId,
+        tenantId: session.tenantId,
+      });
+      return { success: false, error: validationResult.errors.join(', ') };
+    }
+
+    // 4. 파일 업로드 (스토리지)
+    const fileBuffer = await file.arrayBuffer();
+    const uploadResult = await uploadFile(Buffer.from(fileBuffer), {
+      tenantId: session.tenantId,
+      filename: validationResult.sanitizedFilename!,
+      contentType: validationResult.detectedMimeType,
+      folder: 'documents', // 기존 문서와 같은 폴더 사용
+      metadata: {
+        originalFilename: file.name,
+        uploadedBy: session.userId,
+        purpose: 'knowledge-pages', // 구분용 메타데이터
+      },
+    });
+
+    if (!uploadResult.success) {
+      logger.error('[Blog] File upload failed', new Error(uploadResult.error || 'Unknown error'), {
+        filename: file.name,
+        tenantId: session.tenantId,
+      });
+      return { success: false, error: '파일 업로드에 실패했습니다.' };
+    }
+
+    // 5. DB에 문서 레코드 생성 (출처 추적용, datasetId는 null)
+    const [document] = await db
+      .insert(documents)
+      .values({
+        tenantId: session.tenantId,
+        datasetId: null, // 라이브러리/데이터셋에 속하지 않음
+        filename: validationResult.sanitizedFilename!,
+        filePath: uploadResult.key!,
+        fileSize: file.size,
+        fileType: validationResult.detectedMimeType,
+        status: 'processing', // 변환 중 상태
+        metadata: {
+          originalFilename: file.name,
+          uploadedBy: session.userId,
+          url: uploadResult.url,
+          purpose: 'knowledge-pages',
+          chatbotId, // 어떤 챗봇의 페이지로 변환되는지 기록
+        },
+      })
+      .returning();
+
+    // 6. Inngest 이벤트 발송 (문서 → 페이지 변환)
+    await inngestClient.send({
+      name: 'document/convert-to-pages',
+      data: {
+        documentId: document.id,
+        chatbotId,
+        tenantId: session.tenantId,
+        options: parentPageId ? { parentPageId } : undefined,
+      },
+    });
+
+    logger.info('[Blog] Document uploaded for page conversion', {
+      documentId: document.id,
+      chatbotId,
+      filename: validationResult.sanitizedFilename,
+      tenantId: session.tenantId,
+      userId: session.userId,
+    });
+
+    revalidatePath('/console/chatbot/blog');
+
+    return { success: true, documentId: document.id };
+  } catch (error) {
+    logger.error('[Blog] Document upload for page conversion failed', error as Error, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+    });
+    return { success: false, error: '문서 업로드에 실패했습니다.' };
+  }
 }
 
 // ========================================
@@ -170,6 +328,7 @@ export async function createKnowledgePage(
       content: input.content ?? '',
       status: 'draft',
       isIndexed: false,
+      sourceDocumentId: input.sourceDocumentId ?? null,
     };
 
     const [created] = await db
