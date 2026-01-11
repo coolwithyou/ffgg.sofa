@@ -89,7 +89,15 @@ onFailure: async ({ event, error }) => {
   },
   { event: 'document/uploaded' },
   async ({ event, step }) => {
-    const { documentId, tenantId, datasetId: eventDatasetId, filename, fileType, filePath } = event.data;
+    const {
+      documentId,
+      tenantId,
+      datasetId: eventDatasetId,
+      filename,
+      fileType,
+      filePath,
+      chunkingStrategy: userSelectedStrategy, // UI에서 사용자가 선택한 전략
+    } = event.data;
     const processingStartTime = Date.now();
 
     // Step 0: 이전 데이터 정리 (step.run 내부에서 실행하여 retry 시 중복 실행 방지)
@@ -213,12 +221,24 @@ onFailure: async ({ event, error }) => {
     // Step 3: 청킹 (Phase 5: 챗봇별 전략 결정)
     const chunkingStartTime = Date.now();
 
-    // 청킹 전략 결정 (챗봇 설정 또는 글로벌 설정 사용)
-    const strategyResult: ChunkingStrategyResult = determineChunkingStrategy(
-      connectedChatbotId || 'default',
-      experimentConfig,
-      documentId // 문서 ID로 일관된 A/B 분배
-    );
+    // 청킹 전략 결정 (우선순위: 사용자 UI 선택 > 챗봇 설정 > 글로벌 설정)
+    let strategyResult: ChunkingStrategyResult;
+
+    if (userSelectedStrategy && ['semantic', 'smart', 'late'].includes(userSelectedStrategy)) {
+      // 사용자가 UI에서 명시적으로 선택한 전략 우선
+      strategyResult = {
+        strategy: userSelectedStrategy as 'semantic' | 'smart' | 'late',
+        variant: null,
+        reason: 'user_selected',
+      };
+    } else {
+      // 기존 로직: 챗봇 설정 또는 글로벌 설정 사용
+      strategyResult = determineChunkingStrategy(
+        connectedChatbotId || 'default',
+        experimentConfig,
+        documentId // 문서 ID로 일관된 A/B 분배
+      );
+    }
 
     // 실험 메타데이터 생성 (청크에 저장할 정보)
     const experimentMetadata: ChunkExperimentMetadata = toChunkExperimentMetadata(strategyResult);

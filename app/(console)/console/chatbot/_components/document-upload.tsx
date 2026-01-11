@@ -16,6 +16,7 @@ import { DocumentProgressModal } from '@/components/document-progress-modal';
 import { useTenantSettings } from '../../hooks/use-console-state';
 import type { ParsePreviewResponse } from '@/app/api/documents/preview/parse/route';
 import type { ChunkPreviewResponse } from '@/app/api/documents/preview/chunk/route';
+import type { ChunkingStrategy } from '@/types/experiment';
 
 interface DatasetOption {
   id: string;
@@ -172,44 +173,48 @@ export function DocumentUpload() {
     }
   }, []);
 
-  // 2단계: AI 청킹 API 호출 (프로그레스 시뮬레이션 포함)
-  const fetchChunkPreview = useCallback(async () => {
-    // parsed 상태에서 parseData 추출
-    if (uploadState.status !== 'parsed') return;
-    const { parseData } = uploadState;
-    if (!parseData?.text) return;
+  // 2단계: 청킹 API 호출 (프로그레스 시뮬레이션 포함)
+  const fetchChunkPreview = useCallback(
+    async (strategy: Exclude<ChunkingStrategy, 'auto'>) => {
+      // parsed 상태에서 parseData 추출
+      if (uploadState.status !== 'parsed') return;
+      const { parseData } = uploadState;
+      if (!parseData?.text) return;
 
-    // 예상 세그먼트 수와 처리 시간
-    const { segmentCount, estimatedTime } = parseData.estimation;
+      // 예상 세그먼트 수와 처리 시간
+      const { segmentCount, estimatedTime } = parseData.estimation;
 
-    // 분석 시작 (0%)
-    setUploadState({
-      status: 'chunking',
-      progress: 0,
-      message: '분석 시작 중...',
-    });
+      // Semantic만 포인트 소모
+      const strategyLabel =
+        strategy === 'semantic' ? 'AI 분석' : strategy === 'smart' ? 'Smart 분석' : 'Late 분석';
 
-    // 프로그레스 시뮬레이션 시작
-    let currentProgress = 0;
-    const intervalTime = Math.max(500, (estimatedTime * 1000) / (segmentCount * 2));
-    const progressStep = 100 / (segmentCount * 2);
-
-    chunkingIntervalRef.current = setInterval(() => {
-      currentProgress = Math.min(currentProgress + progressStep, 95);
-      const currentSegment = Math.ceil((currentProgress / 100) * segmentCount);
+      // 분석 시작 (0%)
       setUploadState({
         status: 'chunking',
-        progress: currentProgress,
-        message: '문서를 분석하고 있습니다...',
+        progress: 0,
+        message: `${strategyLabel} 시작 중...`,
       });
-    }, intervalTime);
 
-    try {
-      const response = await fetch('/api/documents/preview/chunk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: parseData.text }),
-      });
+      // 프로그레스 시뮬레이션 시작
+      let currentProgress = 0;
+      const intervalTime = Math.max(500, (estimatedTime * 1000) / (segmentCount * 2));
+      const progressStep = 100 / (segmentCount * 2);
+
+      chunkingIntervalRef.current = setInterval(() => {
+        currentProgress = Math.min(currentProgress + progressStep, 95);
+        setUploadState({
+          status: 'chunking',
+          progress: currentProgress,
+          message: '문서를 분석하고 있습니다...',
+        });
+      }, intervalTime);
+
+      try {
+        const response = await fetch('/api/documents/preview/chunk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: parseData.text, strategy }),
+        });
 
       // 시뮬레이션 중지
       if (chunkingIntervalRef.current) {
@@ -237,10 +242,12 @@ export function DocumentUpload() {
       }
       setUploadState({
         status: 'error',
-        message: error instanceof Error ? error.message : 'AI 분석에 실패했습니다.',
+        message: error instanceof Error ? error.message : '분석에 실패했습니다.',
       });
     }
-  }, [uploadState]);
+  },
+    [uploadState]
+  );
 
   // 실제 업로드 실행
   const uploadFile = useCallback(async () => {

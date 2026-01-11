@@ -47,6 +47,8 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File | null;
     let datasetId = formData.get('datasetId') as string | null;
     const destination = (formData.get('destination') as string) || 'dataset'; // 'library' | 'dataset'
+    // 사용자가 UI에서 선택한 청킹 전략 (선택적)
+    const chunkingStrategy = formData.get('chunkingStrategy') as string | null;
 
     if (!file) {
       return NextResponse.json(
@@ -179,6 +181,8 @@ export async function POST(request: NextRequest) {
         filename: validationResult.sanitizedFilename!,
         fileType: validationResult.detectedMimeType!,
         filePath: uploadResult.key!,
+        // 사용자가 선택한 청킹 전략 (UI에서 선택 시)
+        chunkingStrategy: chunkingStrategy || undefined,
       },
     });
 

@@ -4,8 +4,8 @@
  * 통합 문서 미리보기 모달
  *
  * 문서 업로드의 전체 플로우를 하나의 모달에서 처리합니다.
- * - Step 1 (parse): 파싱 결과 + 텍스트 미리보기
- * - Step 2 (chunking): AI 문서 분석 진행 중 (프로그레스바)
+ * - Step 1 (parse): 파싱 결과 + 텍스트 미리보기 + 청킹 전략 선택
+ * - Step 2 (chunking): 문서 분석 진행 중 (프로그레스바)
  * - Step 3 (chunked): 분석 결과 미리보기
  *
  * 다이얼로그가 닫히지 않고 연속적인 UX를 제공합니다.
@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { QualitySummary, QualityBadge } from './quality-indicator';
 import { formatEstimatedTime } from '@/lib/rag/chunk-cost-estimator';
 import type { SemanticChunk } from '@/lib/rag/semantic-chunking';
+import type { ChunkingStrategy } from '@/types/experiment';
 
 // ============================================================
 // 타입
@@ -46,11 +47,14 @@ interface ParsePreviewData {
 }
 
 // 청킹 결과 (3단계)
+// API에서 반환하는 모든 청크 타입 (semantic + smart 모두 지원)
+type PreviewChunkType = SemanticChunk['type'] | 'general' | 'faq' | 'structured';
+
 interface ChunkPreview {
   index: number;
   content: string;
   contentPreview: string;
-  type: SemanticChunk['type'];
+  type: PreviewChunkType;
   topic: string;
   qualityScore: number;
   autoApproved: boolean;
@@ -76,6 +80,8 @@ interface ChunkPreviewData {
     processingTime: number;
     segmentCount: number;
   };
+  /** 실제로 사용된 청킹 전략 */
+  usedStrategy: Exclude<ChunkingStrategy, 'auto'>;
 }
 
 // 업로드 상태 타입 (document-upload.tsx와 동일하게 유지)
@@ -94,7 +100,8 @@ interface DocumentPreviewModalProps {
   onClose: () => void;
   onConfirmUpload: () => void;
   uploadState: UploadState;
-  onStartChunking: () => void;
+  /** 청킹 시작 콜백. 선택한 전략을 인자로 받음 */
+  onStartChunking: (strategy: Exclude<ChunkingStrategy, 'auto'>) => void;
   filename: string;
   currentBalance: number;
   isUploading?: boolean;
@@ -190,7 +197,7 @@ interface ParseStepProps {
   showFullText: boolean;
   setShowFullText: (show: boolean) => void;
   onClose: () => void;
-  onStartChunking: () => void;
+  onStartChunking: (strategy: Exclude<ChunkingStrategy, 'auto'>) => void;
 }
 
 function ParseStep({
@@ -203,7 +210,13 @@ function ParseStep({
   onStartChunking,
 }: ParseStepProps) {
   const { text, textLength, structure, documentType, metadata, estimation } = parseData;
-  const hasEnoughPoints = currentBalance >= estimation.estimatedPoints;
+
+  // 청킹 전략 상태 (기본값: semantic)
+  const [selectedStrategy, setSelectedStrategy] = useState<Exclude<ChunkingStrategy, 'auto'>>('semantic');
+
+  // Semantic만 포인트 필요
+  const requiresPoints = selectedStrategy === 'semantic';
+  const hasEnoughPoints = !requiresPoints || currentBalance >= estimation.estimatedPoints;
 
   // 문서 유형 라벨
   const documentTypeLabels: Record<string, string> = {
@@ -296,14 +309,113 @@ function ParseStep({
           </div>
         </div>
 
-        {/* AI 청킹 비용 안내 */}
-        <div className="mt-6 rounded-lg border border-primary/30 bg-primary/5 p-4">
-          <div className="flex items-center gap-2 text-primary">
-            <SparkleIcon className="h-5 w-5" />
-            <h3 className="font-medium">AI 분석 비용 안내</h3>
+        {/* 청킹 전략 선택 */}
+        <div className="mt-6">
+          <h3 className="mb-3 text-sm font-medium text-foreground">청킹 전략 선택</h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {/* Smart Chunking */}
+            <button
+              type="button"
+              onClick={() => setSelectedStrategy('smart')}
+              className={`relative rounded-lg border p-4 text-left transition-all ${
+                selectedStrategy === 'smart'
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                  : 'border-border hover:border-muted-foreground/50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <RulerIcon className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium text-foreground">Smart</span>
+                <span className="ml-auto rounded bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-500">
+                  무료
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                규칙 기반 청킹. 한글 문장 경계 인식.
+              </p>
+              {selectedStrategy === 'smart' && (
+                <div className="absolute right-2 top-2">
+                  <CheckIcon className="h-4 w-4 text-primary" />
+                </div>
+              )}
+            </button>
+
+            {/* Semantic Chunking */}
+            <button
+              type="button"
+              onClick={() => setSelectedStrategy('semantic')}
+              className={`relative rounded-lg border p-4 text-left transition-all ${
+                selectedStrategy === 'semantic'
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                  : 'border-border hover:border-muted-foreground/50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <SparkleIcon className="h-4 w-4 text-primary" />
+                <span className="font-medium text-foreground">Semantic</span>
+                <span className="ml-auto rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                  {estimation.estimatedPoints}P
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                AI 기반 의미론적 청킹. 최고 품질.
+              </p>
+              {selectedStrategy === 'semantic' && (
+                <div className="absolute right-2 top-2">
+                  <CheckIcon className="h-4 w-4 text-primary" />
+                </div>
+              )}
+            </button>
+
+            {/* Late Chunking */}
+            <button
+              type="button"
+              onClick={() => setSelectedStrategy('late')}
+              className={`relative rounded-lg border p-4 text-left transition-all ${
+                selectedStrategy === 'late'
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                  : 'border-border hover:border-muted-foreground/50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <BeakerIcon className="h-4 w-4 text-purple-500" />
+                <span className="font-medium text-foreground">Late</span>
+                <span className="ml-auto rounded bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-medium text-purple-500">
+                  실험적
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Jina AI 연구 기반. 무료.
+              </p>
+              {selectedStrategy === 'late' && (
+                <div className="absolute right-2 top-2">
+                  <CheckIcon className="h-4 w-4 text-primary" />
+                </div>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* 청킹 비용 안내 */}
+        <div className={`mt-6 rounded-lg border p-4 ${
+          requiresPoints
+            ? 'border-primary/30 bg-primary/5'
+            : 'border-green-500/30 bg-green-500/5'
+        }`}>
+          <div className={`flex items-center gap-2 ${requiresPoints ? 'text-primary' : 'text-green-500'}`}>
+            {requiresPoints ? (
+              <SparkleIcon className="h-5 w-5" />
+            ) : (
+              <CheckIcon className="h-5 w-5" />
+            )}
+            <h3 className="font-medium">
+              {requiresPoints ? 'AI 분석 비용 안내' : '무료 분석'}
+            </h3>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            AI가 문서를 분석하여 챗봇이 정확하게 답변할 수 있도록 준비합니다.
+            {selectedStrategy === 'semantic' && 'AI가 문서를 분석하여 챗봇이 정확하게 답변할 수 있도록 준비합니다.'}
+            {selectedStrategy === 'smart' && '규칙 기반으로 문서를 분석합니다. 한글 문장 경계를 정확히 인식합니다.'}
+            {selectedStrategy === 'late' && 'Late Chunking 방식으로 문서를 분석합니다. 실험적 기능입니다.'}
           </p>
           <div className="mt-4 grid grid-cols-3 gap-4">
             <div className="rounded-lg bg-card p-3 text-center">
@@ -311,8 +423,12 @@ function ParseStep({
               <div className="mt-1 text-xs text-muted-foreground">예상 청크 수</div>
             </div>
             <div className="rounded-lg bg-card p-3 text-center">
-              <div className="text-2xl font-bold text-primary">{estimation.estimatedPoints}P</div>
-              <div className="mt-1 text-xs text-muted-foreground">예상 포인트</div>
+              <div className={`text-2xl font-bold ${requiresPoints ? 'text-primary' : 'text-green-500'}`}>
+                {requiresPoints ? `${estimation.estimatedPoints}P` : '무료'}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {requiresPoints ? '예상 포인트' : '비용'}
+              </div>
             </div>
             <div className="rounded-lg bg-card p-3 text-center">
               <div className="text-2xl font-bold text-foreground">
@@ -321,16 +437,20 @@ function ParseStep({
               <div className="mt-1 text-xs text-muted-foreground">예상 처리 시간</div>
             </div>
           </div>
-          <div className="mt-4 flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">현재 보유 포인트</span>
-            <span className={hasEnoughPoints ? 'text-foreground' : 'text-destructive'}>
-              {currentBalance.toLocaleString()}P
-            </span>
-          </div>
-          {!hasEnoughPoints && (
-            <div className="mt-3 rounded-md bg-destructive/10 p-2 text-center text-sm text-destructive">
-              포인트가 부족합니다. AI 분석을 진행하려면 포인트를 충전해주세요.
-            </div>
+          {requiresPoints && (
+            <>
+              <div className="mt-4 flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">현재 보유 포인트</span>
+                <span className={hasEnoughPoints ? 'text-foreground' : 'text-destructive'}>
+                  {currentBalance.toLocaleString()}P
+                </span>
+              </div>
+              {!hasEnoughPoints && (
+                <div className="mt-3 rounded-md bg-destructive/10 p-2 text-center text-sm text-destructive">
+                  포인트가 부족합니다. AI 분석을 진행하려면 포인트를 충전해주세요.
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -346,12 +466,21 @@ function ParseStep({
             취소
           </button>
           <button
-            onClick={onStartChunking}
+            onClick={() => onStartChunking(selectedStrategy)}
             disabled={!hasEnoughPoints}
             className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
-            <SparkleIcon className="h-4 w-4" />
-            AI 분석 시작 ({estimation.estimatedPoints}P)
+            {requiresPoints ? (
+              <>
+                <SparkleIcon className="h-4 w-4" />
+                AI 분석 시작 ({estimation.estimatedPoints}P)
+              </>
+            ) : (
+              <>
+                <RulerIcon className="h-4 w-4" />
+                분석 시작 (무료)
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -698,6 +827,32 @@ function SparkleIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+      />
+    </svg>
+  );
+}
+
+function RulerIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M6 6l12 12M6 6v4m0-4h4m8 12v-4m0 4h-4"
+      />
+    </svg>
+  );
+}
+
+function BeakerIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
       />
     </svg>
   );

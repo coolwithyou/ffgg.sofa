@@ -1,11 +1,14 @@
 /**
- * AI 시맨틱 청킹 미리보기 API (2단계)
+ * 청킹 미리보기 API (2단계)
  *
- * 파싱된 텍스트를 AI로 시맨틱 청킹하고 포인트를 차감합니다.
+ * 파싱된 텍스트를 선택한 전략으로 청킹합니다.
+ * - semantic: AI 시맨틱 청킹 (포인트 소모)
+ * - smart: 규칙 기반 청킹 (무료)
+ * - late: Late Chunking (무료, 실험적)
  *
  * 2단계 플로우:
  * 1단계: 파싱 + 텍스트 미리보기 (/api/documents/preview/parse)
- * 2단계: AI 시맨틱 청킹 (이 API) - 포인트 소모
+ * 2단계: 청킹 (이 API) - strategy에 따라 포인트 소모
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -13,6 +16,7 @@ import { eq, sql, and } from 'drizzle-orm';
 import { withRateLimit } from '@/lib/middleware/rate-limit';
 import { withTenantIsolation } from '@/lib/middleware/tenant';
 import { semanticChunk, type SemanticChunk } from '@/lib/rag/semantic-chunking';
+import { smartChunk, type Chunk } from '@/lib/rag/chunking';
 import {
   estimateChunkingCost,
   SEGMENT_SIZE,
@@ -23,16 +27,19 @@ import { getPointBalance } from '@/lib/points/service';
 import { db } from '@/lib/db';
 import { tenantPoints, pointTransactions } from '@/drizzle/schema';
 import { logger } from '@/lib/logger';
+import type { ChunkingStrategy } from '@/types/experiment';
 
 // ============================================================
 // 타입
 // ============================================================
 
+type PreviewChunkType = SemanticChunk['type'] | 'general' | 'faq' | 'structured';
+
 interface ChunkPreview {
   index: number;
   content: string;
   contentPreview: string;
-  type: SemanticChunk['type'];
+  type: PreviewChunkType;
   topic: string;
   qualityScore: number;
   autoApproved: boolean;
@@ -59,6 +66,8 @@ export interface ChunkPreviewResponse {
     processingTime: number;
     segmentCount: number;
   };
+  /** 실제로 사용된 청킹 전략 */
+  usedStrategy: Exclude<ChunkingStrategy, 'auto'>;
 }
 
 // ============================================================
@@ -102,6 +111,57 @@ function calculateQualityScore(chunk: SemanticChunk): number {
   }
 
   return Math.min(100, Math.max(0, score));
+}
+
+/**
+ * smartChunk 결과 → ChunkPreview 변환
+ */
+function convertSmartChunkToPreview(chunk: Chunk): ChunkPreview {
+  // metadata에서 타입 추론
+  let type: PreviewChunkType = 'general';
+  if (chunk.metadata.isQAPair) {
+    type = 'faq';
+  } else if (chunk.metadata.isTable || chunk.metadata.isList) {
+    type = 'structured';
+  } else if (chunk.metadata.hasHeader) {
+    type = 'paragraph';
+  }
+
+  // 토픽 추론 (내용에서 첫 문장 또는 헤더 추출)
+  const lines = chunk.content.split('\n').filter((l) => l.trim());
+  const topic = lines[0]?.slice(0, 50) || '';
+
+  return {
+    index: chunk.index,
+    content: chunk.content,
+    contentPreview:
+      chunk.content.length > 200
+        ? chunk.content.slice(0, 200) + '...'
+        : chunk.content,
+    type,
+    topic,
+    qualityScore: chunk.qualityScore,
+    autoApproved: chunk.qualityScore >= 85,
+  };
+}
+
+/**
+ * semanticChunk 결과 → ChunkPreview 변환
+ */
+function convertSemanticChunkToPreview(chunk: SemanticChunk): ChunkPreview {
+  const qualityScore = calculateQualityScore(chunk);
+  return {
+    index: chunk.index,
+    content: chunk.content,
+    contentPreview:
+      chunk.content.length > 200
+        ? chunk.content.slice(0, 200) + '...'
+        : chunk.content,
+    type: chunk.type,
+    topic: chunk.topic,
+    qualityScore,
+    autoApproved: qualityScore >= 85,
+  };
 }
 
 /**
@@ -186,7 +246,10 @@ export async function POST(request: NextRequest) {
   try {
     // JSON 파싱
     const body = await request.json();
-    const { text } = body as { text?: string };
+    const { text, strategy: requestedStrategy } = body as {
+      text?: string;
+      strategy?: ChunkingStrategy;
+    };
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json(
@@ -195,57 +258,73 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 비용 추정
-    const estimation = estimateChunkingCost(text.length);
+    // 전략 결정 (기본값: semantic)
+    const strategy: Exclude<ChunkingStrategy, 'auto'> =
+      requestedStrategy === 'smart' || requestedStrategy === 'late'
+        ? requestedStrategy
+        : 'semantic';
 
-    // 포인트 충분한지 확인
-    const currentBalance = await getPointBalance(tenant.tenantId);
-    if (currentBalance < estimation.estimatedPoints) {
-      return NextResponse.json(
-        {
-          error: '포인트가 부족합니다.',
-          required: estimation.estimatedPoints,
-          balance: currentBalance,
-        },
-        { status: 402 } // Payment Required
-      );
+    // 비용 추정 (semantic만 포인트 소모)
+    const estimation = estimateChunkingCost(text.length);
+    const requiresPoints = strategy === 'semantic';
+
+    // 포인트 충분한지 확인 (semantic 전략만)
+    if (requiresPoints) {
+      const currentBalance = await getPointBalance(tenant.tenantId);
+      if (currentBalance < estimation.estimatedPoints) {
+        return NextResponse.json(
+          {
+            error: '포인트가 부족합니다.',
+            required: estimation.estimatedPoints,
+            balance: currentBalance,
+          },
+          { status: 402 } // Payment Required
+        );
+      }
     }
 
-    // AI 시맨틱 청킹 수행
-    const semanticChunks = await semanticChunk(
-      text,
-      {
-        preChunkSize: SEGMENT_SIZE,
-        minChunkSize: 100,
+    // 전략에 따른 청킹 수행
+    let chunkPreviews: ChunkPreview[];
+    let pointsConsumed = 0;
+    let transactionId: string | null = null;
+
+    if (strategy === 'semantic') {
+      // AI 시맨틱 청킹 수행
+      const semanticChunks = await semanticChunk(
+        text,
+        {
+          preChunkSize: SEGMENT_SIZE,
+          minChunkSize: 100,
+          maxChunkSize: 600,
+        },
+        undefined,
+        { tenantId: tenant.tenantId }
+      );
+
+      // 포인트 차감 (실제 세그먼트 수 기준)
+      const actualSegmentCount = Math.max(1, Math.ceil(text.length / SEGMENT_SIZE));
+      const pointResult = await consumeChunkingPoints(
+        tenant.tenantId,
+        actualSegmentCount
+      );
+      pointsConsumed = pointResult.pointsConsumed;
+      transactionId = pointResult.transactionId;
+
+      // 청크 프리뷰 생성
+      chunkPreviews = semanticChunks.map(convertSemanticChunkToPreview);
+    } else {
+      // Smart 또는 Late 청킹 수행 (규칙 기반, 무료)
+      // Late Chunking은 현재 smartChunk로 처리 (향후 lateChunk 별도 통합 가능)
+      const smartChunks = await smartChunk(text, {
         maxChunkSize: 600,
-      },
-      undefined,
-      { tenantId: tenant.tenantId }
-    );
+        overlap: 50,
+        preserveStructure: true,
+        autoDetectDocumentType: true,
+      });
 
-    // 포인트 차감 (실제 세그먼트 수 기준)
-    const actualSegmentCount = Math.max(1, Math.ceil(text.length / SEGMENT_SIZE));
-    const { pointsConsumed, transactionId } = await consumeChunkingPoints(
-      tenant.tenantId,
-      actualSegmentCount
-    );
-
-    // 청크 프리뷰 생성
-    const chunkPreviews: ChunkPreview[] = semanticChunks.map((chunk) => {
-      const qualityScore = calculateQualityScore(chunk);
-      return {
-        index: chunk.index,
-        content: chunk.content,
-        contentPreview:
-          chunk.content.length > 200
-            ? chunk.content.slice(0, 200) + '...'
-            : chunk.content,
-        type: chunk.type,
-        topic: chunk.topic,
-        qualityScore,
-        autoApproved: qualityScore >= 85,
-      };
-    });
+      // 청크 프리뷰 생성
+      chunkPreviews = smartChunks.map(convertSmartChunkToPreview);
+    }
 
     // 경고 분석
     const warnings: ChunkWarning[] = [];
@@ -304,9 +383,11 @@ export async function POST(request: NextRequest) {
     const pendingCount = totalChunks - autoApprovedCount;
 
     const processingTime = Date.now() - startTime;
+    const segmentCount = Math.max(1, Math.ceil(text.length / SEGMENT_SIZE));
 
     logger.info('Document chunk preview completed', {
       tenantId: tenant.tenantId,
+      strategy,
       textLength: text.length,
       totalChunks,
       avgQualityScore: avgQualityScore.toFixed(2),
@@ -328,8 +409,9 @@ export async function POST(request: NextRequest) {
       usage: {
         pointsConsumed,
         processingTime,
-        segmentCount: actualSegmentCount,
+        segmentCount,
       },
+      usedStrategy: strategy,
     };
 
     return NextResponse.json(response);
