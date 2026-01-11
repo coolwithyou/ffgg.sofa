@@ -3,35 +3,34 @@
 /**
  * Knowledge Pages 에디터 컴포넌트
  *
- * 마크다운 에디터와 미리보기 기능 제공
+ * PC: 좌측 마크다운 에디터 + 우측 실시간 미리보기 (2열 레이아웃)
+ * 모바일: 편집/미리보기 토글 방식
  */
 
 import { useState, useCallback, useEffect } from 'react';
 import {
   Save,
   Eye,
-  EyeOff,
-  Upload,
   MoreVertical,
   Trash2,
   Globe,
   GlobeLock,
+  PenLine,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { MarkdownEditor } from '@/components/ui/markdown-editor';
 import type { KnowledgePage } from '@/lib/db';
 import {
   updateKnowledgePage,
@@ -165,12 +164,16 @@ export function PageEditor({ page, onUpdate, onDelete }: PageEditorProps) {
             className="h-8 w-64 font-medium"
             placeholder="페이지 제목"
           />
-          <Badge
-            variant={page.isIndexed ? 'default' : 'secondary'}
-            className="text-xs"
-          >
-            {page.isIndexed ? '발행됨' : '초안'}
-          </Badge>
+          {/* 상태 배지: publishedVersionId로 발행 여부 판단 */}
+          {page.publishedVersionId ? (
+            <Badge variant="default" className="text-xs">
+              발행됨
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="text-xs">
+              초안
+            </Badge>
+          )}
           {hasChanges && (
             <Badge variant="outline" className="text-xs text-yellow-600">
               미저장
@@ -179,15 +182,16 @@ export function PageEditor({ page, onUpdate, onDelete }: PageEditorProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* 미리보기 토글 */}
+          {/* 미리보기 토글 (모바일 전용) */}
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setShowPreview(!showPreview)}
+            className="md:hidden"
           >
             {showPreview ? (
               <>
-                <EyeOff className="mr-1 h-4 w-4" />
+                <PenLine className="mr-1 h-4 w-4" />
                 편집
               </>
             ) : (
@@ -209,8 +213,8 @@ export function PageEditor({ page, onUpdate, onDelete }: PageEditorProps) {
             {isSaving ? '저장 중...' : '저장'}
           </Button>
 
-          {/* 발행/발행취소 버튼 */}
-          {page.isIndexed ? (
+          {/* 발행/발행취소 버튼: publishedVersionId로 상태 판단 */}
+          {page.publishedVersionId ? (
             <Button
               variant="outline"
               size="sm"
@@ -259,21 +263,50 @@ export function PageEditor({ page, onUpdate, onDelete }: PageEditorProps) {
 
       {/* 에디터/미리보기 영역 */}
       <div className="flex-1 overflow-hidden">
-        {showPreview ? (
-          <div className="h-full overflow-auto p-6">
+        {/* PC: 2열 레이아웃 (좌: 에디터, 우: 미리보기) */}
+        <div className="hidden h-full md:flex">
+          {/* 좌측: 마크다운 에디터 */}
+          <div className="flex-1 border-r border-border">
+            <MarkdownEditor
+              value={content}
+              onChange={setContent}
+              placeholder="마크다운으로 콘텐츠를 작성하세요..."
+              height="100%"
+              className="h-full rounded-none border-0"
+            />
+          </div>
+          {/* 우측: 실시간 미리보기 */}
+          <div className="flex-1 overflow-auto bg-muted/20 p-6">
             <article className="prose prose-sm max-w-none dark:prose-invert">
-              <h1>{title}</h1>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+              <h1>{title || '제목 없음'}</h1>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {content || '*내용을 입력하면 여기에 미리보기가 표시됩니다.*'}
+              </ReactMarkdown>
             </article>
           </div>
-        ) : (
-          <Textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="h-full resize-none rounded-none border-0 p-4 font-mono text-sm focus-visible:ring-0"
-            placeholder="마크다운으로 콘텐츠를 작성하세요..."
-          />
-        )}
+        </div>
+
+        {/* 모바일: 편집/미리보기 토글 방식 */}
+        <div className="h-full md:hidden">
+          {showPreview ? (
+            <div className="h-full overflow-auto p-6">
+              <article className="prose prose-sm max-w-none dark:prose-invert">
+                <h1>{title || '제목 없음'}</h1>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {content || '*내용을 입력하면 여기에 미리보기가 표시됩니다.*'}
+                </ReactMarkdown>
+              </article>
+            </div>
+          ) : (
+            <MarkdownEditor
+              value={content}
+              onChange={setContent}
+              placeholder="마크다운으로 콘텐츠를 작성하세요..."
+              height="100%"
+              className="h-full rounded-none border-0"
+            />
+          )}
+        </div>
       </div>
     </div>
   );

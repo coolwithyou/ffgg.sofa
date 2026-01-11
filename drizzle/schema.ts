@@ -1319,6 +1319,9 @@ export const knowledgePages = pgTable(
       onDelete: 'set null',
     }), // 원본 문서 참조 (있는 경우)
 
+    // 버전 관리
+    publishedVersionId: uuid('published_version_id'), // 현재 발행 버전 참조 (versions 테이블)
+
     // 타임스탬프
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
@@ -1337,3 +1340,53 @@ export const knowledgePages = pgTable(
 // Knowledge Pages 타입 추론용
 export type KnowledgePage = typeof knowledgePages.$inferSelect;
 export type NewKnowledgePage = typeof knowledgePages.$inferInsert;
+
+// =============================================================================
+// Knowledge Page Versions (버전 관리)
+// =============================================================================
+
+/**
+ * Knowledge Page의 발행 버전을 저장하는 테이블
+ *
+ * - versionType: 'published' = 현재 발행 버전 (검색에 사용)
+ * - versionType: 'history' = 이전 발행 버전 (히스토리 보관)
+ *
+ * knowledge_pages는 Draft(작업본), versions는 Published 스냅샷을 관리
+ * 수정 중에도 기존 발행 버전으로 검색 가능
+ */
+export const knowledgePageVersions = pgTable(
+  'knowledge_page_versions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    pageId: uuid('page_id')
+      .notNull()
+      .references(() => knowledgePages.id, { onDelete: 'cascade' }),
+
+    // 버전 타입: 'published' (현재 발행본) | 'history' (이전 버전)
+    versionType: text('version_type').notNull(), // 'published' | 'history'
+    versionNumber: integer('version_number').notNull(),
+
+    // 스냅샷 데이터
+    title: text('title').notNull(),
+    content: text('content').notNull(),
+    summary: text('summary'),
+    path: text('path').notNull(),
+
+    // 벡터 (검색용)
+    embedding: vector('embedding', { dimensions: 1536 }),
+
+    // 메타데이터
+    publishedAt: timestamp('published_at', { withTimezone: true }).notNull(),
+    publishedBy: uuid('published_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_kp_versions_page').on(table.pageId),
+    index('idx_kp_versions_page_type').on(table.pageId, table.versionType),
+    index('idx_kp_versions_type').on(table.versionType),
+  ]
+);
+
+// Knowledge Page Versions 타입 추론용
+export type KnowledgePageVersion = typeof knowledgePageVersions.$inferSelect;
+export type NewKnowledgePageVersion = typeof knowledgePageVersions.$inferInsert;

@@ -12,7 +12,7 @@
  */
 
 import { db } from '@/lib/db';
-import { chunks } from '@/drizzle/schema';
+import { chunks, knowledgePages, knowledgePageVersions } from '@/drizzle/schema';
 import { sql, eq, and } from 'drizzle-orm';
 import { embedText, type EmbeddingTrackingContext } from './embedding';
 import { logger } from '@/lib/logger';
@@ -694,36 +694,37 @@ export async function searchKnowledgePages(
     const queryEmbedding = await embedText(query, trackingContext);
     const embeddingStr = `[${queryEmbedding.join(',')}]`;
 
-    // pgvector 코사인 유사도 검색
+    // knowledge_page_versions의 'published' 버전만 검색
+    // Draft/Published 분리 아키텍처: 수정 중에도 기존 발행 버전으로 검색 가능
     const results = await db.execute(sql`
       SELECT
-        id,
-        chatbot_id,
-        title,
-        path,
-        content,
-        1 - (embedding <=> ${embeddingStr}::vector) as score
-      FROM knowledge_pages
-      WHERE chatbot_id = ${chatbotId}::uuid
-        AND is_indexed = true
-        AND status = 'published'
-        AND embedding IS NOT NULL
-      ORDER BY embedding <=> ${embeddingStr}::vector
+        v.id as version_id,
+        v.page_id,
+        v.title,
+        v.path,
+        v.content,
+        1 - (v.embedding <=> ${embeddingStr}::vector) as score
+      FROM knowledge_page_versions v
+      INNER JOIN knowledge_pages p ON p.id = v.page_id
+      WHERE p.chatbot_id = ${chatbotId}::uuid
+        AND v.version_type = 'published'
+        AND v.embedding IS NOT NULL
+      ORDER BY v.embedding <=> ${embeddingStr}::vector
       LIMIT ${limit}
     `);
 
     const searchResults = (results as unknown as Array<{
-      id: string;
-      chatbot_id: string;
+      version_id: string;
+      page_id: string;
       title: string;
       path: string;
       content: string;
       score: number;
     }>).map((row) => ({
-      id: row.id,
-      chunkId: row.id, // Knowledge Page는 그 자체가 청크
-      documentId: row.id, // 자체 문서 ID
-      pageId: row.id,
+      id: row.version_id,
+      chunkId: row.version_id, // 버전 ID가 청크 ID 역할
+      documentId: row.page_id, // 원본 페이지 ID
+      pageId: row.page_id,
       content: row.content,
       score: Number(row.score),
       denseScore: Number(row.score),
@@ -828,27 +829,29 @@ export async function getIndexedKnowledgePagesByChatbot(
   limit: number = 20
 ): Promise<Array<{ content: string; title: string; pageId: string }>> {
   try {
+    // knowledge_page_versions의 'published' 버전에서 조회
+    // Draft/Published 분리로 수정 중인 페이지도 발행된 내용으로 분석 가능
     const results = await db.execute(sql`
       SELECT
-        id,
-        title,
-        content
-      FROM knowledge_pages
-      WHERE chatbot_id = ${chatbotId}::uuid
-        AND is_indexed = true
-        AND status = 'published'
+        v.page_id,
+        v.title,
+        v.content
+      FROM knowledge_page_versions v
+      INNER JOIN knowledge_pages p ON p.id = v.page_id
+      WHERE p.chatbot_id = ${chatbotId}::uuid
+        AND v.version_type = 'published'
       ORDER BY RANDOM()
       LIMIT ${limit}
     `);
 
     return (results as unknown as Array<{
-      id: string;
+      page_id: string;
       title: string;
       content: string;
     }>).map((row) => ({
       content: row.content,
       title: row.title,
-      pageId: row.id,
+      pageId: row.page_id,
     }));
   } catch (error) {
     logger.error(

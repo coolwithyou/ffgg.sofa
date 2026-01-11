@@ -7,8 +7,15 @@
  * 핵심 컨셉: 1 Page = 1 Chunk = 1 읽을 수 있는 문서
  */
 
-import { db, knowledgePages, type KnowledgePage, type NewKnowledgePage } from '@/lib/db';
-import { eq, and, desc, asc, isNull } from 'drizzle-orm';
+import {
+  db,
+  knowledgePages,
+  knowledgePageVersions,
+  type KnowledgePage,
+  type NewKnowledgePage,
+  type NewKnowledgePageVersion,
+} from '@/lib/db';
+import { eq, and, desc, asc, isNull, sql } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 import { revalidatePath } from 'next/cache';
 import { embedText } from '@/lib/rag/embedding';
@@ -198,14 +205,12 @@ export async function updateKnowledgePage(
       return { success: false, error: '페이지를 찾을 수 없습니다.' };
     }
 
-    // 콘텐츠가 변경되면 인덱스 무효화
-    const shouldReindex = input.content !== undefined && input.content !== existing.content;
-
+    // 버전 시스템 도입으로 isIndexed 무효화 불필요
+    // 발행된 버전은 versions 테이블에서 별도 관리됨
     await db
       .update(knowledgePages)
       .set({
         ...input,
-        isIndexed: shouldReindex ? false : existing.isIndexed,
         updatedAt: new Date(),
       })
       .where(eq(knowledgePages.id, pageId));
@@ -268,15 +273,20 @@ export async function deleteKnowledgePage(
 // ========================================
 
 /**
- * 페이지 발행 (인덱싱)
+ * 페이지 발행 (버전 스냅샷 생성)
  *
- * 페이지 콘텐츠를 임베딩하여 RAG 검색 가능하게 함
+ * Draft/Published 분리 아키텍처:
+ * - knowledge_pages: Draft(작업본) - 편집 중인 내용
+ * - knowledge_page_versions: Published 스냅샷 - 검색에 사용
+ *
+ * 발행 시 현재 Draft를 스냅샷으로 저장하고 임베딩 생성
+ * 기존 발행 버전은 'history'로 변경 (FIFO로 오래된 것 삭제)
  */
 export async function publishKnowledgePage(
   pageId: string
 ): Promise<{ success: boolean; error?: string }> {
   const session = await getSession();
-  if (!session?.tenantId) {
+  if (!session?.tenantId || !session?.userId) {
     return { success: false, error: '인증이 필요합니다.' };
   }
 
@@ -290,24 +300,84 @@ export async function publishKnowledgePage(
       return { success: false, error: '콘텐츠가 비어있습니다.' };
     }
 
-    // 임베딩 생성 (경로 + 제목 + 콘텐츠를 합쳐서 임베딩)
+    // 1. 기존 'published' 버전을 'history'로 변경
+    await db
+      .update(knowledgePageVersions)
+      .set({ versionType: 'history' })
+      .where(
+        and(
+          eq(knowledgePageVersions.pageId, pageId),
+          eq(knowledgePageVersions.versionType, 'published')
+        )
+      );
+
+    // 2. 현재 최대 버전 번호 조회
+    const [maxVersionResult] = await db
+      .select({ maxVersion: sql<number>`COALESCE(MAX(${knowledgePageVersions.versionNumber}), 0)` })
+      .from(knowledgePageVersions)
+      .where(eq(knowledgePageVersions.pageId, pageId));
+
+    const nextVersionNumber = (maxVersionResult?.maxVersion ?? 0) + 1;
+
+    // 3. 임베딩 생성 (경로 + 제목 + 콘텐츠)
     const textForEmbedding = `${page.path}\n${page.title}\n\n${page.content}`;
     const embedding = await embedText(textForEmbedding, {
       tenantId: session.tenantId,
       chatbotId: page.chatbotId,
     });
 
-    // 요약은 나중에 추가 (MVP에서는 생략)
+    // 4. 새 'published' 버전 스냅샷 생성
+    const newVersion: NewKnowledgePageVersion = {
+      pageId,
+      versionType: 'published',
+      versionNumber: nextVersionNumber,
+      title: page.title,
+      content: page.content,
+      path: page.path,
+      embedding,
+      summary: null, // TODO: AI 요약 추가
+      publishedAt: new Date(),
+      publishedBy: session.userId,
+    };
+
+    const [createdVersion] = await db
+      .insert(knowledgePageVersions)
+      .values(newVersion)
+      .returning({ id: knowledgePageVersions.id });
+
+    // 5. knowledge_pages의 publishedVersionId 업데이트
     await db
       .update(knowledgePages)
       .set({
-        embedding,
+        publishedVersionId: createdVersion.id,
         isIndexed: true,
         status: 'published',
         publishedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(knowledgePages.id, pageId));
+
+    // 6. FIFO: 오래된 history 버전 삭제 (10개 초과 시)
+    const MAX_HISTORY_VERSIONS = 10;
+    const historyVersions = await db
+      .select({ id: knowledgePageVersions.id })
+      .from(knowledgePageVersions)
+      .where(
+        and(
+          eq(knowledgePageVersions.pageId, pageId),
+          eq(knowledgePageVersions.versionType, 'history')
+        )
+      )
+      .orderBy(desc(knowledgePageVersions.versionNumber));
+
+    if (historyVersions.length > MAX_HISTORY_VERSIONS) {
+      const toDelete = historyVersions.slice(MAX_HISTORY_VERSIONS);
+      for (const version of toDelete) {
+        await db
+          .delete(knowledgePageVersions)
+          .where(eq(knowledgePageVersions.id, version.id));
+      }
+    }
 
     revalidatePath('/console/chatbot/blog');
     revalidatePath(`/console/chatbot/blog/${pageId}`);
@@ -320,7 +390,10 @@ export async function publishKnowledgePage(
 }
 
 /**
- * 페이지 발행 취소 (인덱스 제거)
+ * 페이지 발행 취소 (버전 삭제)
+ *
+ * 'published' 버전을 삭제하여 검색에서 제외
+ * 기존 history 버전은 유지 (필요시 복원 가능)
  */
 export async function unpublishKnowledgePage(
   pageId: string
@@ -331,10 +404,21 @@ export async function unpublishKnowledgePage(
   }
 
   try {
+    // 1. 'published' 버전 삭제 (검색에서 제외)
+    await db
+      .delete(knowledgePageVersions)
+      .where(
+        and(
+          eq(knowledgePageVersions.pageId, pageId),
+          eq(knowledgePageVersions.versionType, 'published')
+        )
+      );
+
+    // 2. knowledge_pages 상태 업데이트
     await db
       .update(knowledgePages)
       .set({
-        embedding: null,
+        publishedVersionId: null,
         isIndexed: false,
         status: 'draft',
         updatedAt: new Date(),
