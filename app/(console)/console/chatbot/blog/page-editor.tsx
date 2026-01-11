@@ -38,6 +38,7 @@ import {
   publishKnowledgePage,
   unpublishKnowledgePage,
 } from './actions';
+import { MarkdownHelpModal } from './_components/markdown-help-modal';
 
 interface PageEditorProps {
   page: KnowledgePage;
@@ -201,6 +202,9 @@ export function PageEditor({ page, onUpdate, onDelete }: PageEditorProps) {
               </>
             )}
           </Button>
+
+          {/* 마크다운 도움말 */}
+          <MarkdownHelpModal />
 
           {/* 저장 버튼 */}
           <Button
