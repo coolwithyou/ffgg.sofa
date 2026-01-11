@@ -8,10 +8,12 @@ import {
   claims,
   sourceSpans,
   documents,
+  validationAuditLogs,
 } from '@/drizzle/schema';
 import { eq, desc, inArray } from 'drizzle-orm';
 import { getCurrentUserId } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import { auditHelpers } from '@/lib/knowledge-pages/verification/audit-logger';
 // TODO: Phase 4에서 구현 예정
 // import { createPagesFromStructure } from '@/lib/knowledge-pages/document-to-pages';
 
@@ -120,8 +122,19 @@ export async function updateReconstructedMarkdown(
 export async function updateClaimHumanVerdict(
   claimId: string,
   verdict: 'approved' | 'rejected' | 'modified',
-  note?: string
+  note?: string,
+  sessionId?: string
 ) {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Unauthorized');
+
+  // 기존 verdict 조회 (감사 로그용)
+  const existingClaim = await db
+    .select({ humanVerdict: claims.humanVerdict, sessionId: claims.sessionId })
+    .from(claims)
+    .where(eq(claims.id, claimId))
+    .then((rows) => rows[0]);
+
   await db
     .update(claims)
     .set({
@@ -130,6 +143,18 @@ export async function updateClaimHumanVerdict(
       reviewedAt: new Date(),
     })
     .where(eq(claims.id, claimId));
+
+  // 감사 로그 기록
+  const sid = sessionId || existingClaim?.sessionId;
+  if (sid) {
+    await auditHelpers.claimReviewed(
+      sid,
+      userId,
+      claimId,
+      verdict,
+      existingClaim?.humanVerdict ?? undefined
+    );
+  }
 
   return { success: true };
 }
@@ -183,6 +208,9 @@ export async function approveValidationSession(sessionId: string) {
     })
     .where(eq(validationSessions.id, sessionId));
 
+  // 감사 로그 기록
+  await auditHelpers.sessionApproved(sessionId, userId);
+
   revalidatePath('/console/chatbot/blog');
 
   return { success: true, pagesCount: pages.length };
@@ -206,5 +234,41 @@ export async function rejectValidationSession(sessionId: string, reason: string)
     })
     .where(eq(validationSessions.id, sessionId));
 
+  // 감사 로그 기록
+  await auditHelpers.sessionRejected(sessionId, userId, reason);
+
   return { success: true };
+}
+
+/**
+ * 감사 로그 조회
+ */
+export async function getValidationAuditLogs(sessionId: string) {
+  const logs = await db
+    .select()
+    .from(validationAuditLogs)
+    .where(eq(validationAuditLogs.sessionId, sessionId))
+    .orderBy(desc(validationAuditLogs.createdAt));
+
+  return logs;
+}
+
+/**
+ * 세션 조회 감사 로그 기록
+ */
+export async function logSessionViewed(sessionId: string) {
+  const userId = await getCurrentUserId();
+  if (!userId) return;
+
+  await auditHelpers.sessionViewed(sessionId, userId);
+}
+
+/**
+ * 마스킹 해제 감사 로그 기록
+ */
+export async function logMaskingRevealed(sessionId: string) {
+  const userId = await getCurrentUserId();
+  if (!userId) return;
+
+  await auditHelpers.maskingRevealed(sessionId, userId);
 }

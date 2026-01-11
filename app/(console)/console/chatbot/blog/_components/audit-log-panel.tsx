@@ -68,7 +68,7 @@ interface AuditLog {
   metadata?: Record<string, unknown> | null;
   ipAddress?: string | null;
   userAgent?: string | null;
-  createdAt: Date | string;
+  createdAt: Date | string | null;
   // Join된 사용자 정보 (optional)
   user?: {
     name?: string | null;
@@ -207,7 +207,11 @@ function AuditLogItem({ log }: { log: AuditLog }) {
   const Icon = config.icon;
 
   const createdAt =
-    typeof log.createdAt === 'string' ? new Date(log.createdAt) : log.createdAt;
+    log.createdAt === null
+      ? new Date()
+      : typeof log.createdAt === 'string'
+        ? new Date(log.createdAt)
+        : log.createdAt;
 
   const hasDetails =
     log.previousValue || log.newValue || log.metadata || log.ipAddress;

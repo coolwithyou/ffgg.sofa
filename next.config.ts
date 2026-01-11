@@ -5,6 +5,13 @@ import type { NextConfig } from "next";
  * [W-007] 보안 헤더 설정
  */
 const nextConfig: NextConfig = {
+  // react-pdf를 위한 webpack 설정
+  webpack: (config) => {
+    // canvas 모듈 비활성화 (Node.js 환경에서만 필요)
+    config.resolve.alias.canvas = false;
+    return config;
+  },
+
   // Node.js 전용 패키지를 서버 외부 패키지로 지정 (번들링 제외)
   // __dirname 에러 방지 - Vercel 서버리스 환경에서 ESM/CommonJS 호환성 문제 해결
   serverExternalPackages: [

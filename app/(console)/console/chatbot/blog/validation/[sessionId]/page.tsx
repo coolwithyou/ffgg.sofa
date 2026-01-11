@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -10,19 +10,33 @@ import { OriginalViewer } from '../../_components/original-viewer';
 import { ReconstructedEditor } from '../../_components/reconstructed-editor';
 import { ClaimPanel } from '../../_components/claim-panel';
 import { FilterTabs } from '../../_components/filter-tabs';
+import { ScrollSyncToggle, type SyncMode } from '../../_components/scroll-sync-toggle';
+import { MaskingBadge } from '../../_components/masking-badge';
+import { AuditLogPanel } from '../../_components/audit-log-panel';
+import { useScrollSync } from '../../_components/use-scroll-sync';
+import {
+  maskSensitiveInfo,
+  unmaskSensitiveInfo,
+  type MaskingEntry,
+} from '@/lib/knowledge-pages/verification/masking';
 import {
   getValidationSessionDetail,
   updateReconstructedMarkdown,
   updateClaimHumanVerdict,
   approveValidationSession,
   rejectValidationSession,
+  getValidationAuditLogs,
+  logSessionViewed,
+  logMaskingRevealed,
 } from '../actions';
-import type { validationSessions, claims, sourceSpans } from '@/drizzle/schema';
+import type { validationSessions, claims, sourceSpans, validationAuditLogs } from '@/drizzle/schema';
 import { ArrowLeft, Check, X, AlertTriangle, Save } from 'lucide-react';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
 
 type ValidationSession = typeof validationSessions.$inferSelect;
 type Claim = typeof claims.$inferSelect;
 type SourceSpan = typeof sourceSpans.$inferSelect;
+type AuditLog = typeof validationAuditLogs.$inferSelect;
 
 type FilterType = 'all' | 'high_risk' | 'contradicted' | 'not_found' | 'pending';
 
@@ -30,6 +44,7 @@ export default function DualViewerPage() {
   const params = useParams();
   const router = useRouter();
   const sessionId = params.sessionId as string;
+  const { confirm } = useAlertDialog();
 
   // 데이터 상태
   const [session, setSession] = useState<ValidationSession | null>(null);
@@ -46,6 +61,27 @@ export default function DualViewerPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
 
+  // Phase 4 추가 상태
+  const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true);
+  const [syncMode, setSyncMode] = useState<SyncMode>('ratio');
+  const [maskings, setMaskings] = useState<MaskingEntry[]>([]);
+  const [isMaskingRevealed, setIsMaskingRevealed] = useState(false);
+  const [originalMaskings, setOriginalMaskings] = useState<MaskingEntry[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
+
+  // 스크롤 동기화를 위한 refs
+  const leftPanelRef = useRef<HTMLDivElement>(null);
+  const middlePanelRef = useRef<HTMLDivElement>(null);
+
+  // 스크롤 동기화 훅
+  useScrollSync({
+    enabled: scrollSyncEnabled,
+    leftRef: leftPanelRef,
+    rightRef: middlePanelRef,
+    mode: syncMode,
+  });
+
   // 데이터 로드
   const loadSession = useCallback(async () => {
     setIsLoading(true);
@@ -54,7 +90,16 @@ export default function DualViewerPage() {
       setSession(data.session);
       setClaimsData(data.claims);
       setSourceSpansMap(new Map(Object.entries(data.sourceSpans)));
-      setReconstructed(data.session.reconstructedMarkdown || '');
+
+      // 재구성 텍스트에서 민감정보 마스킹 적용
+      const markdown = data.session.reconstructedMarkdown || '';
+      const { maskedText, maskings: foundMaskings } = maskSensitiveInfo(markdown);
+      setReconstructed(maskedText);
+      setMaskings(foundMaskings);
+      setOriginalMaskings(foundMaskings);
+
+      // 세션 조회 감사 로그
+      logSessionViewed(sessionId);
     } catch {
       toast.error('세션을 불러오는데 실패했습니다');
       router.push('../validation');
@@ -63,9 +108,45 @@ export default function DualViewerPage() {
     }
   }, [sessionId, router]);
 
+  // 감사 로그 로드
+  const loadAuditLogs = useCallback(async () => {
+    setIsLoadingAuditLogs(true);
+    try {
+      const logs = await getValidationAuditLogs(sessionId);
+      setAuditLogs(logs);
+    } catch {
+      console.error('Failed to load audit logs');
+    } finally {
+      setIsLoadingAuditLogs(false);
+    }
+  }, [sessionId]);
+
   useEffect(() => {
     loadSession();
-  }, [loadSession]);
+    loadAuditLogs();
+  }, [loadSession, loadAuditLogs]);
+
+  // 마스킹 토글
+  const handleToggleMasking = useCallback(async () => {
+    if (isMaskingRevealed) {
+      // 마스킹 다시 적용
+      const { maskedText, maskings: newMaskings } = maskSensitiveInfo(
+        unmaskSensitiveInfo(reconstructed, maskings)
+      );
+      setReconstructed(maskedText);
+      setMaskings(newMaskings);
+      setIsMaskingRevealed(false);
+    } else {
+      // 마스킹 해제
+      const unmasked = unmaskSensitiveInfo(reconstructed, maskings);
+      setReconstructed(unmasked);
+      setIsMaskingRevealed(true);
+
+      // 감사 로그 기록
+      await logMaskingRevealed(sessionId);
+      loadAuditLogs();
+    }
+  }, [isMaskingRevealed, reconstructed, maskings, sessionId, loadAuditLogs]);
 
   // 필터링된 Claim
   const filteredClaims = claimsData.filter((claim) => {
@@ -98,8 +179,14 @@ export default function DualViewerPage() {
   const handleSaveReconstructed = async () => {
     setIsSaving(true);
     try {
-      await updateReconstructedMarkdown(sessionId, reconstructed);
+      // 마스킹된 상태라면 마스킹 해제 후 저장
+      const textToSave = isMaskingRevealed
+        ? reconstructed
+        : unmaskSensitiveInfo(reconstructed, maskings);
+
+      await updateReconstructedMarkdown(sessionId, textToSave);
       toast.success('저장되었습니다');
+      loadAuditLogs();
     } catch {
       toast.error('저장에 실패했습니다');
     } finally {
@@ -114,7 +201,7 @@ export default function DualViewerPage() {
     note?: string
   ) => {
     try {
-      await updateClaimHumanVerdict(claimId, verdict, note);
+      await updateClaimHumanVerdict(claimId, verdict, note, sessionId);
       setClaimsData((prev) =>
         prev.map((c) =>
           c.id === claimId
@@ -123,6 +210,7 @@ export default function DualViewerPage() {
         )
       );
       toast.success('검토 결과가 저장되었습니다');
+      loadAuditLogs();
     } catch {
       toast.error('저장에 실패했습니다');
     }
@@ -134,6 +222,15 @@ export default function DualViewerPage() {
       toast.error(`${highRiskUnreviewed}개의 고위험 항목을 먼저 검토하세요`);
       return;
     }
+
+    const confirmed = await confirm({
+      title: '검증 승인',
+      message: '이 검증 세션을 승인하고 Knowledge Pages를 생성하시겠습니까?',
+      confirmText: '승인',
+      cancelText: '취소',
+    });
+
+    if (!confirmed) return;
 
     setIsApproving(true);
     try {
@@ -151,7 +248,17 @@ export default function DualViewerPage() {
 
   // 거부
   const handleReject = async () => {
-    const reason = prompt('거부 사유를 입력하세요:');
+    const confirmed = await confirm({
+      title: '검증 거부',
+      message: '이 검증 세션을 거부하시겠습니까? 거부 사유를 입력해주세요.',
+      confirmText: '거부',
+      cancelText: '취소',
+      variant: 'destructive',
+    });
+
+    if (!confirmed) return;
+
+    const reason = window.prompt('거부 사유를 입력하세요:');
     if (!reason) return;
 
     try {
@@ -210,6 +317,25 @@ export default function DualViewerPage() {
 
         <div className="flex-1" />
 
+        {/* Phase 4: 스크롤 동기화 토글 */}
+        <ScrollSyncToggle
+          enabled={scrollSyncEnabled}
+          onToggle={setScrollSyncEnabled}
+          mode={syncMode}
+          onModeChange={setSyncMode}
+        />
+
+        {/* Phase 4: 마스킹 배지 */}
+        <MaskingBadge
+          maskings={originalMaskings}
+          isRevealed={isMaskingRevealed}
+          onToggleReveal={handleToggleMasking}
+          canReveal={originalMaskings.length > 0}
+        />
+
+        {/* Phase 4: 감사 로그 패널 */}
+        <AuditLogPanel logs={auditLogs} isLoading={isLoadingAuditLogs} />
+
         {highRiskUnreviewed > 0 && (
           <span className="flex items-center gap-1 text-sm text-destructive">
             <AlertTriangle className="h-4 w-4" />
@@ -238,7 +364,10 @@ export default function DualViewerPage() {
       {/* 3열 레이아웃 */}
       <div className="flex flex-1 overflow-hidden">
         {/* 좌측: 원본 뷰어 */}
-        <div className="w-[35%] overflow-auto border-r border-border">
+        <div
+          ref={leftPanelRef}
+          className="w-[35%] overflow-auto border-r border-border"
+        >
           <div className="sticky top-0 z-10 border-b border-border bg-card px-4 py-2">
             <h3 className="text-sm font-medium text-muted-foreground">원본 문서</h3>
           </div>
@@ -249,7 +378,10 @@ export default function DualViewerPage() {
         </div>
 
         {/* 중앙: 재구성 에디터 */}
-        <div className="w-[40%] overflow-auto border-r border-border">
+        <div
+          ref={middlePanelRef}
+          className="w-[40%] overflow-auto border-r border-border"
+        >
           <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card px-4 py-2">
             <h3 className="text-sm font-medium text-muted-foreground">재구성 결과</h3>
             <Button
