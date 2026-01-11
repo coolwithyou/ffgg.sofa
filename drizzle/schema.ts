@@ -1613,9 +1613,10 @@ export const validationAuditLogs = pgTable(
     sessionId: uuid('session_id')
       .notNull()
       .references(() => validationSessions.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    // 사용자 ID (시스템 자동 작업 시 null 가능)
+    userId: uuid('user_id').references(() => users.id, {
+      onDelete: 'cascade',
+    }),
 
     // 액션 유형
     action: text('action', {
@@ -1623,6 +1624,7 @@ export const validationAuditLogs = pgTable(
         'session_viewed', // 세션 열람
         'session_approved', // 세션 승인
         'session_rejected', // 세션 거부
+        'session_expired', // 세션 만료 (시스템 자동)
         'claim_reviewed', // Claim 검토
         'claim_approved', // Claim 승인
         'claim_rejected', // Claim 거부

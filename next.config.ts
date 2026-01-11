@@ -5,11 +5,12 @@ import type { NextConfig } from "next";
  * [W-007] 보안 헤더 설정
  */
 const nextConfig: NextConfig = {
-  // react-pdf를 위한 webpack 설정
-  webpack: (config) => {
-    // canvas 모듈 비활성화 (Node.js 환경에서만 필요)
-    config.resolve.alias.canvas = false;
-    return config;
+  // react-pdf를 위한 Turbopack 설정 (Next.js 16+)
+  turbopack: {
+    resolveAlias: {
+      // canvas 모듈 비활성화 (Node.js 환경에서만 필요)
+      canvas: false,
+    },
   },
 
   // Node.js 전용 패키지를 서버 외부 패키지로 지정 (번들링 제외)

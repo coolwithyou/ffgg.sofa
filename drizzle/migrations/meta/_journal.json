@@ -204,6 +204,13 @@
       "when": 1768139447836,
       "tag": "0028_long_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1768172242228,
+      "tag": "0029_early_spot",
+      "breakpoints": true
     }
   ]
 }

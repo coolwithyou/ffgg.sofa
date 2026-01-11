@@ -28,6 +28,12 @@ export interface PageNode {
   contentSummary: string;
   /** 하위 페이지 */
   children: PageNode[];
+  /** 마크다운 시작 라인 (Human-in-the-loop 검증용) */
+  startLine?: number;
+  /** 마크다운 종료 라인 (Human-in-the-loop 검증용) */
+  endLine?: number;
+  /** 헤더 레벨 (1-6, 구조 복원용) */
+  level?: number;
 }
 
 /**

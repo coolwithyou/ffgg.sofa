@@ -47,6 +47,7 @@ type AuditAction =
   | 'session_viewed'
   | 'session_approved'
   | 'session_rejected'
+  | 'session_expired'
   | 'claim_reviewed'
   | 'claim_approved'
   | 'claim_rejected'
@@ -59,7 +60,7 @@ type AuditAction =
 interface AuditLog {
   id: string;
   sessionId: string;
-  userId: string;
+  userId: string | null; // 시스템 자동 작업 시 null
   action: AuditAction;
   targetType?: 'session' | 'claim' | 'markdown' | null;
   targetId?: string | null;
@@ -104,6 +105,11 @@ const actionConfig: Record<
     icon: XCircle,
     label: '세션 거부',
     color: 'text-destructive',
+  },
+  session_expired: {
+    icon: Clock,
+    label: '세션 만료',
+    color: 'text-muted-foreground',
   },
   claim_reviewed: {
     icon: Eye,
