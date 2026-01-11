@@ -18,6 +18,7 @@ import {
   PenLine,
   AlertTriangle,
   RotateCcw,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -322,16 +323,28 @@ export function PageEditor({ page, onUpdate, onDelete }: PageEditorProps) {
             <AlertTriangle className="h-4 w-4" />
             <span>현재 편집본이 발행 버전과 다릅니다. 챗봇은 발행된 버전을 검색합니다.</span>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRestoreToPublished}
-            disabled={isRestoring}
-            className="h-7 border-yellow-500/50 text-yellow-600 hover:bg-yellow-500/20 dark:text-yellow-500"
-          >
-            <RotateCcw className="mr-1 h-3 w-3" />
-            {isRestoring ? '되돌리는 중...' : '발행 버전으로 되돌리기'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRestoreToPublished}
+              disabled={isRestoring || isPublishing}
+              className="h-7 border-yellow-500/50 text-yellow-600 hover:bg-yellow-500/20 dark:text-yellow-500"
+            >
+              <RotateCcw className="mr-1 h-3 w-3" />
+              {isRestoring ? '되돌리는 중...' : '발행 버전으로 되돌리기'}
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handlePublish}
+              disabled={isPublishing || isRestoring}
+              className="h-7"
+            >
+              <RefreshCw className="mr-1 h-3 w-3" />
+              {isPublishing ? '발행 중...' : '수정사항 재발행'}
+            </Button>
+          </div>
         </div>
       )}
 
