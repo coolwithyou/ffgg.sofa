@@ -50,6 +50,7 @@ export const navItems: NavItem[] = [
       { id: 'ai', label: 'AI 설정', href: '/console/chatbot/ai' },
       { id: 'documents', label: '문서', href: '/console/chatbot' },
       { id: 'blog', label: '블로그', href: '/console/chatbot/blog' },
+      { id: 'validation', label: '문서 검증', href: '/console/chatbot/blog/validation' },
       { id: 'datasets', label: '데이터셋', href: '/console/chatbot/datasets' },
       { id: 'faq', label: 'FAQ', href: '/console/chatbot/faq' },
       { id: 'review', label: '검수', href: '/console/chatbot/review' },
