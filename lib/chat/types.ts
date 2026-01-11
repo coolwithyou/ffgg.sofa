@@ -26,6 +26,8 @@ export interface ChatResponse {
   sources?: Array<{
     documentId: string;
     chunkId: string;
+    /** Knowledge Page ID (블로그 페이지 소스인 경우) */
+    pageId?: string;
     content: string;
     score: number;
   }>;

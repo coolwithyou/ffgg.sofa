@@ -10,7 +10,13 @@ export {
   splitByTokenLimit,
   cosineSimilarity,
 } from './embedding';
-export { hybridSearch, type SearchResult } from './retrieval';
+export {
+  hybridSearch,
+  hybridSearchMultiDataset,
+  searchKnowledgePages,
+  searchWithKnowledgePages,
+  type SearchResult,
+} from './retrieval';
 export { generateResponse, generateWithFallback, type GenerateOptions } from './generator';
 export { rewriteQuery, type QueryRewriteOptions } from './query-rewriter';
 export {

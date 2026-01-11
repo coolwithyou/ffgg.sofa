@@ -4,7 +4,12 @@
  */
 
 import { logger } from '@/lib/logger';
-import { hybridSearch, hybridSearchMultiDataset, type SearchResult } from '@/lib/rag/retrieval';
+import {
+  hybridSearch,
+  hybridSearchMultiDataset,
+  searchWithKnowledgePages,
+  type SearchResult,
+} from '@/lib/rag/retrieval';
 import { generateResponse, type GenerateOptions } from '@/lib/rag/generator';
 import { rewriteQuery } from '@/lib/rag/query-rewriter';
 import { rerankWithLLM, shouldRerank } from '@/lib/rag/reranker';
@@ -209,18 +214,21 @@ export async function processChat(
         searchQuery = request.message;
       }
 
-      // Hybrid Search로 관련 청크 검색 (Re-ranking을 위해 더 많이 검색)
+      // Hybrid Search로 관련 청크 + Knowledge Pages 검색 (Re-ranking을 위해 더 많이 검색)
       const embeddingTrackingContext = { tenantId, chatbotId: chatbotId ?? undefined };
       let searchResults: SearchResult[];
 
       if (chatbotId) {
         const datasetIds = await getChatbotDatasetIds(chatbotId);
-        if (datasetIds.length > 0) {
-          searchResults = await hybridSearchMultiDataset(tenantId, datasetIds, searchQuery, initialSearchLimit, embeddingTrackingContext);
-        } else {
-          logger.warn('Chatbot has no linked datasets, falling back to tenant search', { chatbotId });
-          searchResults = await hybridSearch(tenantId, searchQuery, initialSearchLimit, embeddingTrackingContext);
-        }
+        // Knowledge Pages와 문서 청크를 통합 검색 (RRF 병합)
+        searchResults = await searchWithKnowledgePages(
+          tenantId,
+          chatbotId,
+          datasetIds,
+          searchQuery,
+          initialSearchLimit,
+          embeddingTrackingContext
+        );
       } else {
         searchResults = await hybridSearch(tenantId, searchQuery, initialSearchLimit, embeddingTrackingContext);
       }
@@ -406,6 +414,7 @@ export async function processChat(
         ? searchResults.map((r) => ({
             documentId: r.documentId,
             chunkId: r.chunkId,
+            pageId: r.pageId, // Knowledge Pages 소스인 경우
             content: r.content.slice(0, 200) + (r.content.length > 200 ? '...' : ''),
             score: r.score,
           }))

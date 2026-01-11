@@ -12,7 +12,7 @@
  */
 
 import { db } from '@/lib/db';
-import { chunks } from '@/drizzle/schema';
+import { chunks, knowledgePages } from '@/drizzle/schema';
 import { sql, eq, and } from 'drizzle-orm';
 import { embedText, type EmbeddingTrackingContext } from './embedding';
 import { logger } from '@/lib/logger';
@@ -22,13 +22,15 @@ export interface SearchResult {
   chunkId: string;
   documentId: string;
   datasetId?: string;
+  /** Knowledge Page ID (블로그 페이지 검색 결과인 경우) */
+  pageId?: string;
   content: string;
   /** RRF 점수 (랭킹용, 0.01~0.03 범위) */
   score: number;
   /** Dense 검색 원본 점수 (코사인 유사도, 0~1 범위, 임계값 비교용) */
   denseScore?: number;
   metadata: Record<string, unknown>;
-  source: 'dense' | 'sparse' | 'hybrid';
+  source: 'dense' | 'sparse' | 'hybrid' | 'knowledge_page';
 }
 
 interface RankedResult {
@@ -660,4 +662,191 @@ export async function getChunksByDatasets(
     );
     return [];
   }
+}
+
+// ========================================
+// Knowledge Pages 검색
+// ========================================
+
+/**
+ * Knowledge Pages 벡터 검색
+ *
+ * 블로그 페이지를 벡터 유사도로 검색합니다.
+ * - 발행된 페이지만 검색 (isIndexed: true, status: 'published')
+ * - chatbotId로 필터링
+ * - Dense 검색 (코사인 유사도)
+ *
+ * @param chatbotId - 검색할 챗봇 ID
+ * @param query - 검색 쿼리
+ * @param limit - 반환할 최대 결과 수
+ * @param trackingContext - 임베딩 추적 컨텍스트
+ */
+export async function searchKnowledgePages(
+  chatbotId: string,
+  query: string,
+  limit: number = DEFAULT_LIMIT,
+  trackingContext?: EmbeddingTrackingContext
+): Promise<SearchResult[]> {
+  const startTime = Date.now();
+
+  try {
+    // 쿼리 임베딩 생성
+    const queryEmbedding = await embedText(query, trackingContext);
+    const embeddingStr = `[${queryEmbedding.join(',')}]`;
+
+    // pgvector 코사인 유사도 검색
+    const results = await db.execute(sql`
+      SELECT
+        id,
+        chatbot_id,
+        title,
+        path,
+        content,
+        1 - (embedding <=> ${embeddingStr}::vector) as score
+      FROM knowledge_pages
+      WHERE chatbot_id = ${chatbotId}::uuid
+        AND is_indexed = true
+        AND status = 'published'
+        AND embedding IS NOT NULL
+      ORDER BY embedding <=> ${embeddingStr}::vector
+      LIMIT ${limit}
+    `);
+
+    const searchResults = (results as unknown as Array<{
+      id: string;
+      chatbot_id: string;
+      title: string;
+      path: string;
+      content: string;
+      score: number;
+    }>).map((row) => ({
+      id: row.id,
+      chunkId: row.id, // Knowledge Page는 그 자체가 청크
+      documentId: row.id, // 자체 문서 ID
+      pageId: row.id,
+      content: row.content,
+      score: Number(row.score),
+      denseScore: Number(row.score),
+      metadata: {
+        title: row.title,
+        path: row.path,
+        sourceType: 'knowledge_page',
+      },
+      source: 'knowledge_page' as const,
+    }));
+
+    const duration = Date.now() - startTime;
+    logger.info('Knowledge Pages search completed', {
+      chatbotId,
+      queryLength: query.length,
+      resultCount: searchResults.length,
+      duration,
+      topScores: searchResults.slice(0, 3).map(r => r.score),
+    });
+
+    return searchResults;
+  } catch (error) {
+    logger.error(
+      'Knowledge Pages search failed',
+      error instanceof Error ? error : undefined,
+      { chatbotId }
+    );
+    return [];
+  }
+}
+
+/**
+ * Chunks + Knowledge Pages 통합 검색
+ *
+ * 기존 청크 검색 결과와 Knowledge Pages 검색 결과를 병합합니다.
+ * RRF 알고리즘을 사용하여 두 결과를 통합합니다.
+ *
+ * @param tenantId - 테넌트 ID
+ * @param chatbotId - 챗봇 ID
+ * @param datasetIds - 검색할 데이터셋 ID 배열
+ * @param query - 검색 쿼리
+ * @param limit - 반환할 최대 결과 수
+ * @param trackingContext - 임베딩 추적 컨텍스트
+ */
+export async function searchWithKnowledgePages(
+  tenantId: string,
+  chatbotId: string,
+  datasetIds: string[],
+  query: string,
+  limit: number = DEFAULT_LIMIT,
+  trackingContext?: EmbeddingTrackingContext
+): Promise<SearchResult[]> {
+  const startTime = Date.now();
+
+  try {
+    // 병렬로 두 검색 수행
+    const [chunkResults, pageResults] = await Promise.all([
+      // 기존 청크 검색 (데이터셋이 있는 경우)
+      datasetIds.length > 0
+        ? hybridSearchMultiDataset(tenantId, datasetIds, query, limit, trackingContext)
+        : hybridSearch(tenantId, query, limit, trackingContext),
+      // Knowledge Pages 검색
+      searchKnowledgePages(chatbotId, query, limit, trackingContext),
+    ]);
+
+    // 두 결과를 RRF로 병합
+    const mergedResults = mergeSearchResults(chunkResults, pageResults, limit);
+
+    const duration = Date.now() - startTime;
+    logger.info('Combined search completed', {
+      tenantId,
+      chatbotId,
+      chunkCount: chunkResults.length,
+      pageCount: pageResults.length,
+      mergedCount: mergedResults.length,
+      duration,
+    });
+
+    return mergedResults;
+  } catch (error) {
+    logger.error(
+      'Combined search failed',
+      error instanceof Error ? error : undefined,
+      { tenantId, chatbotId }
+    );
+    throw error;
+  }
+}
+
+/**
+ * 두 검색 결과를 RRF로 병합
+ */
+function mergeSearchResults(
+  chunkResults: SearchResult[],
+  pageResults: SearchResult[],
+  limit: number
+): SearchResult[] {
+  const scores = new Map<string, { result: SearchResult; score: number }>();
+
+  // Chunk 결과 점수 계산
+  chunkResults.forEach((result, rank) => {
+    const rrfScore = 1 / (RRF_K + rank + 1);
+    scores.set(`chunk_${result.id}`, {
+      result,
+      score: rrfScore,
+    });
+  });
+
+  // Knowledge Page 결과 점수 계산 (별도 키로 중복 방지)
+  pageResults.forEach((result, rank) => {
+    const rrfScore = 1 / (RRF_K + rank + 1);
+    scores.set(`page_${result.id}`, {
+      result,
+      score: rrfScore,
+    });
+  });
+
+  // 점수 기준 정렬 및 상위 N개 반환
+  return Array.from(scores.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((item) => ({
+      ...item.result,
+      score: item.score,
+    }));
 }
