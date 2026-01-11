@@ -491,6 +491,121 @@ export async function reorderKnowledgePage(
 }
 
 // ========================================
+// 버전 히스토리
+// ========================================
+
+/**
+ * 페이지의 모든 버전 조회 (발행된 버전 + 히스토리)
+ *
+ * 버전 목록을 버전 번호 역순으로 정렬하여 반환
+ * 현재 발행 버전은 versionType: 'published'로 표시
+ */
+export async function getPageVersions(pageId: string): Promise<{
+  success: boolean;
+  versions?: Array<{
+    id: string;
+    versionNumber: number;
+    versionType: 'published' | 'history';
+    title: string;
+    content: string;
+    path: string;
+    publishedAt: Date;
+  }>;
+  error?: string;
+}> {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  try {
+    // 페이지 소유권 확인
+    const page = await getKnowledgePage(pageId);
+    if (!page) {
+      return { success: false, error: '페이지를 찾을 수 없습니다.' };
+    }
+
+    // 모든 버전 조회 (버전 번호 역순)
+    const versions = await db
+      .select({
+        id: knowledgePageVersions.id,
+        versionNumber: knowledgePageVersions.versionNumber,
+        versionType: knowledgePageVersions.versionType,
+        title: knowledgePageVersions.title,
+        content: knowledgePageVersions.content,
+        path: knowledgePageVersions.path,
+        publishedAt: knowledgePageVersions.publishedAt,
+      })
+      .from(knowledgePageVersions)
+      .where(eq(knowledgePageVersions.pageId, pageId))
+      .orderBy(desc(knowledgePageVersions.versionNumber));
+
+    return {
+      success: true,
+      versions: versions.map((v) => ({
+        ...v,
+        versionType: v.versionType as 'published' | 'history',
+      })),
+    };
+  } catch (error) {
+    console.error('버전 목록 조회 실패:', error);
+    return { success: false, error: '버전 목록을 불러오는데 실패했습니다.' };
+  }
+}
+
+/**
+ * 버전 복원 (선택한 버전의 콘텐츠를 Draft로 복사)
+ *
+ * 버전의 title, content를 knowledge_pages로 복사
+ * 발행 상태는 변경하지 않음 (사용자가 확인 후 재발행)
+ */
+export async function restoreVersion(
+  versionId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  try {
+    // 버전 조회
+    const [version] = await db
+      .select()
+      .from(knowledgePageVersions)
+      .where(eq(knowledgePageVersions.id, versionId))
+      .limit(1);
+
+    if (!version) {
+      return { success: false, error: '버전을 찾을 수 없습니다.' };
+    }
+
+    // 페이지 소유권 확인
+    const page = await getKnowledgePage(version.pageId);
+    if (!page) {
+      return { success: false, error: '페이지를 찾을 수 없습니다.' };
+    }
+
+    // Draft에 버전 콘텐츠 복사
+    await db
+      .update(knowledgePages)
+      .set({
+        title: version.title,
+        content: version.content,
+        updatedAt: new Date(),
+      })
+      .where(eq(knowledgePages.id, version.pageId));
+
+    revalidatePath('/console/chatbot/blog');
+    revalidatePath(`/console/chatbot/blog/${version.pageId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error('버전 복원 실패:', error);
+    return { success: false, error: '버전 복원에 실패했습니다.' };
+  }
+}
+
+// ========================================
 // 헬퍼 함수
 // ========================================
 

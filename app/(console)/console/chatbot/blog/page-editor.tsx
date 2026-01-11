@@ -39,6 +39,7 @@ import {
   unpublishKnowledgePage,
 } from './actions';
 import { MarkdownHelpModal } from './_components/markdown-help-modal';
+import { VersionHistoryModal } from './_components/version-history-modal';
 
 interface PageEditorProps {
   page: KnowledgePage;
@@ -202,6 +203,13 @@ export function PageEditor({ page, onUpdate, onDelete }: PageEditorProps) {
               </>
             )}
           </Button>
+
+          {/* 버전 히스토리 */}
+          <VersionHistoryModal
+            pageId={page.id}
+            onRestore={onUpdate}
+            hasPublishedVersion={!!page.publishedVersionId}
+          />
 
           {/* 마크다운 도움말 */}
           <MarkdownHelpModal />
