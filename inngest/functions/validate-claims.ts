@@ -93,9 +93,12 @@ export const validateClaimsFunction = inngestClient.createFunction(
     const { sessionId, chatbotId, tenantId } = event.data;
 
     console.log(`[validate-claims] Starting validation for session: ${sessionId}`);
+    console.log(`[validate-claims] Event data:`, JSON.stringify(event.data, null, 2));
 
     // Step 1: 세션 정보 조회 및 상태 업데이트 (analyzing)
     const session = await step.run('fetch-session', async () => {
+      console.log(`[validate-claims:fetch-session] Fetching session: ${sessionId}`);
+
       const result = await db
         .select()
         .from(validationSessions)
@@ -106,6 +109,14 @@ export const validateClaimsFunction = inngestClient.createFunction(
         throw new Error(`Session not found: ${sessionId}`);
       }
 
+      console.log(`[validate-claims:fetch-session] Session found:`, {
+        id: result.id,
+        status: result.status,
+        hasOriginalText: !!result.originalText,
+        originalTextLength: result.originalText?.length ?? 0,
+        hasReconstructedMarkdown: !!result.reconstructedMarkdown,
+      });
+
       // 상태를 analyzing으로 업데이트
       await updateSessionStatus(sessionId, 'analyzing');
 
@@ -114,20 +125,32 @@ export const validateClaimsFunction = inngestClient.createFunction(
 
     // Step 2: 마크다운 재구성 (없는 경우)
     const markdown = await step.run('reconstruct-markdown', async () => {
+      console.log(`[validate-claims:reconstruct-markdown] Starting reconstruction for session: ${sessionId}`);
+
       // 이미 재구성된 마크다운이 있으면 그대로 사용
       if (session.reconstructedMarkdown) {
-        console.log('[validate-claims] Using existing reconstructed markdown');
+        console.log('[validate-claims:reconstruct-markdown] Using existing reconstructed markdown');
+        console.log(`[validate-claims:reconstruct-markdown] Existing markdown length: ${session.reconstructedMarkdown.length}`);
         return session.reconstructedMarkdown;
       }
 
       // 원본 텍스트가 없으면 에러
       if (!session.originalText) {
+        console.error('[validate-claims:reconstruct-markdown] No original text found!');
         throw new Error('No original text found in session');
       }
 
-      console.log('[validate-claims] Reconstructing markdown from original text');
-      const result = await reconstructAndSave(sessionId, session.originalText);
-      return result.markdown;
+      console.log(`[validate-claims:reconstruct-markdown] Original text length: ${session.originalText.length}`);
+      console.log('[validate-claims:reconstruct-markdown] Calling reconstructAndSave...');
+
+      try {
+        const result = await reconstructAndSave(sessionId, session.originalText);
+        console.log(`[validate-claims:reconstruct-markdown] Reconstruction complete, markdown length: ${result.markdown.length}`);
+        return result.markdown;
+      } catch (error) {
+        console.error('[validate-claims:reconstruct-markdown] Reconstruction failed:', error);
+        throw error;
+      }
     });
 
     if (!markdown) {

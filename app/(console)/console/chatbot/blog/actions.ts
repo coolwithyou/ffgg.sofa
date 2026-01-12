@@ -78,7 +78,11 @@ const DOCUMENT_TO_PAGES_ALLOWED_TYPES: AllowedMimeType[] = [
  * - 바로 LLM을 통해 Knowledge Pages로 변환
  * - 변환된 페이지는 Draft 상태로 생성
  *
- * @param formData - file: File, chatbotId: string, parentPageId?: string
+ * @param formData - file: File, chatbotId: string, parentPageId?: string, skipConversion?: string
+ *
+ * skipConversion 옵션:
+ * - 'true'로 설정 시 Inngest 변환 이벤트를 발송하지 않음
+ * - Human-in-the-loop 검증 플로우에서 사용 (문서 업로드 후 별도로 검증 시작)
  */
 export async function uploadAndConvertDocument(
   formData: FormData
@@ -93,6 +97,7 @@ export async function uploadAndConvertDocument(
     const file = formData.get('file') as File | null;
     const chatbotId = formData.get('chatbotId') as string | null;
     const parentPageId = formData.get('parentPageId') as string | null;
+    const skipConversion = formData.get('skipConversion') === 'true';
 
     if (!file) {
       return { success: false, error: '파일이 필요합니다.' };
@@ -156,6 +161,7 @@ export async function uploadAndConvertDocument(
     }
 
     // 5. DB에 문서 레코드 생성 (출처 추적용, datasetId는 null)
+    // skipConversion: HITL 검증용으로 업로드만 하는 경우 'approved' 상태로 설정
     const [document] = await db
       .insert(documents)
       .values({
@@ -165,34 +171,38 @@ export async function uploadAndConvertDocument(
         filePath: uploadResult.key!,
         fileSize: file.size,
         fileType: validationResult.detectedMimeType,
-        status: 'processing', // 변환 중 상태
+        status: skipConversion ? 'approved' : 'processing', // HITL용은 approved, 직접 변환은 processing
         metadata: {
           originalFilename: file.name,
           uploadedBy: session.userId,
           url: uploadResult.url,
-          purpose: 'knowledge-pages',
+          purpose: skipConversion ? 'hitl-validation' : 'knowledge-pages',
           chatbotId, // 어떤 챗봇의 페이지로 변환되는지 기록
         },
       })
       .returning();
 
     // 6. Inngest 이벤트 발송 (문서 → 페이지 변환)
-    await inngestClient.send({
-      name: 'document/convert-to-pages',
-      data: {
-        documentId: document.id,
-        chatbotId,
-        tenantId: session.tenantId,
-        options: parentPageId ? { parentPageId } : undefined,
-      },
-    });
+    // skipConversion이 true면 HITL 검증 플로우를 사용하므로 변환 이벤트 발송 안함
+    if (!skipConversion) {
+      await inngestClient.send({
+        name: 'document/convert-to-pages',
+        data: {
+          documentId: document.id,
+          chatbotId,
+          tenantId: session.tenantId,
+          options: parentPageId ? { parentPageId } : undefined,
+        },
+      });
+    }
 
-    logger.info('[Blog] Document uploaded for page conversion', {
+    logger.info('[Blog] Document uploaded', {
       documentId: document.id,
       chatbotId,
       filename: validationResult.sanitizedFilename,
       tenantId: session.tenantId,
       userId: session.userId,
+      mode: skipConversion ? 'hitl-validation' : 'direct-conversion',
     });
 
     revalidatePath('/console/chatbot/blog');

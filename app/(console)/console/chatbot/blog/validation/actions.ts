@@ -298,6 +298,14 @@ export async function createValidationSessionFromDocument(
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('Unauthorized');
 
+  // 환경 변수 사전 체크 (빠른 실패)
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey || anthropicKey === 'your-anthropic-api-key' || anthropicKey.startsWith('sk-ant-xxx')) {
+    throw new Error(
+      'ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다. AI 문서 재구성 기능을 사용하려면 .env.local 파일에 유효한 Anthropic API 키를 추가해주세요.'
+    );
+  }
+
   // 문서 정보 조회
   const document = await db
     .select()
@@ -353,7 +361,13 @@ export async function createValidationSessionFromDocument(
     .returning();
 
   // Inngest 이벤트 발송
-  await inngest.send({
+  console.log('[HITL] Sending validate-document event:', {
+    sessionId: session.id,
+    chatbotId,
+    tenantId: document.tenantId,
+  });
+
+  const sendResult = await inngest.send({
     name: 'knowledge-pages/validate-document',
     data: {
       sessionId: session.id,
@@ -362,6 +376,8 @@ export async function createValidationSessionFromDocument(
       parentPageId,
     },
   } as KnowledgePagesValidateDocumentEvent);
+
+  console.log('[HITL] Event send result:', sendResult);
 
   revalidatePath('/console/chatbot/blog/validation');
 

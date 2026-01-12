@@ -15,6 +15,17 @@ import { validationSessions } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
 import type { DocumentStructure } from '../types';
 
+// ANTHROPIC_API_KEY 환경변수 체크
+function checkAnthropicApiKey(): void {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || apiKey === 'your-anthropic-api-key' || apiKey.startsWith('sk-ant-xxx')) {
+    throw new Error(
+      'ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다. ' +
+        '.env.local 파일에 유효한 Anthropic API 키를 추가해주세요.'
+    );
+  }
+}
+
 const anthropic = createAnthropic();
 
 /**
@@ -93,6 +104,9 @@ interface ReconstructionResult {
 export async function reconstructMarkdown(
   originalText: string
 ): Promise<ReconstructionResult> {
+  // API 키 확인
+  checkAnthropicApiKey();
+
   // 문서가 너무 길면 청킹하여 처리
   const maxChars = 80000; // 약 20k 토큰
   const truncatedText =

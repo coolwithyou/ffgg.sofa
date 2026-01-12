@@ -8,7 +8,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
+import { FileText, RefreshCw, FileCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCurrentChatbot } from '../../hooks/use-console-state';
 import { NoChatbotState } from '../../components/no-chatbot-state';
@@ -21,6 +22,7 @@ import {
   getKnowledgePage,
   type KnowledgePageTreeNode,
 } from './actions';
+import { getValidationSessions } from './validation/actions';
 import type { KnowledgePage } from '@/lib/db';
 import { toast } from 'sonner';
 
@@ -36,6 +38,9 @@ export default function BlogPage() {
   const [selectedPage, setSelectedPage] = useState<KnowledgePage | null>(null);
   const [isLoadingPage, setIsLoadingPage] = useState(false);
 
+  // 검증 세션 상태 (진행 중/대기 중 개수)
+  const [pendingValidationCount, setPendingValidationCount] = useState(0);
+
   // 페이지 목록 로드
   const loadPages = useCallback(async () => {
     if (!currentChatbot?.id) return;
@@ -49,6 +54,22 @@ export default function BlogPage() {
       toast.error('페이지 목록을 불러오는데 실패했습니다.');
     } finally {
       setIsLoading(false);
+    }
+  }, [currentChatbot?.id]);
+
+  // 검증 세션 개수 로드
+  const loadValidationCount = useCallback(async () => {
+    if (!currentChatbot?.id) return;
+
+    try {
+      const sessions = await getValidationSessions(currentChatbot.id);
+      // 진행 중/대기 중인 세션 개수
+      const pendingCount = sessions.filter((s) =>
+        ['pending', 'analyzing', 'extracting_claims', 'verifying', 'ready_for_review', 'reviewing'].includes(s.status)
+      ).length;
+      setPendingValidationCount(pendingCount);
+    } catch (error) {
+      console.error('Failed to load validation count:', error);
     }
   }, [currentChatbot?.id]);
 
@@ -70,7 +91,8 @@ export default function BlogPage() {
   // 초기 로드
   useEffect(() => {
     loadPages();
-  }, [loadPages]);
+    loadValidationCount();
+  }, [loadPages, loadValidationCount]);
 
   // 페이지 선택 시 상세 정보 로드
   useEffect(() => {
@@ -131,10 +153,25 @@ export default function BlogPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* 검증 세션 목록 버튼 */}
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/console/chatbot/blog/validation" className="relative">
+              <FileCheck className="mr-1 h-4 w-4" />
+              문서 검증
+              {pendingValidationCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+                  {pendingValidationCount > 9 ? '9+' : pendingValidationCount}
+                </span>
+              )}
+            </Link>
+          </Button>
           <Button
             variant="outline"
             size="sm"
-            onClick={loadPages}
+            onClick={() => {
+              loadPages();
+              loadValidationCount();
+            }}
             disabled={isLoading}
           >
             <RefreshCw

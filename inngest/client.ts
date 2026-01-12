@@ -14,8 +14,16 @@ import { eq } from 'drizzle-orm';
 
 /**
  * Inngest가 제대로 설정되어 있는지 확인
+ *
+ * 개발 환경에서 INNGEST_DEV=1이면 Dev Server를 사용하므로
+ * 이벤트 키 없이도 작동합니다.
  */
 function isInngestConfigured(): boolean {
+  // 개발 환경에서는 Dev Server 사용 - 키 없이 작동
+  if (process.env.INNGEST_DEV === '1' || process.env.NODE_ENV === 'development') {
+    return true;
+  }
+
   const eventKey = process.env.INNGEST_EVENT_KEY;
   const signingKey = process.env.INNGEST_SIGNING_KEY;
 

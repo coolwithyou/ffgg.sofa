@@ -30,7 +30,7 @@ import {
   logMaskingRevealed,
 } from '../actions';
 import type { validationSessions, claims, sourceSpans, validationAuditLogs } from '@/drizzle/schema';
-import { ArrowLeft, Check, X, AlertTriangle, Save } from 'lucide-react';
+import { ArrowLeft, Check, X, AlertTriangle, Save, Loader2 } from 'lucide-react';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
 
 type ValidationSession = typeof validationSessions.$inferSelect;
@@ -125,6 +125,26 @@ export default function DualViewerPage() {
     loadSession();
     loadAuditLogs();
   }, [loadSession, loadAuditLogs]);
+
+  // 처리 중인 세션 자동 폴링
+  useEffect(() => {
+    if (!session) return;
+
+    // 처리 중인 상태일 때만 폴링
+    const isProcessing = ['pending', 'analyzing', 'extracting_claims', 'verifying'].includes(
+      session.status
+    );
+
+    if (!isProcessing) return;
+
+    // 10초마다 새로고침
+    const interval = setInterval(() => {
+      loadSession();
+      loadAuditLogs();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [session, loadSession, loadAuditLogs]);
 
   // 마스킹 토글
   const handleToggleMasking = useCallback(async () => {
@@ -237,7 +257,7 @@ export default function DualViewerPage() {
       const result = await approveValidationSession(sessionId);
       if (result.success) {
         toast.success(`${result.pagesCount}개의 페이지가 생성되었습니다`);
-        router.push('../blog');
+        router.push('/console/chatbot/blog');
       }
     } catch {
       toast.error('승인에 실패했습니다');
@@ -264,7 +284,7 @@ export default function DualViewerPage() {
     try {
       await rejectValidationSession(sessionId, reason);
       toast.success('검증이 거부되었습니다');
-      router.push('../validation');
+      router.push('/console/chatbot/blog/validation');
     } catch {
       toast.error('거부에 실패했습니다');
     }
@@ -388,26 +408,101 @@ export default function DualViewerPage() {
               variant="ghost"
               size="sm"
               onClick={handleSaveReconstructed}
-              disabled={isSaving}
+              disabled={isSaving || !reconstructed}
             >
               <Save className="mr-1 h-4 w-4" />
               {isSaving ? '저장 중...' : '저장'}
             </Button>
           </div>
-          <ReconstructedEditor
-            value={reconstructed}
-            onChange={setReconstructed}
-            highlightedRange={
-              selectedClaim?.reconstructedLocation as
-                | {
-                    startLine: number;
-                    endLine: number;
-                    startChar: number;
-                    endChar: number;
-                  }
-                | undefined
-            }
-          />
+          {/* 재구성 결과가 비어있을 때 상태 표시 */}
+          {!reconstructed ? (
+            <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+              {['pending', 'analyzing', 'extracting_claims', 'verifying'].includes(session.status) ? (
+                <>
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-semibold text-foreground">
+                      {session.status === 'pending' && 'AI 분석 대기 중'}
+                      {session.status === 'analyzing' && '문서 분석 중'}
+                      {session.status === 'extracting_claims' && 'Claim 추출 중'}
+                      {session.status === 'verifying' && '검증 진행 중'}
+                    </h4>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      AI가 문서를 분석하고 마크다운을 생성하고 있습니다.
+                      <br />잠시 후 새로고침해 주세요.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadSession()}
+                  >
+                    <Loader2 className="mr-1 h-4 w-4" />
+                    새로고침
+                  </Button>
+                </>
+              ) : session.status === 'rejected' ? (
+                <>
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+                    <AlertTriangle className="h-8 w-8 text-destructive" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-semibold text-destructive">
+                      처리 실패
+                    </h4>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      문서 처리 중 오류가 발생했습니다.
+                      {session.reviewNote && (
+                        <span className="mt-2 block text-destructive">
+                          사유: {session.reviewNote}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                    <AlertTriangle className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-semibold text-foreground">
+                      재구성 결과 없음
+                    </h4>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      AI 재구성 결과가 비어 있습니다.
+                      <br />Inngest Dev Server가 실행 중인지 확인해주세요.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadSession()}
+                  >
+                    <Loader2 className="mr-1 h-4 w-4" />
+                    새로고침
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : (
+            <ReconstructedEditor
+              value={reconstructed}
+              onChange={setReconstructed}
+              highlightedRange={
+                selectedClaim?.reconstructedLocation as
+                  | {
+                      startLine: number;
+                      endLine: number;
+                      startChar: number;
+                      endChar: number;
+                    }
+                  | undefined
+              }
+            />
+          )}
         </div>
 
         {/* 우측: Claim 패널 */}
