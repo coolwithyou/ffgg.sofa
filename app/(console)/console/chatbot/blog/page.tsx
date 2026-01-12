@@ -7,10 +7,12 @@
  * 핵심 컨셉: 1 Page = 1 Chunk = 1 읽을 수 있는 문서
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { FileText, RefreshCw, FileCheck } from 'lucide-react';
+import { FileText, RefreshCw, FileCheck, CheckSquare, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useAlertDialog } from '@/components/ui/alert-dialog';
 import { useCurrentChatbot } from '../../hooks/use-console-state';
 import { NoChatbotState } from '../../components/no-chatbot-state';
 import { PageTree } from './page-tree';
@@ -20,26 +22,56 @@ import { ImportDocumentDialog } from './import-document-dialog';
 import {
   getKnowledgePagesTree,
   getKnowledgePage,
+  deleteKnowledgePages,
   type KnowledgePageTreeNode,
 } from './actions';
 import { getValidationSessions } from './validation/actions';
 import type { KnowledgePage } from '@/lib/db';
 import { toast } from 'sonner';
 
+/**
+ * 트리에서 모든 페이지 ID를 플랫하게 추출
+ */
+function getAllPageIds(pages: KnowledgePageTreeNode[]): string[] {
+  const ids: string[] = [];
+  function traverse(nodes: KnowledgePageTreeNode[]) {
+    for (const node of nodes) {
+      ids.push(node.id);
+      if (node.children.length > 0) {
+        traverse(node.children);
+      }
+    }
+  }
+  traverse(pages);
+  return ids;
+}
+
 export default function BlogPage() {
   const { currentChatbot } = useCurrentChatbot();
+  const { confirm } = useAlertDialog();
 
   // 페이지 트리 상태
   const [pages, setPages] = useState<KnowledgePageTreeNode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 선택된 페이지 상태
+  // 선택된 페이지 상태 (에디터용)
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [selectedPage, setSelectedPage] = useState<KnowledgePage | null>(null);
   const [isLoadingPage, setIsLoadingPage] = useState(false);
 
+  // 선택 모드 상태 (일괄 삭제용)
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   // 검증 세션 상태 (진행 중/대기 중 개수)
   const [pendingValidationCount, setPendingValidationCount] = useState(0);
+
+  // 전체 페이지 ID 목록
+  const allPageIds = useMemo(() => getAllPageIds(pages), [pages]);
+
+  // 전체 선택 상태 계산
+  const isAllSelected = allPageIds.length > 0 && selectedIds.size === allPageIds.length;
+  const isIndeterminate = selectedIds.size > 0 && selectedIds.size < allPageIds.length;
 
   // 페이지 목록 로드
   const loadPages = useCallback(async () => {
@@ -132,6 +164,58 @@ export default function BlogPage() {
     setSelectedPage(null);
   }, [loadPages]);
 
+  // 선택 모드 토글
+  const handleToggleSelectionMode = useCallback(() => {
+    setSelectionMode((prev) => !prev);
+    setSelectedIds(new Set());
+  }, []);
+
+  // 선택 모드 취소
+  const handleCancelSelection = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  // 전체 선택/해제 토글
+  const handleToggleSelectAll = useCallback(() => {
+    if (isAllSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(allPageIds));
+    }
+  }, [isAllSelected, allPageIds]);
+
+  // 선택 변경 핸들러
+  const handleSelectionChange = useCallback((ids: Set<string>) => {
+    setSelectedIds(ids);
+  }, []);
+
+  // 일괄 삭제 핸들러
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+
+    await confirm({
+      title: '페이지 일괄 삭제',
+      message: `선택한 ${selectedIds.size}개의 페이지를 삭제하시겠습니까?\n하위 페이지도 함께 삭제됩니다.`,
+      confirmText: '삭제',
+      cancelText: '취소',
+      variant: 'destructive',
+      onConfirm: async () => {
+        const result = await deleteKnowledgePages([...selectedIds]);
+        if (!result.success) {
+          throw new Error(result.error || '삭제에 실패했습니다.');
+        }
+        toast.success(`${result.deletedCount}개의 페이지가 삭제되었습니다.`);
+        // 상태 초기화
+        setSelectionMode(false);
+        setSelectedIds(new Set());
+        setSelectedPageId(null);
+        setSelectedPage(null);
+        loadPages();
+      },
+    });
+  }, [selectedIds, confirm, loadPages]);
+
   // 챗봇 없음 상태
   if (!currentChatbot) {
     return (
@@ -196,14 +280,67 @@ export default function BlogPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* 좌측: 트리 뷰 */}
         <div className="w-72 shrink-0 overflow-auto border-r border-border bg-muted/30 p-4">
+          {/* 트리 헤더 */}
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-medium text-muted-foreground">
               페이지 목록
             </h2>
-            <span className="text-xs text-muted-foreground">
-              {pages.length}개
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {pages.length}개
+              </span>
+              {/* 선택 모드 토글 버튼 */}
+              {!selectionMode && pages.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={handleToggleSelectionMode}
+                >
+                  <CheckSquare className="mr-1 h-3 w-3" />
+                  선택
+                </Button>
+              )}
+            </div>
           </div>
+
+          {/* 선택 모드 툴바 */}
+          {selectionMode && (
+            <div className="mb-3 flex items-center gap-2 rounded-md bg-muted p-2">
+              {/* 전체 선택 체크박스 */}
+              <Checkbox
+                checked={isIndeterminate ? 'indeterminate' : isAllSelected}
+                onCheckedChange={handleToggleSelectAll}
+              />
+              <span className="flex-1 text-xs text-muted-foreground">
+                {selectedIds.size > 0
+                  ? `${selectedIds.size}개 선택됨`
+                  : '전체 선택'}
+              </span>
+              {/* 삭제 버튼 */}
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={handleBulkDelete}
+                disabled={selectedIds.size === 0}
+              >
+                <Trash2 className="mr-1 h-3 w-3" />
+                삭제
+              </Button>
+              {/* 취소 버튼 */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={handleCancelSelection}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
+
+          {/* 트리 목록 */}
           {isLoading ? (
             <div className="flex h-40 items-center justify-center">
               <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -213,6 +350,9 @@ export default function BlogPage() {
               pages={pages}
               selectedPageId={selectedPageId}
               onSelectPage={handleSelectPage}
+              selectionMode={selectionMode}
+              selectedIds={selectedIds}
+              onSelectionChange={handleSelectionChange}
             />
           )}
         </div>

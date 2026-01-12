@@ -17,7 +17,7 @@ import {
   type NewKnowledgePage,
   type NewKnowledgePageVersion,
 } from '@/lib/db';
-import { eq, and, desc, asc, isNull, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, isNull, sql, inArray } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 import { revalidatePath } from 'next/cache';
 import { embedText } from '@/lib/rag/embedding';
@@ -434,6 +434,80 @@ export async function deleteKnowledgePage(
   } catch (error) {
     console.error('페이지 삭제 실패:', error);
     return { success: false, error: '페이지 삭제에 실패했습니다.' };
+  }
+}
+
+
+/**
+ * 여러 페이지 일괄 삭제
+ *
+ * 선택된 페이지들과 그 하위 페이지들을 모두 삭제합니다.
+ * 부모-자식이 동시에 선택된 경우 중복 삭제를 방지합니다.
+ */
+export async function deleteKnowledgePages(
+  pageIds: string[]
+): Promise<{ success: boolean; deletedCount: number; error?: string }> {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    return { success: false, deletedCount: 0, error: '인증이 필요합니다.' };
+  }
+
+  if (pageIds.length === 0) {
+    return { success: false, deletedCount: 0, error: '삭제할 페이지가 없습니다.' };
+  }
+
+  try {
+    // 선택된 페이지들의 정보를 조회
+    const selectedPages = await db
+      .select({ id: knowledgePages.id, path: knowledgePages.path })
+      .from(knowledgePages)
+      .where(
+        and(
+          inArray(knowledgePages.id, pageIds),
+          eq(knowledgePages.tenantId, session.tenantId)
+        )
+      );
+
+    if (selectedPages.length === 0) {
+      return { success: false, deletedCount: 0, error: '삭제할 페이지를 찾을 수 없습니다.' };
+    }
+
+    // 부모-자식 중복 제거: 부모가 선택되면 자식은 자동으로 삭제되므로 제외
+    const pathsToDelete = selectedPages.map((p) => p.path);
+    const rootPagesToDelete = selectedPages.filter((page) => {
+      // 다른 선택된 페이지의 하위 경로가 아닌 경우만 포함
+      return !pathsToDelete.some(
+        (otherPath) =>
+          otherPath !== page.path && page.path.startsWith(otherPath + '/')
+      );
+    });
+
+    let deletedCount = 0;
+
+    // 각 루트 페이지에 대해 삭제 수행
+    for (const page of rootPagesToDelete) {
+      // 하위 페이지들 재귀 삭제
+      await deleteDescendants(page.id, session.tenantId);
+
+      // 현재 페이지 삭제
+      await db
+        .delete(knowledgePages)
+        .where(
+          and(
+            eq(knowledgePages.id, page.id),
+            eq(knowledgePages.tenantId, session.tenantId)
+          )
+        );
+
+      deletedCount++;
+    }
+
+    revalidatePath('/console/chatbot/blog');
+
+    return { success: true, deletedCount };
+  } catch (error) {
+    console.error('페이지 일괄 삭제 실패:', error);
+    return { success: false, deletedCount: 0, error: '페이지 삭제에 실패했습니다.' };
   }
 }
 
