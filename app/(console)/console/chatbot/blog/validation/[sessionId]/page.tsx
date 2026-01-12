@@ -32,6 +32,16 @@ import {
 import type { validationSessions, claims, sourceSpans, validationAuditLogs } from '@/drizzle/schema';
 import { ArrowLeft, Check, X, AlertTriangle, Save, Loader2 } from 'lucide-react';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 type ValidationSession = typeof validationSessions.$inferSelect;
 type Claim = typeof claims.$inferSelect;
@@ -60,6 +70,11 @@ export default function DualViewerPage() {
   const [reconstructed, setReconstructed] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
+
+  // 거부 다이얼로그 상태
+  const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [isRejecting, setIsRejecting] = useState(false);
 
   // Phase 4 추가 상태
   const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true);
@@ -266,27 +281,29 @@ export default function DualViewerPage() {
     }
   };
 
-  // 거부
-  const handleReject = async () => {
-    const confirmed = await confirm({
-      title: '검증 거부',
-      message: '이 검증 세션을 거부하시겠습니까? 거부 사유를 입력해주세요.',
-      confirmText: '거부',
-      cancelText: '취소',
-      variant: 'destructive',
-    });
+  // 거부 다이얼로그 열기
+  const handleRejectClick = () => {
+    setRejectReason('');
+    setIsRejectDialogOpen(true);
+  };
 
-    if (!confirmed) return;
+  // 거부 확인
+  const handleRejectConfirm = async () => {
+    if (!rejectReason.trim()) {
+      toast.error('거부 사유를 입력해주세요');
+      return;
+    }
 
-    const reason = window.prompt('거부 사유를 입력하세요:');
-    if (!reason) return;
-
+    setIsRejecting(true);
     try {
-      await rejectValidationSession(sessionId, reason);
+      await rejectValidationSession(sessionId, rejectReason.trim());
       toast.success('검증이 거부되었습니다');
+      setIsRejectDialogOpen(false);
       router.push('/console/chatbot/blog/validation');
     } catch {
       toast.error('거부에 실패했습니다');
+    } finally {
+      setIsRejecting(false);
     }
   };
 
@@ -363,7 +380,7 @@ export default function DualViewerPage() {
           </span>
         )}
 
-        <Button variant="outline" size="sm" onClick={handleReject}>
+        <Button variant="outline" size="sm" onClick={handleRejectClick}>
           <X className="mr-1 h-4 w-4" />
           거부
         </Button>
@@ -520,6 +537,60 @@ export default function DualViewerPage() {
           />
         </div>
       </div>
+
+      {/* 거부 사유 입력 다이얼로그 */}
+      <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>검증 거부</DialogTitle>
+            <DialogDescription>
+              이 검증 세션을 거부합니다. 거부 사유를 입력해주세요.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="reject-reason" className="text-sm font-medium">
+              거부 사유
+            </Label>
+            <Input
+              id="reject-reason"
+              placeholder="거부 사유를 입력하세요..."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              className="mt-2"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleRejectConfirm();
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsRejectDialogOpen(false)}
+              disabled={isRejecting}
+            >
+              취소
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRejectConfirm}
+              disabled={isRejecting || !rejectReason.trim()}
+            >
+              {isRejecting ? (
+                <>
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  거부 중...
+                </>
+              ) : (
+                '거부'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
