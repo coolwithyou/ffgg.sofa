@@ -10,7 +10,7 @@
  * 4. Knowledge Pages DB 저장 (Draft 상태)
  */
 
-import { createAnthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
 import { createKnowledgePage } from '@/app/(console)/console/chatbot/blog/actions';
 import { logger } from '@/lib/logger';
@@ -30,9 +30,6 @@ import type {
   ConversionProgress,
   ConversionResult,
 } from './types';
-
-// Anthropic 클라이언트 생성
-const anthropic = createAnthropic();
 
 /**
  * 문서 → Knowledge Pages 변환 메인 함수
@@ -166,16 +163,16 @@ export async function convertDocumentToPages(
  * Step 1: LLM으로 문서 구조 분석
  */
 async function analyzeDocumentStructure(documentText: string): Promise<DocumentStructure> {
-  // 문서가 너무 길면 처음 부분만 사용 (토큰 제한)
-  const maxChars = 100000; // 약 25k 토큰
+  // Gemini 2.0 Flash는 1M 토큰 컨텍스트 지원
+  const maxChars = 200000; // 약 50k 토큰
   const truncatedText =
     documentText.length > maxChars ? documentText.slice(0, maxChars) + '\n\n[문서가 너무 길어 일부만 분석합니다...]' : documentText;
 
   const { text } = await generateText({
-    model: anthropic('claude-3-5-haiku-latest'),
+    model: google('gemini-2.0-flash'),
     system: STRUCTURE_ANALYSIS_SYSTEM_PROMPT,
     prompt: createStructureAnalysisPrompt(truncatedText),
-    maxOutputTokens: 4096,
+    maxOutputTokens: 8192,
     temperature: 0,
   });
 
@@ -230,9 +227,9 @@ async function generatePagesContent(
     // MVP에서는 전체 텍스트 사용, 추후 페이지 매핑 구현 필요
     const sourceText = extractSourceText(fullDocumentText, node.sourcePages);
 
-    // LLM으로 콘텐츠 생성
+    // LLM으로 콘텐츠 생성 (Gemini 2.0 Flash)
     const { text } = await generateText({
-      model: anthropic('claude-3-5-haiku-latest'),
+      model: google('gemini-2.0-flash'),
       system: CONTENT_GENERATION_SYSTEM_PROMPT,
       prompt: createContentGenerationPrompt(
         node.title,
@@ -241,7 +238,7 @@ async function generatePagesContent(
         sourceText,
         node.sourcePages
       ),
-      maxOutputTokens: 4096,
+      maxOutputTokens: 16384,
       temperature: 0,
     });
 
@@ -312,8 +309,8 @@ function countPages(nodes: PageNode[]): number {
  * TODO: PDF 페이지 매핑 구현 시 개선 필요
  */
 function extractSourceText(fullText: string, _sourcePages: number[]): string {
-  // 토큰 제한을 위해 최대 길이 설정
-  const maxChars = 50000; // 약 12.5k 토큰
+  // Gemini 2.0 Flash는 큰 컨텍스트 지원
+  const maxChars = 100000; // 약 25k 토큰
   return fullText.length > maxChars ? fullText.slice(0, maxChars) + '\n\n[텍스트가 너무 길어 일부만 사용합니다...]' : fullText;
 }
 

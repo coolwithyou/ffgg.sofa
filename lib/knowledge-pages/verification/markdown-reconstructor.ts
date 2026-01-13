@@ -9,24 +9,22 @@
  */
 
 import { generateText } from 'ai';
-import { createAnthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
 import { db } from '@/lib/db';
 import { validationSessions } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
 import type { DocumentStructure } from '../types';
 
-// ANTHROPIC_API_KEY 환경변수 체크
-function checkAnthropicApiKey(): void {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey || apiKey === 'your-anthropic-api-key' || apiKey.startsWith('sk-ant-xxx')) {
+// GOOGLE_GENERATIVE_AI_API_KEY 환경변수 체크
+function checkGoogleApiKey(): void {
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (!apiKey || apiKey === 'your-google-api-key') {
     throw new Error(
-      'ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다. ' +
-        '.env.local 파일에 유효한 Anthropic API 키를 추가해주세요.'
+      'GOOGLE_GENERATIVE_AI_API_KEY 환경변수가 설정되지 않았습니다. ' +
+        '.env.local 파일에 유효한 Google API 키를 추가해주세요.'
     );
   }
 }
-
-const anthropic = createAnthropic();
 
 /**
  * 마크다운 재구성 시스템 프롬프트
@@ -55,6 +53,11 @@ export const MARKDOWN_RECONSTRUCTION_SYSTEM_PROMPT = `당신은 문서 정리 �
    - 논리적 문단 구분
    - 중요 내용 **굵게** 표시
    - 인용이나 참고는 > 사용
+
+## 중요 주의사항
+- 절대로 내용을 생략하지 마세요. "(이하 생략)", "..." 등으로 내용을 줄이지 마세요.
+- 문서 전체를 완벽하게 변환해야 합니다.
+- 원본에 있는 모든 정보가 결과물에도 있어야 합니다.
 
 ## 출력 형식
 마크다운 텍스트만 반환하세요.
@@ -105,35 +108,36 @@ export async function reconstructMarkdown(
   originalText: string
 ): Promise<ReconstructionResult> {
   // API 키 확인
-  checkAnthropicApiKey();
+  checkGoogleApiKey();
 
-  // 문서가 너무 길면 청킹하여 처리
-  const maxChars = 80000; // 약 20k 토큰
+  // Gemini 2.0 Flash는 1M 토큰 컨텍스트 지원
+  // 입력 제한을 200,000자로 상향 (약 50k 토큰)
+  const maxChars = 200000;
   const truncatedText =
     originalText.length > maxChars
       ? originalText.slice(0, maxChars) + '\n\n[문서가 너무 길어 일부만 처리됩니다...]'
       : originalText;
 
-  // Step 1: 마크다운 재구성
+  // Step 1: 마크다운 재구성 (Gemini 2.0 Flash - 최대 65k 출력 토큰)
   const { text: markdown } = await generateText({
-    model: anthropic('claude-3-5-haiku-latest'),
+    model: google('gemini-2.0-flash'),
     system: MARKDOWN_RECONSTRUCTION_SYSTEM_PROMPT,
-    prompt: `다음 원본 텍스트를 깔끔한 마크다운으로 재구성하세요:\n\n${truncatedText}`,
-    maxOutputTokens: 8192,
+    prompt: `다음 원본 텍스트를 깔끔한 마크다운으로 재구성하세요. 절대로 내용을 생략하지 마세요:\n\n${truncatedText}`,
+    maxOutputTokens: 65536,
     temperature: 0,
   });
 
   // 마크다운 코드 블록 표시 제거
   const cleanMarkdown = markdown.replace(/```(?:markdown)?\n?|\n?```/g, '').trim();
 
-  // Step 2: 구조 분석
+  // Step 2: 구조 분석 (Gemini 2.0 Flash)
   let structure: DocumentStructure | null = null;
   try {
     const { text: structureJson } = await generateText({
-      model: anthropic('claude-3-5-haiku-latest'),
+      model: google('gemini-2.0-flash'),
       system: STRUCTURE_EXTRACTION_SYSTEM_PROMPT,
       prompt: `다음 마크다운 문서의 구조를 분석하세요:\n\n${cleanMarkdown}`,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 8192,
       temperature: 0,
     });
 

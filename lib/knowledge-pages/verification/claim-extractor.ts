@@ -3,14 +3,12 @@
 import { db } from '@/lib/db';
 import { claims } from '@/drizzle/schema';
 import { generateText } from 'ai';
-import { createAnthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
 import {
   CLAIM_EXTRACTION_SYSTEM_PROMPT,
   createClaimExtractionPrompt,
 } from './prompts/claim-extraction';
 import type { ClaimType, RiskLevel, ReconstructedLocation } from '../types';
-
-const anthropic = createAnthropic();
 
 interface ExtractedClaim {
   text: string;
@@ -116,18 +114,18 @@ export function extractRegexClaims(markdown: string): ExtractedClaim[] {
  * 예: "환불 정책은 7일 이내입니다", "마케팅팀 담당자는 홍길동입니다"
  */
 async function extractLLMClaims(markdown: string): Promise<ExtractedClaim[]> {
-  // 문서가 너무 길면 청킹
-  const maxChars = 30000;
+  // Gemini 2.0 Flash는 큰 컨텍스트 지원
+  const maxChars = 100000;
   const truncatedMarkdown =
     markdown.length > maxChars
       ? markdown.slice(0, maxChars) + '\n\n[문서가 길어 일부만 분석합니다...]'
       : markdown;
 
   const { text } = await generateText({
-    model: anthropic('claude-3-5-haiku-latest'),
+    model: google('gemini-2.0-flash'),
     system: CLAIM_EXTRACTION_SYSTEM_PROMPT,
     prompt: createClaimExtractionPrompt(truncatedMarkdown),
-    maxOutputTokens: 4096,
+    maxOutputTokens: 8192,
     temperature: 0,
   });
 

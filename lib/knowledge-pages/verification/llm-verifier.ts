@@ -11,6 +11,8 @@ import {
 } from './prompts/verification';
 import type { Verdict, SuspicionType } from '../types';
 
+// NOTE: Claim 검증은 추론 정확도가 중요하므로 Claude Haiku 유지
+// (Gemini는 구조화된 출력에 적합, Claude는 추론에 적합)
 const anthropic = createAnthropic();
 
 interface VerificationResult {
