@@ -42,6 +42,9 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { PageStructurePreview } from '../_components/page-structure-preview';
+import { MarkdownGuideDialog } from '../_components/markdown-guide-dialog';
+import type { DocumentStructure } from '@/lib/knowledge-pages/types';
 
 type ValidationSession = typeof validationSessions.$inferSelect;
 type Claim = typeof claims.$inferSelect;
@@ -84,6 +87,14 @@ export default function DualViewerPage() {
   const [originalMaskings, setOriginalMaskings] = useState<MaskingEntry[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
+
+  // 페이지 구조 미리보기 하이라이트 (노드 선택 시)
+  const [structureHighlightRange, setStructureHighlightRange] = useState<{
+    startLine: number;
+    endLine: number;
+    startChar: number;
+    endChar: number;
+  } | null>(null);
 
   // 스크롤 동기화를 위한 refs
   const leftPanelRef = useRef<HTMLDivElement>(null);
@@ -160,6 +171,37 @@ export default function DualViewerPage() {
 
     return () => clearInterval(interval);
   }, [session, loadSession, loadAuditLogs]);
+
+  // 페이지 구조 노드 선택 핸들러 (라인 → 문자 위치 변환)
+  const handleStructureNodeSelect = useCallback(
+    (startLine: number, endLine: number) => {
+      const lines = reconstructed.split('\n');
+      let startChar = 0;
+      let endChar = 0;
+
+      // startLine까지의 문자 수 계산 (1-indexed)
+      for (let i = 0; i < startLine - 1 && i < lines.length; i++) {
+        startChar += lines[i].length + 1; // +1 for newline
+      }
+
+      // endLine까지의 문자 수 계산
+      for (let i = 0; i < endLine && i < lines.length; i++) {
+        endChar += lines[i].length + 1;
+      }
+      endChar = Math.max(endChar - 1, startChar); // 마지막 줄바꿈 제외
+
+      setStructureHighlightRange({
+        startLine,
+        endLine,
+        startChar,
+        endChar,
+      });
+
+      // 선택된 Claim 해제 (페이지 구조 하이라이트 우선)
+      setSelectedClaimId(null);
+    },
+    [reconstructed]
+  );
 
   // 마스킹 토글
   const handleToggleMasking = useCallback(async () => {
@@ -317,85 +359,104 @@ export default function DualViewerPage() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* 상단 바 */}
-      <header className="flex items-center gap-4 border-b border-border px-4 py-3">
-        <Button variant="ghost" size="sm" onClick={() => router.push('../validation')}>
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          목록
-        </Button>
+      {/* 상단 바 - 2행 구성 */}
+      <header className="border-b border-border">
+        {/* 1행: 네비게이션 및 필터 */}
+        <div className="flex h-12 items-center gap-4 border-b border-border/50 px-4">
+          <Button variant="ghost" size="sm" onClick={() => router.push('../validation')}>
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            목록
+          </Button>
 
-        <FilterTabs
-          tabs={[
-            { id: 'all', label: '전체', count: claimsData.length },
-            {
-              id: 'high_risk',
-              label: '고위험',
-              count: claimsData.filter((c) => c.riskLevel === 'high').length,
-            },
-            {
-              id: 'contradicted',
-              label: '모순',
-              count: claimsData.filter((c) => c.verdict === 'contradicted').length,
-            },
-            {
-              id: 'not_found',
-              label: '근거 없음',
-              count: claimsData.filter((c) => c.verdict === 'not_found').length,
-            },
-            {
-              id: 'pending',
-              label: '미검토',
-              count: claimsData.filter((c) => !c.humanVerdict).length,
-            },
-          ]}
-          activeTab={activeFilter}
-          onChange={(tab) => setActiveFilter(tab as FilterType)}
-        />
+          <FilterTabs
+            tabs={[
+              { id: 'all', label: '전체', count: claimsData.length },
+              {
+                id: 'high_risk',
+                label: '고위험',
+                count: claimsData.filter((c) => c.riskLevel === 'high').length,
+              },
+              {
+                id: 'contradicted',
+                label: '모순',
+                count: claimsData.filter((c) => c.verdict === 'contradicted').length,
+              },
+              {
+                id: 'not_found',
+                label: '근거 없음',
+                count: claimsData.filter((c) => c.verdict === 'not_found').length,
+              },
+              {
+                id: 'pending',
+                label: '미검토',
+                count: claimsData.filter((c) => !c.humanVerdict).length,
+              },
+            ]}
+            activeTab={activeFilter}
+            onChange={(tab) => setActiveFilter(tab as FilterType)}
+          />
 
-        <div className="flex-1" />
+          <div className="flex-1" />
 
-        {/* Phase 4: 스크롤 동기화 토글 */}
-        <ScrollSyncToggle
-          enabled={scrollSyncEnabled}
-          onToggle={setScrollSyncEnabled}
-          mode={syncMode}
-          onModeChange={setSyncMode}
-        />
-
-        {/* Phase 4: 마스킹 배지 */}
-        <MaskingBadge
-          maskings={originalMaskings}
-          isRevealed={isMaskingRevealed}
-          onToggleReveal={handleToggleMasking}
-          canReveal={originalMaskings.length > 0}
-        />
-
-        {/* Phase 4: 감사 로그 패널 */}
-        <AuditLogPanel logs={auditLogs} isLoading={isLoadingAuditLogs} />
-
-        {highRiskUnreviewed > 0 && (
-          <span className="flex items-center gap-1 text-sm text-destructive">
-            <AlertTriangle className="h-4 w-4" />
-            {highRiskUnreviewed}개 고위험 항목 미검토
-          </span>
-        )}
-
-        <Button variant="outline" size="sm" onClick={handleRejectClick}>
-          <X className="mr-1 h-4 w-4" />
-          거부
-        </Button>
-        <Button
-          size="sm"
-          onClick={handleApprove}
-          disabled={highRiskUnreviewed > 0 || isApproving}
-        >
-          {isApproving ? (
-            <div className="mr-1 h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-          ) : (
-            <Check className="mr-1 h-4 w-4" />
+          {highRiskUnreviewed > 0 && (
+            <span className="flex items-center gap-1 text-sm text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              {highRiskUnreviewed}개 고위험 미검토
+            </span>
           )}
-          승인 및 저장
-        </Button>
+
+          <Button variant="outline" size="sm" onClick={handleRejectClick}>
+            <X className="mr-1 h-4 w-4" />
+            거부
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleApprove}
+            disabled={highRiskUnreviewed > 0 || isApproving}
+          >
+            {isApproving ? (
+              <div className="mr-1 h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+            ) : (
+              <Check className="mr-1 h-4 w-4" />
+            )}
+            승인
+          </Button>
+        </div>
+
+        {/* 2행: 도구 버튼들 */}
+        <div className="flex h-10 items-center gap-3 bg-muted/30 px-4">
+          {/* 스크롤 동기화 토글 */}
+          <ScrollSyncToggle
+            enabled={scrollSyncEnabled}
+            onToggle={setScrollSyncEnabled}
+            mode={syncMode}
+            onModeChange={setSyncMode}
+          />
+
+          <div className="h-4 w-px bg-border" />
+
+          {/* 마스킹 배지 */}
+          <MaskingBadge
+            maskings={originalMaskings}
+            isRevealed={isMaskingRevealed}
+            onToggleReveal={handleToggleMasking}
+            canReveal={originalMaskings.length > 0}
+          />
+
+          <div className="h-4 w-px bg-border" />
+
+          {/* 감사 로그 패널 */}
+          <AuditLogPanel logs={auditLogs} isLoading={isLoadingAuditLogs} />
+
+          <div className="h-4 w-px bg-border" />
+
+          {/* 페이지 구조 미리보기 */}
+          <PageStructurePreview
+            structure={session.structureJson as DocumentStructure | null}
+            markdown={reconstructed}
+            onNodeSelect={handleStructureNodeSelect}
+          />
+        </div>
       </header>
 
       {/* 3열 레이아웃 */}
@@ -405,7 +466,7 @@ export default function DualViewerPage() {
           ref={leftPanelRef}
           className="w-[35%] overflow-auto border-r border-border"
         >
-          <div className="sticky top-0 z-10 border-b border-border bg-card px-4 py-2">
+          <div className="sticky top-0 z-10 flex h-10 items-center border-b border-border bg-card px-4">
             <h3 className="text-sm font-medium text-muted-foreground">원본 문서</h3>
           </div>
           <OriginalViewer
@@ -419,17 +480,20 @@ export default function DualViewerPage() {
           ref={middlePanelRef}
           className="w-[40%] overflow-auto border-r border-border"
         >
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card px-4 py-2">
+          <div className="sticky top-0 z-10 flex h-10 items-center justify-between border-b border-border bg-card px-4">
             <h3 className="text-sm font-medium text-muted-foreground">재구성 결과</h3>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleSaveReconstructed}
-              disabled={isSaving || !reconstructed}
-            >
-              <Save className="mr-1 h-4 w-4" />
-              {isSaving ? '저장 중...' : '저장'}
-            </Button>
+            <div className="flex items-center gap-1">
+              <MarkdownGuideDialog />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSaveReconstructed}
+                disabled={isSaving || !reconstructed}
+              >
+                <Save className="mr-1 h-4 w-4" />
+                {isSaving ? '저장 중...' : '저장'}
+              </Button>
+            </div>
           </div>
           {/* 재구성 결과가 비어있을 때 상태 표시 */}
           {!reconstructed ? (
@@ -509,14 +573,16 @@ export default function DualViewerPage() {
               value={reconstructed}
               onChange={setReconstructed}
               highlightedRange={
-                selectedClaim?.reconstructedLocation as
+                // 페이지 구조 선택 우선, 없으면 Claim 선택 사용
+                structureHighlightRange ||
+                (selectedClaim?.reconstructedLocation as
                   | {
                       startLine: number;
                       endLine: number;
                       startChar: number;
                       endChar: number;
                     }
-                  | undefined
+                  | undefined)
               }
             />
           )}
@@ -524,7 +590,7 @@ export default function DualViewerPage() {
 
         {/* 우측: Claim 패널 */}
         <div className="w-[25%] overflow-auto bg-muted/30">
-          <div className="sticky top-0 z-10 border-b border-border bg-muted/50 px-4 py-2">
+          <div className="sticky top-0 z-10 flex h-10 items-center border-b border-border bg-muted/50 px-4">
             <h3 className="text-sm font-medium text-muted-foreground">
               검증 항목 ({filteredClaims.length})
             </h3>
@@ -532,7 +598,11 @@ export default function DualViewerPage() {
           <ClaimPanel
             claims={filteredClaims}
             selectedId={selectedClaimId}
-            onSelect={setSelectedClaimId}
+            onSelect={(id) => {
+              setSelectedClaimId(id);
+              // Claim 선택 시 페이지 구조 하이라이트 해제
+              setStructureHighlightRange(null);
+            }}
             onVerdictChange={handleVerdictChange}
           />
         </div>

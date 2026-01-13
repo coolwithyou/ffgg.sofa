@@ -10,6 +10,7 @@ import { useTheme } from 'next-themes';
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
+import { highlightSpecialChars } from '@codemirror/view';
 import { cn } from '@/lib/utils';
 
 // 에디터 테마 생성 함수
@@ -63,6 +64,10 @@ function createEditorTheme(isDark: boolean) {
       '.cm-placeholder': {
         color: isDark ? 'hsl(240 5% 64.9%)' : 'hsl(240 3.8% 46.1%)',
         fontStyle: 'normal',
+      },
+      // 특수 문자 (탭, 제어문자 등) 시각화
+      '.cm-specialChar': {
+        color: isDark ? 'hsl(240 5% 40%)' : 'hsl(240 5% 70%)',
       },
       // 마크다운 문법 하이라이팅
       '.cm-header': {
@@ -168,6 +173,7 @@ export function MarkdownEditor({
         codeLanguages: languages,
       }),
       EditorView.lineWrapping,
+      highlightSpecialChars(), // 탭, 제어문자 등 시각화
     ],
     []
   );
