@@ -207,7 +207,7 @@ export function parseMarkdownStructure(
   const existingIds = new Set<string>();
 
   let documentTitle = frontmatter?.title || '';
-  let documentDescription = frontmatter?.description;
+  const documentDescription = frontmatter?.description;
   let preamble = ''; // # 헤딩 전 콘텐츠
   let currentSection: MarkdownSection | null = null;
   let currentContent: string[] = [];

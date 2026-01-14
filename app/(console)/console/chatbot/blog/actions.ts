@@ -24,6 +24,10 @@ import { embedText } from '@/lib/rag/embedding';
 import { validateFile, uploadFile, type AllowedMimeType } from '@/lib/upload';
 import { inngestClient } from '@/inngest/client';
 import { logger } from '@/lib/logger';
+import {
+  uploadMarkdownToPages,
+  validateMarkdownContent,
+} from '@/lib/knowledge-pages/markdown-to-pages';
 
 // ========================================
 // 타입 정의
@@ -214,6 +218,128 @@ export async function uploadAndConvertDocument(
       userId: session.userId,
     });
     return { success: false, error: '문서 업로드에 실패했습니다.' };
+  }
+}
+
+/**
+ * 마크다운 파일 직접 업로드 (LLM 변환 없이)
+ *
+ * 외부 LLM으로 이미 마크다운으로 변환된 파일을 직접 Knowledge Pages로 저장합니다.
+ * ## 헤딩 기준으로 페이지를 자동 분할하고, YAML 프론트매터에서 메타데이터를 추출합니다.
+ *
+ * @param formData - file: File (.md), chatbotId: string, parentPageId?: string
+ * @returns 업로드 결과 (성공 여부, 생성된 페이지 수, 루트 페이지 ID)
+ */
+export async function uploadMarkdownDirect(
+  formData: FormData
+): Promise<{
+  success: boolean;
+  pageCount?: number;
+  rootPageId?: string;
+  pages?: Array<{ id: string; title: string }>;
+  error?: string;
+}> {
+  const session = await getSession();
+  if (!session?.tenantId || !session?.userId) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  try {
+    // 1. FormData 파싱
+    const file = formData.get('file') as File | null;
+    const chatbotId = formData.get('chatbotId') as string | null;
+    const parentPageId = formData.get('parentPageId') as string | null;
+
+    if (!file) {
+      return { success: false, error: '파일이 필요합니다.' };
+    }
+
+    if (!chatbotId) {
+      return { success: false, error: 'chatbotId가 필요합니다.' };
+    }
+
+    // 2. 마크다운 파일 확장자 검증
+    const filename = file.name;
+    const isMarkdown =
+      filename.endsWith('.md') ||
+      filename.endsWith('.markdown') ||
+      file.type === 'text/markdown';
+
+    if (!isMarkdown) {
+      return {
+        success: false,
+        error: '마크다운 파일(.md)만 지원합니다.',
+      };
+    }
+
+    // 3. 챗봇 소유권 확인
+    const [chatbot] = await db
+      .select({ id: chatbots.id })
+      .from(chatbots)
+      .where(
+        and(
+          eq(chatbots.id, chatbotId),
+          eq(chatbots.tenantId, session.tenantId)
+        )
+      )
+      .limit(1);
+
+    if (!chatbot) {
+      return { success: false, error: '챗봇을 찾을 수 없습니다.' };
+    }
+
+    // 4. 파일 내용 읽기
+    const markdownContent = await file.text();
+
+    // 5. 마크다운 유효성 검증
+    const validation = validateMarkdownContent(markdownContent);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+
+    // 6. Knowledge Pages로 직접 저장
+    logger.info('[Blog] Starting direct markdown upload', {
+      chatbotId,
+      filename,
+      contentLength: markdownContent.length,
+      tenantId: session.tenantId,
+      userId: session.userId,
+    });
+
+    const result = await uploadMarkdownToPages(markdownContent, filename, {
+      chatbotId,
+      parentPageId: parentPageId ?? undefined,
+    });
+
+    if (result.success) {
+      logger.info('[Blog] Direct markdown upload completed', {
+        chatbotId,
+        filename,
+        pageCount: result.pageCount,
+        rootPageId: result.rootPageId,
+        tenantId: session.tenantId,
+      });
+
+      revalidatePath('/console/chatbot/blog');
+
+      return {
+        success: true,
+        pageCount: result.pageCount,
+        rootPageId: result.rootPageId,
+        pages: result.pages,
+      };
+    }
+
+    return {
+      success: false,
+      error: result.error || '마크다운 업로드에 실패했습니다.',
+    };
+  } catch (error) {
+    logger.error('[Blog] Direct markdown upload failed', error as Error, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+    });
+    return { success: false, error: '마크다운 업로드에 실패했습니다.' };
   }
 }
 

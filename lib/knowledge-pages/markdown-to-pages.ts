@@ -15,7 +15,6 @@ import { logger } from '@/lib/logger';
 import {
   parseMarkdownStructure,
   convertToGeneratedPages,
-  type ParsedMarkdown,
 } from './utils/markdown-parser';
 import type { GeneratedPage } from './types';
 
