@@ -22,6 +22,10 @@ import {
   CONTENT_GENERATION_SYSTEM_PROMPT,
   createContentGenerationPrompt,
 } from './prompts/content-generation';
+import {
+  truncateWithWarning,
+  TRUNCATION_LIMITS,
+} from './utils/truncation';
 import type {
   DocumentStructure,
   PageNode,
@@ -164,14 +168,16 @@ export async function convertDocumentToPages(
  */
 async function analyzeDocumentStructure(documentText: string): Promise<DocumentStructure> {
   // Gemini 2.0 Flash는 1M 토큰 컨텍스트 지원
-  const maxChars = 200000; // 약 50k 토큰
-  const truncatedText =
-    documentText.length > maxChars ? documentText.slice(0, maxChars) + '\n\n[문서가 너무 길어 일부만 분석합니다...]' : documentText;
+  const truncation = truncateWithWarning(documentText, {
+    maxChars: TRUNCATION_LIMITS.STRUCTURE_ANALYSIS,
+    context: 'document-to-pages/structure-analysis',
+    truncationMessage: '\n\n[문서가 너무 길어 일부만 분석합니다...]',
+  });
 
   const { text } = await generateText({
     model: google('gemini-2.0-flash'),
     system: STRUCTURE_ANALYSIS_SYSTEM_PROMPT,
-    prompt: createStructureAnalysisPrompt(truncatedText),
+    prompt: createStructureAnalysisPrompt(truncation.text),
     maxOutputTokens: 8192,
     temperature: 0,
   });
@@ -310,8 +316,12 @@ function countPages(nodes: PageNode[]): number {
  */
 function extractSourceText(fullText: string, _sourcePages: number[]): string {
   // Gemini 2.0 Flash는 큰 컨텍스트 지원
-  const maxChars = 100000; // 약 25k 토큰
-  return fullText.length > maxChars ? fullText.slice(0, maxChars) + '\n\n[텍스트가 너무 길어 일부만 사용합니다...]' : fullText;
+  const truncation = truncateWithWarning(fullText, {
+    maxChars: TRUNCATION_LIMITS.SOURCE_TEXT_EXTRACTION,
+    context: 'document-to-pages/extract-source-text',
+    truncationMessage: '\n\n[텍스트가 너무 길어 일부만 사용합니다...]',
+  });
+  return truncation.text;
 }
 
 /**

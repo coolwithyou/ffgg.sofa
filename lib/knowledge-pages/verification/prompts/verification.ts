@@ -1,5 +1,10 @@
 // lib/knowledge-pages/verification/prompts/verification.ts
 
+import {
+  truncateWithWarning,
+  TRUNCATION_LIMITS,
+} from '../../utils/truncation';
+
 export const VERIFICATION_SYSTEM_PROMPT = `당신은 문서 검증 전문가입니다. 재구성된 문서의 주장(Claim)이 원본 문서에 근거가 있는지 검증합니다.
 
 ## 판정 기준
@@ -58,16 +63,16 @@ export function createVerificationPrompt(
   originalText: string,
   claims: Array<{ id: string; text: string }>
 ): string {
-  // 원본이 너무 길면 자르기
-  const maxLength = 50000;
-  const truncatedOriginal =
-    originalText.length > maxLength
-      ? originalText.slice(0, maxLength) + '\n\n[문서가 길어 일부만 표시됨...]'
-      : originalText;
+  // 원본이 너무 길면 자르기 (검증은 Claude Haiku 사용 - 더 작은 컨텍스트)
+  const truncation = truncateWithWarning(originalText, {
+    maxChars: TRUNCATION_LIMITS.CLAIM_VERIFICATION,
+    context: 'verification/prompt',
+    truncationMessage: '\n\n[문서가 길어 일부만 표시됨...]',
+  });
 
   return `## 원본 문서
 
-${truncatedOriginal}
+${truncation.text}
 
 ---
 

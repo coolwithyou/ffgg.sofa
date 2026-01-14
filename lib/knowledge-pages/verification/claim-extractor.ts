@@ -8,6 +8,10 @@ import {
   CLAIM_EXTRACTION_SYSTEM_PROMPT,
   createClaimExtractionPrompt,
 } from './prompts/claim-extraction';
+import {
+  truncateWithWarning,
+  TRUNCATION_LIMITS,
+} from '../utils/truncation';
 import type { ClaimType, RiskLevel, ReconstructedLocation } from '../types';
 
 interface ExtractedClaim {
@@ -115,16 +119,16 @@ export function extractRegexClaims(markdown: string): ExtractedClaim[] {
  */
 async function extractLLMClaims(markdown: string): Promise<ExtractedClaim[]> {
   // Gemini 2.0 Flash는 큰 컨텍스트 지원
-  const maxChars = 100000;
-  const truncatedMarkdown =
-    markdown.length > maxChars
-      ? markdown.slice(0, maxChars) + '\n\n[문서가 길어 일부만 분석합니다...]'
-      : markdown;
+  const truncation = truncateWithWarning(markdown, {
+    maxChars: TRUNCATION_LIMITS.CLAIM_EXTRACTION,
+    context: 'claim-extractor/llm-claims',
+    truncationMessage: '\n\n[문서가 길어 일부만 분석합니다...]',
+  });
 
   const { text } = await generateText({
     model: google('gemini-2.0-flash'),
     system: CLAIM_EXTRACTION_SYSTEM_PROMPT,
-    prompt: createClaimExtractionPrompt(truncatedMarkdown),
+    prompt: createClaimExtractionPrompt(truncation.text),
     maxOutputTokens: 8192,
     temperature: 0,
   });

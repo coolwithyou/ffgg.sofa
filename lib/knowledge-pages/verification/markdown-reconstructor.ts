@@ -14,6 +14,11 @@ import { db } from '@/lib/db';
 import { validationSessions } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
 import type { DocumentStructure } from '../types';
+import {
+  truncateWithWarning,
+  TRUNCATION_LIMITS,
+  type TruncationResult,
+} from '../utils/truncation';
 
 // GOOGLE_GENERATIVE_AI_API_KEY 환경변수 체크
 function checkGoogleApiKey(): void {
@@ -96,6 +101,8 @@ JSON만 반환하세요.`;
 interface ReconstructionResult {
   markdown: string;
   structure: DocumentStructure | null;
+  /** truncation 발생 정보 (경고 표시용) */
+  truncation?: TruncationResult;
 }
 
 /**
@@ -111,18 +118,18 @@ export async function reconstructMarkdown(
   checkGoogleApiKey();
 
   // Gemini 2.0 Flash는 1M 토큰 컨텍스트 지원
-  // 입력 제한을 200,000자로 상향 (약 50k 토큰)
-  const maxChars = 200000;
-  const truncatedText =
-    originalText.length > maxChars
-      ? originalText.slice(0, maxChars) + '\n\n[문서가 너무 길어 일부만 처리됩니다...]'
-      : originalText;
+  // 입력 제한을 200,000자로 설정 (약 80k 토큰)
+  const truncation = truncateWithWarning(originalText, {
+    maxChars: TRUNCATION_LIMITS.MARKDOWN_RECONSTRUCTION,
+    context: 'markdown-reconstructor',
+    truncationMessage: '\n\n[문서가 너무 길어 일부만 처리됩니다...]',
+  });
 
   // Step 1: 마크다운 재구성 (Gemini 2.0 Flash - 최대 65k 출력 토큰)
   const { text: markdown } = await generateText({
     model: google('gemini-2.0-flash'),
     system: MARKDOWN_RECONSTRUCTION_SYSTEM_PROMPT,
-    prompt: `다음 원본 텍스트를 깔끔한 마크다운으로 재구성하세요. 절대로 내용을 생략하지 마세요:\n\n${truncatedText}`,
+    prompt: `다음 원본 텍스트를 깔끔한 마크다운으로 재구성하세요. 절대로 내용을 생략하지 마세요:\n\n${truncation.text}`,
     maxOutputTokens: 65536,
     temperature: 0,
   });
@@ -155,7 +162,11 @@ export async function reconstructMarkdown(
     // 구조 분석 실패해도 마크다운은 반환
   }
 
-  return { markdown: cleanMarkdown, structure };
+  return {
+    markdown: cleanMarkdown,
+    structure,
+    truncation: truncation.wasTruncated ? truncation : undefined,
+  };
 }
 
 /**
