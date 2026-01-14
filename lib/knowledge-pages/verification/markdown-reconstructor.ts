@@ -125,9 +125,11 @@ export async function reconstructMarkdown(
     truncationMessage: '\n\n[문서가 너무 길어 일부만 처리됩니다...]',
   });
 
-  // Step 1: 마크다운 재구성 (Gemini 2.0 Flash - 최대 65k 출력 토큰)
+  // Step 1: 마크다운 재구성
+  // ⚠️ Gemini 2.0 Flash는 최대 8,192 출력 토큰만 지원
+  // 긴 문서 재구성에는 Gemini 1.5 Flash 사용 (최대 65,536 출력 토큰 지원)
   const { text: markdown, finishReason, usage } = await generateText({
-    model: google('gemini-2.0-flash'),
+    model: google('gemini-1.5-flash'),
     system: MARKDOWN_RECONSTRUCTION_SYSTEM_PROMPT,
     prompt: `다음 원본 텍스트를 깔끔한 마크다운으로 재구성하세요. 절대로 내용을 생략하지 마세요:\n\n${truncation.text}`,
     maxOutputTokens: 65536,
@@ -184,11 +186,11 @@ export async function reconstructMarkdown(
     );
   }
 
-  // Step 2: 구조 분석 (Gemini 2.0 Flash)
+  // Step 2: 구조 분석 (Gemini 1.5 Flash)
   let structure: DocumentStructure | null = null;
   try {
     const { text: structureJson } = await generateText({
-      model: google('gemini-2.0-flash'),
+      model: google('gemini-1.5-flash'),
       system: STRUCTURE_EXTRACTION_SYSTEM_PROMPT,
       prompt: `다음 마크다운 문서의 구조를 분석하세요:\n\n${cleanMarkdown}`,
       maxOutputTokens: 8192,
