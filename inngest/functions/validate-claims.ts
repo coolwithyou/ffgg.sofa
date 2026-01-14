@@ -145,7 +145,20 @@ export const validateClaimsFunction = inngestClient.createFunction(
 
       try {
         const result = await reconstructAndSave(sessionId, session.originalText);
-        console.log(`[validate-claims:reconstruct-markdown] Reconstruction complete, markdown length: ${result.markdown.length}`);
+        console.log(`[validate-claims:reconstruct-markdown] Reconstruction complete:`, {
+          markdownLength: result.markdown.length,
+          truncationOccurred: !!result.truncation,
+          ...(result.truncation && {
+            originalLength: result.truncation.originalLength,
+            lostPercentage: result.truncation.lostPercentage,
+          }),
+        });
+
+        // Truncation 발생 시 경고
+        if (result.truncation) {
+          console.warn(`[validate-claims:reconstruct-markdown] ⚠️ Document truncated: ${result.truncation.lostPercentage}% lost`);
+        }
+
         return result.markdown;
       } catch (error) {
         console.error('[validate-claims:reconstruct-markdown] Reconstruction failed:', error);

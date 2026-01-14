@@ -207,7 +207,6 @@ function NavMain() {
 
     return false;
   };
-  // ㄹㄹ
 
   // 현재 경로가 해당 아이템의 경로와 일치하는지 확인
   const isActive = (item: NavItem) => {

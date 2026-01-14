@@ -126,7 +126,7 @@ export async function reconstructMarkdown(
   });
 
   // Step 1: 마크다운 재구성 (Gemini 2.0 Flash - 최대 65k 출력 토큰)
-  const { text: markdown } = await generateText({
+  const { text: markdown, finishReason, usage } = await generateText({
     model: google('gemini-2.0-flash'),
     system: MARKDOWN_RECONSTRUCTION_SYSTEM_PROMPT,
     prompt: `다음 원본 텍스트를 깔끔한 마크다운으로 재구성하세요. 절대로 내용을 생략하지 마세요:\n\n${truncation.text}`,
@@ -134,8 +134,55 @@ export async function reconstructMarkdown(
     temperature: 0,
   });
 
-  // 마크다운 코드 블록 표시 제거
-  const cleanMarkdown = markdown.replace(/```(?:markdown)?\n?|\n?```/g, '').trim();
+  // 디버그 로깅: 응답 상태 확인
+  console.log('[reconstructMarkdown] Gemini response stats:', {
+    finishReason,
+    usage,
+    rawLength: markdown.length,
+    first100Chars: markdown.slice(0, 100),
+    last100Chars: markdown.slice(-100),
+    whitespaceRatio: ((markdown.match(/\s/g)?.length || 0) / markdown.length).toFixed(2),
+  });
+
+  // 마크다운 코드 블록 표시 제거 (여러 패턴 처리)
+  let cleanMarkdown = markdown
+    .replace(/^```(?:markdown)?\s*\n?/gm, '') // 시작 코드 블록
+    .replace(/\n?```\s*$/gm, '')              // 끝 코드 블록
+    .trim();
+
+  // 연속 공백 줄을 최대 2줄로 정규화 (과도한 공백 문제 해결)
+  cleanMarkdown = cleanMarkdown.replace(/\n{3,}/g, '\n\n');
+
+  // 디버그: 정리 후 상태
+  console.log('[reconstructMarkdown] After cleanup:', {
+    cleanLength: cleanMarkdown.length,
+    lengthDiff: markdown.length - cleanMarkdown.length,
+  });
+
+  // finishReason 체크: 'length'면 출력이 잘린 것
+  if (finishReason === 'length') {
+    console.warn(
+      '[reconstructMarkdown] ⚠️ Output truncated by model (finishReason: length)! ' +
+        'Consider reducing input or increasing maxOutputTokens.'
+    );
+  } else if (finishReason !== 'stop') {
+    console.warn(`[reconstructMarkdown] Unexpected finishReason: ${finishReason}`);
+  }
+
+  // 결과 품질 검증: 비정상적으로 짧거나 공백이 많은 경우 경고
+  const nonWhitespaceLength = cleanMarkdown.replace(/\s/g, '').length;
+  const contentRatio = nonWhitespaceLength / cleanMarkdown.length;
+  if (cleanMarkdown.length < truncation.text.length * 0.1) {
+    console.warn(
+      '[reconstructMarkdown] ⚠️ Output suspiciously short! ' +
+        `Input: ${truncation.text.length} chars, Output: ${cleanMarkdown.length} chars`
+    );
+  }
+  if (contentRatio < 0.5) {
+    console.warn(
+      `[reconstructMarkdown] ⚠️ High whitespace ratio detected: ${((1 - contentRatio) * 100).toFixed(1)}% whitespace`
+    );
+  }
 
   // Step 2: 구조 분석 (Gemini 2.0 Flash)
   let structure: DocumentStructure | null = null;
