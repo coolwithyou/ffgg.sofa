@@ -9,7 +9,15 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { FileText, RefreshCw, FileCheck, CheckSquare, Trash2, X } from 'lucide-react';
+import {
+  FileText,
+  RefreshCw,
+  FileCheck,
+  CheckSquare,
+  Trash2,
+  X,
+  Upload,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
@@ -23,6 +31,7 @@ import {
   getKnowledgePagesTree,
   getKnowledgePage,
   deleteKnowledgePages,
+  publishKnowledgePages,
   type KnowledgePageTreeNode,
 } from './actions';
 import { getValidationSessions } from './validation/actions';
@@ -216,6 +225,47 @@ export default function BlogPage() {
     });
   }, [selectedIds, confirm, loadPages]);
 
+  // 일괄 발행 핸들러
+  const handleBulkPublish = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+
+    await confirm({
+      title: '페이지 일괄 발행',
+      message: `선택한 ${selectedIds.size}개의 페이지를 발행하시겠습니까?\n\n• 이미 발행된 페이지는 새 버전으로 업데이트됩니다.\n• 콘텐츠가 비어있는 페이지는 건너뜁니다.`,
+      confirmText: '발행',
+      cancelText: '취소',
+      onConfirm: async () => {
+        const result = await publishKnowledgePages([...selectedIds]);
+
+        if (!result.success && result.error) {
+          throw new Error(result.error);
+        }
+
+        // 결과 요약 토스트
+        const messages: string[] = [];
+        if (result.publishedCount > 0)
+          messages.push(`${result.publishedCount}개 발행 완료`);
+        if (result.skippedCount > 0)
+          messages.push(`${result.skippedCount}개 스킵 (빈 콘텐츠)`);
+        if (result.failedCount > 0)
+          messages.push(`${result.failedCount}개 실패`);
+
+        if (result.publishedCount > 0) {
+          toast.success(messages.join(', '));
+        } else if (result.skippedCount > 0 && result.failedCount === 0) {
+          toast.warning(messages.join(', '));
+        } else if (result.failedCount > 0) {
+          toast.error(messages.join(', '));
+        }
+
+        // 상태 초기화
+        setSelectionMode(false);
+        setSelectedIds(new Set());
+        loadPages();
+      },
+    });
+  }, [selectedIds, confirm, loadPages]);
+
   // 챗봇 없음 상태
   if (!currentChatbot) {
     return (
@@ -317,6 +367,17 @@ export default function BlogPage() {
                   ? `${selectedIds.size}개 선택됨`
                   : '전체 선택'}
               </span>
+              {/* 발행 버튼 */}
+              <Button
+                variant="default"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={handleBulkPublish}
+                disabled={selectedIds.size === 0}
+              >
+                <Upload className="mr-1 h-3 w-3" />
+                발행
+              </Button>
               {/* 삭제 버튼 */}
               <Button
                 variant="destructive"

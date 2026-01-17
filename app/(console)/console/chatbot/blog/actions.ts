@@ -20,7 +20,7 @@ import {
 import { eq, and, desc, asc, isNull, sql, inArray } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 import { revalidatePath } from 'next/cache';
-import { embedText } from '@/lib/rag/embedding';
+import { embedText, embedTexts } from '@/lib/rag/embedding';
 import { validateFile, uploadFile, type AllowedMimeType } from '@/lib/upload';
 import { inngestClient } from '@/inngest/client';
 import { logger } from '@/lib/logger';
@@ -801,6 +801,229 @@ export async function unpublishKnowledgePage(
   } catch (error) {
     console.error('페이지 발행 취소 실패:', error);
     return { success: false, error: '페이지 발행 취소에 실패했습니다.' };
+  }
+}
+
+/**
+ * 복수 페이지 일괄 발행 결과 타입
+ */
+export interface BulkPublishResult {
+  success: boolean;
+  publishedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  skippedPages?: Array<{ id: string; title: string; reason: string }>;
+  failedPages?: Array<{ id: string; title: string; error: string }>;
+  error?: string;
+}
+
+/**
+ * 복수 페이지 일괄 발행
+ *
+ * - 배치 임베딩으로 성능 최적화
+ * - 부분 성공 허용 (일부 실패해도 나머지는 계속 진행)
+ * - 빈 콘텐츠 페이지는 스킵 처리
+ */
+export async function publishKnowledgePages(
+  pageIds: string[]
+): Promise<BulkPublishResult> {
+  const session = await getSession();
+  if (!session?.tenantId || !session?.userId) {
+    return {
+      success: false,
+      publishedCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      error: '인증이 필요합니다.',
+    };
+  }
+
+  if (pageIds.length === 0) {
+    return {
+      success: false,
+      publishedCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      error: '발행할 페이지가 없습니다.',
+    };
+  }
+
+  try {
+    // 1. 선택된 페이지들의 상세 정보 조회
+    const pages = await db
+      .select()
+      .from(knowledgePages)
+      .where(
+        and(
+          inArray(knowledgePages.id, pageIds),
+          eq(knowledgePages.tenantId, session.tenantId)
+        )
+      );
+
+    // 2. 발행 가능/불가 분류
+    const publishable: (typeof pages)[0][] = [];
+    const skipped: Array<{ id: string; title: string; reason: string }> = [];
+
+    for (const page of pages) {
+      if (!page.content || page.content.trim().length === 0) {
+        skipped.push({
+          id: page.id,
+          title: page.title,
+          reason: '콘텐츠가 비어있습니다.',
+        });
+      } else {
+        publishable.push(page);
+      }
+    }
+
+    // 발행할 페이지가 없으면 조기 종료
+    if (publishable.length === 0) {
+      return {
+        success: true,
+        publishedCount: 0,
+        skippedCount: skipped.length,
+        failedCount: 0,
+        skippedPages: skipped.length > 0 ? skipped : undefined,
+      };
+    }
+
+    // 3. 배치 임베딩 생성
+    const textsForEmbedding = publishable.map(
+      (page) => `${page.path}\n${page.title}\n\n${page.content}`
+    );
+
+    let embeddings: number[][];
+    try {
+      embeddings = await embedTexts(textsForEmbedding, {
+        tenantId: session.tenantId,
+        chatbotId: publishable[0].chatbotId,
+      });
+    } catch (error) {
+      console.error('배치 임베딩 생성 실패:', error);
+      return {
+        success: false,
+        publishedCount: 0,
+        skippedCount: skipped.length,
+        failedCount: publishable.length,
+        skippedPages: skipped.length > 0 ? skipped : undefined,
+        error: '임베딩 생성에 실패했습니다.',
+      };
+    }
+
+    // 4. 각 페이지 발행 처리
+    const failed: Array<{ id: string; title: string; error: string }> = [];
+    let publishedCount = 0;
+
+    for (let i = 0; i < publishable.length; i++) {
+      const page = publishable[i];
+      const embedding = embeddings[i];
+
+      try {
+        // 4a. 기존 'published' 버전을 'history'로 변경
+        await db
+          .update(knowledgePageVersions)
+          .set({ versionType: 'history' })
+          .where(
+            and(
+              eq(knowledgePageVersions.pageId, page.id),
+              eq(knowledgePageVersions.versionType, 'published')
+            )
+          );
+
+        // 4b. 최대 버전 번호 조회
+        const [maxVersionResult] = await db
+          .select({
+            maxVersion: sql<number>`COALESCE(MAX(${knowledgePageVersions.versionNumber}), 0)`,
+          })
+          .from(knowledgePageVersions)
+          .where(eq(knowledgePageVersions.pageId, page.id));
+        const nextVersionNumber = (maxVersionResult?.maxVersion ?? 0) + 1;
+
+        // 4c. 새 버전 생성
+        const [createdVersion] = await db
+          .insert(knowledgePageVersions)
+          .values({
+            pageId: page.id,
+            versionType: 'published',
+            versionNumber: nextVersionNumber,
+            title: page.title,
+            content: page.content,
+            path: page.path,
+            embedding,
+            summary: null,
+            publishedAt: new Date(),
+            publishedBy: session.userId,
+          })
+          .returning({ id: knowledgePageVersions.id });
+
+        // 4d. knowledge_pages 상태 업데이트
+        await db
+          .update(knowledgePages)
+          .set({
+            publishedVersionId: createdVersion.id,
+            isIndexed: true,
+            status: 'published',
+            publishedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(knowledgePages.id, page.id));
+
+        // 4e. FIFO 히스토리 관리 (10개 초과 시 삭제)
+        const MAX_HISTORY_VERSIONS = 10;
+        const historyVersions = await db
+          .select({ id: knowledgePageVersions.id })
+          .from(knowledgePageVersions)
+          .where(
+            and(
+              eq(knowledgePageVersions.pageId, page.id),
+              eq(knowledgePageVersions.versionType, 'history')
+            )
+          )
+          .orderBy(desc(knowledgePageVersions.versionNumber));
+
+        if (historyVersions.length > MAX_HISTORY_VERSIONS) {
+          const toDelete = historyVersions.slice(MAX_HISTORY_VERSIONS);
+          await db
+            .delete(knowledgePageVersions)
+            .where(
+              inArray(
+                knowledgePageVersions.id,
+                toDelete.map((v) => v.id)
+              )
+            );
+        }
+
+        publishedCount++;
+      } catch (error) {
+        console.error(`페이지 발행 실패 (${page.id}):`, error);
+        failed.push({
+          id: page.id,
+          title: page.title,
+          error: error instanceof Error ? error.message : '알 수 없는 오류',
+        });
+      }
+    }
+
+    // 5. 결과 반환
+    revalidatePath('/console/chatbot/blog');
+
+    return {
+      success: publishedCount > 0 || (publishedCount === 0 && failed.length === 0),
+      publishedCount,
+      skippedCount: skipped.length,
+      failedCount: failed.length,
+      skippedPages: skipped.length > 0 ? skipped : undefined,
+      failedPages: failed.length > 0 ? failed : undefined,
+    };
+  } catch (error) {
+    console.error('일괄 발행 실패:', error);
+    return {
+      success: false,
+      publishedCount: 0,
+      skippedCount: 0,
+      failedCount: pageIds.length,
+      error: '일괄 발행에 실패했습니다.',
+    };
   }
 }
 
