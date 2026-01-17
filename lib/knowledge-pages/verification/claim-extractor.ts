@@ -118,7 +118,7 @@ export function extractRegexClaims(markdown: string): ExtractedClaim[] {
  * 예: "환불 정책은 7일 이내입니다", "마케팅팀 담당자는 홍길동입니다"
  */
 async function extractLLMClaims(markdown: string): Promise<ExtractedClaim[]> {
-  // Gemini 2.0 Flash는 큰 컨텍스트 지원
+  // Gemini 2.5 Flash: 65,536 출력 토큰 지원 (현재 권장 모델)
   const truncation = truncateWithWarning(markdown, {
     maxChars: TRUNCATION_LIMITS.CLAIM_EXTRACTION,
     context: 'claim-extractor/llm-claims',
@@ -126,7 +126,7 @@ async function extractLLMClaims(markdown: string): Promise<ExtractedClaim[]> {
   });
 
   const { text } = await generateText({
-    model: google('gemini-2.0-flash'),
+    model: google('gemini-2.5-flash'),
     system: CLAIM_EXTRACTION_SYSTEM_PROMPT,
     prompt: createClaimExtractionPrompt(truncation.text),
     maxOutputTokens: 8192,

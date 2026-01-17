@@ -167,7 +167,7 @@ export async function convertDocumentToPages(
  * Step 1: LLM으로 문서 구조 분석
  */
 async function analyzeDocumentStructure(documentText: string): Promise<DocumentStructure> {
-  // Gemini 2.0 Flash는 1M 토큰 컨텍스트 지원
+  // Gemini 2.5 Flash: 65,536 출력 토큰 지원 (현재 권장 모델)
   const truncation = truncateWithWarning(documentText, {
     maxChars: TRUNCATION_LIMITS.STRUCTURE_ANALYSIS,
     context: 'document-to-pages/structure-analysis',
@@ -175,7 +175,7 @@ async function analyzeDocumentStructure(documentText: string): Promise<DocumentS
   });
 
   const { text } = await generateText({
-    model: google('gemini-2.0-flash'),
+    model: google('gemini-2.5-flash'),
     system: STRUCTURE_ANALYSIS_SYSTEM_PROMPT,
     prompt: createStructureAnalysisPrompt(truncation.text),
     maxOutputTokens: 8192,
@@ -235,7 +235,7 @@ async function generatePagesContent(
 
     // LLM으로 콘텐츠 생성 (Gemini 2.0 Flash)
     const { text } = await generateText({
-      model: google('gemini-2.0-flash'),
+      model: google('gemini-2.5-flash'),
       system: CONTENT_GENERATION_SYSTEM_PROMPT,
       prompt: createContentGenerationPrompt(
         node.title,
