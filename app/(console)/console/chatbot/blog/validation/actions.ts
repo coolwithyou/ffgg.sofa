@@ -248,6 +248,71 @@ export async function rejectValidationSession(sessionId: string, reason: string)
 }
 
 /**
+ * 검증 세션 삭제
+ *
+ * 검토 대기 또는 완료된 세션만 삭제 가능합니다.
+ * 처리 중인 세션(pending, analyzing, extracting_claims, verifying)은 삭제할 수 없습니다.
+ *
+ * 주의: cascade 삭제로 claims, sourceSpans, auditLogs가 함께 삭제됩니다.
+ */
+export async function deleteValidationSession(
+  sessionId: string
+): Promise<{ success: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return { success: false, error: '인증이 필요합니다.' };
+  }
+
+  try {
+    // 세션 조회
+    const session = await db
+      .select()
+      .from(validationSessions)
+      .where(eq(validationSessions.id, sessionId))
+      .then((rows) => rows[0]);
+
+    if (!session) {
+      return { success: false, error: '세션을 찾을 수 없습니다.' };
+    }
+
+    // 상태 검증: 처리 중인 세션은 삭제 불가
+    const processingStatuses = ['pending', 'analyzing', 'extracting_claims', 'verifying'];
+    if (processingStatuses.includes(session.status)) {
+      return {
+        success: false,
+        error: '처리 중인 세션은 삭제할 수 없습니다. 처리가 완료된 후 다시 시도해주세요.',
+      };
+    }
+
+    // 문서 정보 조회 (로깅용)
+    const doc = await db
+      .select({ filename: documents.filename })
+      .from(documents)
+      .where(eq(documents.id, session.documentId))
+      .then((rows) => rows[0]);
+
+    // 삭제 전 로깅 (DB 감사 로그는 cascade로 함께 삭제되므로 console.log로 기록)
+    console.log('[Validation] Session deleted:', {
+      sessionId,
+      userId,
+      filename: doc?.filename,
+      status: session.status,
+      chatbotId: session.chatbotId,
+    });
+
+    // 세션 삭제 (cascade로 claims, sourceSpans, auditLogs 자동 삭제)
+    await db.delete(validationSessions).where(eq(validationSessions.id, sessionId));
+
+    revalidatePath('/console/chatbot/blog/validation');
+
+    return { success: true };
+  } catch (error) {
+    console.error('Validation session delete error:', error);
+    return { success: false, error: '세션 삭제 중 오류가 발생했습니다.' };
+  }
+}
+
+/**
  * 감사 로그 조회
  */
 export async function getValidationAuditLogs(sessionId: string) {

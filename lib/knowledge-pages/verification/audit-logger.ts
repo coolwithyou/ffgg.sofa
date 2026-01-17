@@ -222,4 +222,18 @@ export const auditHelpers = {
       targetId: sessionId,
       metadata: { format, pagesCount },
     }),
+
+  sessionDeleted: (
+    sessionId: string,
+    userId: string,
+    metadata?: { filename?: string; status?: string }
+  ) =>
+    logAudit({
+      sessionId,
+      userId,
+      action: 'session_deleted',
+      targetType: 'session',
+      targetId: sessionId,
+      metadata,
+    }),
 };

@@ -9,12 +9,13 @@ import {
   CardContent,
 } from '@/components/ui/card';
 import type { ValidationSessionWithDocument } from '../validation/actions';
-import { FileText, Clock, AlertTriangle, Loader2 } from 'lucide-react';
+import { FileText, Clock, AlertTriangle, Loader2, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 interface ValidationCardProps {
   session: ValidationSessionWithDocument;
+  onDelete?: (id: string, filename: string) => void;
 }
 
 const statusConfig: Record<
@@ -32,7 +33,7 @@ const statusConfig: Record<
   expired: { label: '만료됨', color: 'bg-muted text-muted-foreground' },
 };
 
-export function ValidationCard({ session }: ValidationCardProps) {
+export function ValidationCard({ session, onDelete }: ValidationCardProps) {
   const status = statusConfig[session.status] || statusConfig.pending;
 
   // 만료된 세션만 클릭 불가, 나머지는 모두 클릭하여 상세 보기 가능
@@ -43,6 +44,15 @@ export function ValidationCard({ session }: ValidationCardProps) {
 
   // 처리 중인 상태 (진행 표시)
   const isProcessing = ['pending', 'analyzing', 'extracting_claims', 'verifying'].includes(session.status);
+
+  // 삭제 버튼 클릭 핸들러
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.preventDefault(); // Link 클릭 방지
+    e.stopPropagation();
+    if (onDelete) {
+      onDelete(session.id, session.document?.filename || '문서');
+    }
+  };
 
   const content = (
     <Card
@@ -62,11 +72,23 @@ export function ValidationCard({ session }: ValidationCardProps) {
               {session.document?.filename || '문서'}
             </CardTitle>
           </div>
-          <span
-            className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.color}`}
-          >
-            {status.label}
-          </span>
+          <div className="flex items-center gap-2">
+            {/* 삭제 버튼 - onDelete가 있을 때만 표시 */}
+            {onDelete && (
+              <button
+                onClick={handleDeleteClick}
+                className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                title="삭제"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.color}`}
+            >
+              {status.label}
+            </span>
+          </div>
         </div>
         <CardDescription className="flex items-center gap-1">
           <Clock className="h-3 w-3" />

@@ -1625,6 +1625,7 @@ export const validationAuditLogs = pgTable(
         'session_approved', // 세션 승인
         'session_rejected', // 세션 거부
         'session_expired', // 세션 만료 (시스템 자동)
+        'session_deleted', // 세션 삭제
         'claim_reviewed', // Claim 검토
         'claim_approved', // Claim 승인
         'claim_rejected', // Claim 거부
