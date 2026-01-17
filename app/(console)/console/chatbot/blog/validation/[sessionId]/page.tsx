@@ -45,6 +45,8 @@ import { Label } from '@/components/ui/label';
 import { PageStructurePreview } from '../_components/page-structure-preview';
 import { MarkdownGuideDialog } from '../_components/markdown-guide-dialog';
 import { ValidationProgress } from '../_components/validation-progress';
+import { PageLocationSelectDialog } from '../_components/page-location-select-dialog';
+import { getKnowledgePagesTree, type KnowledgePageTreeNode } from '../../actions';
 import type { DocumentStructure, ProcessingStep } from '@/lib/knowledge-pages/types';
 
 type ValidationSession = typeof validationSessions.$inferSelect;
@@ -78,6 +80,10 @@ export default function DualViewerPage() {
   // 거부 다이얼로그 상태
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+
+  // 위치 선택 다이얼로그 상태
+  const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false);
+  const [existingPages, setExistingPages] = useState<KnowledgePageTreeNode[]>([]);
   const [isRejecting, setIsRejecting] = useState(false);
 
   // Phase 4 추가 상태
@@ -177,6 +183,13 @@ export default function DualViewerPage() {
     loadSession();
     loadAuditLogs();
   }, [loadSession, loadAuditLogs]);
+
+  // 위치 선택을 위한 기존 페이지 트리 로드
+  useEffect(() => {
+    if (session?.chatbotId) {
+      getKnowledgePagesTree(session.chatbotId).then(setExistingPages).catch(console.error);
+    }
+  }, [session?.chatbotId]);
 
   // 처리 중인 세션 자동 폴링 (상태별 차등 주기)
   useEffect(() => {
@@ -334,25 +347,20 @@ export default function DualViewerPage() {
     }
   };
 
-  // 승인
-  const handleApprove = async () => {
+  // 승인 - 위치 선택 다이얼로그 열기
+  const handleApprove = () => {
     if (highRiskUnreviewed > 0) {
       toast.error(`${highRiskUnreviewed}개의 고위험 항목을 먼저 검토하세요`);
       return;
     }
+    setIsLocationDialogOpen(true);
+  };
 
-    const confirmed = await confirm({
-      title: '검증 승인',
-      message: '이 검증 세션을 승인하고 Knowledge Pages를 생성하시겠습니까?',
-      confirmText: '승인',
-      cancelText: '취소',
-    });
-
-    if (!confirmed) return;
-
+  // 위치 선택 후 실제 승인 처리
+  const handleConfirmApproval = async (parentPageId: string | null) => {
     setIsApproving(true);
     try {
-      const result = await approveValidationSession(sessionId);
+      const result = await approveValidationSession(sessionId, parentPageId);
       if (result.success) {
         toast.success(`${result.pagesCount}개의 페이지가 생성되었습니다`);
         router.push('/console/chatbot/blog');
@@ -361,6 +369,7 @@ export default function DualViewerPage() {
       toast.error('승인에 실패했습니다');
     } finally {
       setIsApproving(false);
+      setIsLocationDialogOpen(false);
     }
   };
 
@@ -702,6 +711,16 @@ export default function DualViewerPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 페이지 생성 위치 선택 다이얼로그 */}
+      <PageLocationSelectDialog
+        open={isLocationDialogOpen}
+        onOpenChange={setIsLocationDialogOpen}
+        structure={session.structureJson as DocumentStructure | null}
+        existingPages={existingPages}
+        onConfirm={handleConfirmApproval}
+        isLoading={isApproving}
+      />
     </div>
   );
 }

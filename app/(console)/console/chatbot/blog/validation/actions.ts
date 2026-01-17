@@ -169,7 +169,10 @@ export async function updateClaimHumanVerdict(
  * Human-in-the-loop 검증이 완료된 세션을 승인하고,
  * 검증된 구조와 마크다운에서 Knowledge Pages를 생성합니다.
  */
-export async function approveValidationSession(sessionId: string) {
+export async function approveValidationSession(
+  sessionId: string,
+  parentPageId?: string | null
+) {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('Unauthorized');
 
@@ -193,7 +196,8 @@ export async function approveValidationSession(sessionId: string) {
       structure,
       markdown,
       validationSession.chatbotId,
-      validationSession.documentId
+      validationSession.documentId,
+      parentPageId ?? undefined
     );
 
     if (!result.success) {
