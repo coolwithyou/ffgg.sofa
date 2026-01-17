@@ -27,14 +27,29 @@ import {
   calculateRiskScore,
   reconstructAndSave,
 } from '@/lib/knowledge-pages/verification';
-import type { ValidationStatus } from '@/lib/knowledge-pages/types';
+import type { ValidationStatus, ProcessingStep } from '@/lib/knowledge-pages/types';
+
+/**
+ * Progress 정보 타입
+ */
+interface ProgressUpdate {
+  currentStep?: ProcessingStep;
+  completedSteps?: number;
+  totalSteps?: number;
+  processedClaims?: number;
+}
 
 /**
  * 세션 상태 업데이트 헬퍼
+ * @param sessionId - 세션 ID
+ * @param status - 검증 상태
+ * @param progress - 진행 상태 (선택)
+ * @param additionalData - 추가 데이터 (선택)
  */
 async function updateSessionStatus(
   sessionId: string,
   status: ValidationStatus,
+  progress?: ProgressUpdate,
   additionalData?: Record<string, unknown>
 ) {
   await db
@@ -42,6 +57,12 @@ async function updateSessionStatus(
     .set({
       status,
       updatedAt: new Date(),
+      ...(progress && {
+        currentStep: progress.currentStep,
+        completedSteps: progress.completedSteps,
+        totalSteps: progress.totalSteps,
+        processedClaims: progress.processedClaims,
+      }),
       ...additionalData,
     })
     .where(eq(validationSessions.id, sessionId));
@@ -117,8 +138,13 @@ export const validateClaimsFunction = inngestClient.createFunction(
         hasReconstructedMarkdown: !!result.reconstructedMarkdown,
       });
 
-      // 상태를 analyzing으로 업데이트
-      await updateSessionStatus(sessionId, 'analyzing');
+      // 상태를 analyzing으로 업데이트 (진행 상태 초기화)
+      await updateSessionStatus(sessionId, 'analyzing', {
+        currentStep: 'reconstruct',
+        totalSteps: 4,
+        completedSteps: 0,
+        processedClaims: 0,
+      });
 
       return result;
     });
@@ -172,7 +198,11 @@ export const validateClaimsFunction = inngestClient.createFunction(
 
     // Step 3: Claim 추출
     const extractedClaims = await step.run('extract-claims', async () => {
-      await updateSessionStatus(sessionId, 'extracting_claims');
+      // 재구성 완료 → Claim 추출 단계로
+      await updateSessionStatus(sessionId, 'extracting_claims', {
+        currentStep: 'extract',
+        completedSteps: 1,
+      });
 
       const result = await extractClaims(sessionId, markdown);
       console.log(`[validate-claims] Extracted ${result.length} claims`);
@@ -184,6 +214,9 @@ export const validateClaimsFunction = inngestClient.createFunction(
       // Claim이 없으면 바로 ready_for_review로
       await step.run('no-claims-complete', async () => {
         await updateSessionStatus(sessionId, 'ready_for_review', {
+          currentStep: 'complete',
+          completedSteps: 4,
+        }, {
           totalClaims: 0,
           riskScore: 0,
         });
@@ -199,7 +232,11 @@ export const validateClaimsFunction = inngestClient.createFunction(
 
     // Step 4: Regex 검증
     await step.run('verify-with-regex', async () => {
-      await updateSessionStatus(sessionId, 'verifying');
+      // Claim 추출 완료 → Regex 검증 단계로
+      await updateSessionStatus(sessionId, 'verifying', {
+        currentStep: 'regex',
+        completedSteps: 2,
+      });
 
       // DB에서 저장된 claim들 조회 (extractClaims에서 저장됨)
       const savedClaims = await db
@@ -220,6 +257,12 @@ export const validateClaimsFunction = inngestClient.createFunction(
 
     // Step 5: LLM 검증 (pending 상태인 claim만)
     await step.run('verify-with-llm', async () => {
+      // Regex 검증 완료 → LLM 검증 단계로
+      await updateSessionStatus(sessionId, 'verifying', {
+        currentStep: 'llm',
+        completedSteps: 3,
+      });
+
       // pending 상태인 claim들 조회
       const pendingClaims = await db
         .select()
@@ -251,7 +294,11 @@ export const validateClaimsFunction = inngestClient.createFunction(
 
     // Step 7: 세션 상태를 ready_for_review로 업데이트하고 최종 통계 조회
     const finalStats = await step.run('complete-validation', async () => {
-      await updateSessionStatus(sessionId, 'ready_for_review');
+      // LLM 검증 완료 → 완료 상태로
+      await updateSessionStatus(sessionId, 'ready_for_review', {
+        currentStep: 'complete',
+        completedSteps: 4,
+      });
 
       // 최종 세션 통계 조회
       const updatedSession = await db

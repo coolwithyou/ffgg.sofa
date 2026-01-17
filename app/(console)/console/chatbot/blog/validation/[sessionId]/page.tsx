@@ -44,7 +44,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PageStructurePreview } from '../_components/page-structure-preview';
 import { MarkdownGuideDialog } from '../_components/markdown-guide-dialog';
-import type { DocumentStructure } from '@/lib/knowledge-pages/types';
+import { ValidationProgress } from '../_components/validation-progress';
+import type { DocumentStructure, ProcessingStep } from '@/lib/knowledge-pages/types';
 
 type ValidationSession = typeof validationSessions.$inferSelect;
 type Claim = typeof claims.$inferSelect;
@@ -108,29 +109,54 @@ export default function DualViewerPage() {
     mode: syncMode,
   });
 
-  // 데이터 로드
-  const loadSession = useCallback(async () => {
-    setIsLoading(true);
+  // 이전 데이터 참조 (깜빡임 방지용 비교)
+  const prevSessionRef = useRef<string | null>(null);
+  const prevClaimsRef = useRef<string | null>(null);
+
+  // 데이터 로드 (isPolling: 폴링 시 true - 로딩 스피너 표시 안함)
+  const loadSession = useCallback(async (isPolling = false) => {
+    if (!isPolling) {
+      setIsLoading(true);
+    }
     try {
       const data = await getValidationSessionDetail(sessionId);
-      setSession(data.session);
-      setClaimsData(data.claims);
-      setSourceSpansMap(new Map(Object.entries(data.sourceSpans)));
 
-      // 재구성 텍스트에서 민감정보 마스킹 적용
-      const markdown = data.session.reconstructedMarkdown || '';
-      const { maskedText, maskings: foundMaskings } = maskSensitiveInfo(markdown);
-      setReconstructed(maskedText);
-      setMaskings(foundMaskings);
-      setOriginalMaskings(foundMaskings);
+      // 깜빡임 방지: 데이터가 실제로 변경된 경우에만 상태 업데이트
+      const sessionJson = JSON.stringify(data.session);
+      const claimsJson = JSON.stringify(data.claims);
 
-      // 세션 조회 감사 로그
-      logSessionViewed(sessionId);
+      const hasSessionChanged = prevSessionRef.current !== sessionJson;
+      const hasClaimsChanged = prevClaimsRef.current !== claimsJson;
+
+      if (hasSessionChanged) {
+        prevSessionRef.current = sessionJson;
+        setSession(data.session);
+
+        // 재구성 텍스트에서 민감정보 마스킹 적용 (세션이 변경된 경우에만)
+        const markdown = data.session.reconstructedMarkdown || '';
+        const { maskedText, maskings: foundMaskings } = maskSensitiveInfo(markdown);
+        setReconstructed(maskedText);
+        setMaskings(foundMaskings);
+        setOriginalMaskings(foundMaskings);
+      }
+
+      if (hasClaimsChanged) {
+        prevClaimsRef.current = claimsJson;
+        setClaimsData(data.claims);
+        setSourceSpansMap(new Map(Object.entries(data.sourceSpans)));
+      }
+
+      // 세션 조회 감사 로그 (최초 로드 시에만)
+      if (!isPolling) {
+        logSessionViewed(sessionId);
+      }
     } catch {
       toast.error('세션을 불러오는데 실패했습니다');
       router.push('../validation');
     } finally {
-      setIsLoading(false);
+      if (!isPolling) {
+        setIsLoading(false);
+      }
     }
   }, [sessionId, router]);
 
@@ -152,7 +178,7 @@ export default function DualViewerPage() {
     loadAuditLogs();
   }, [loadSession, loadAuditLogs]);
 
-  // 처리 중인 세션 자동 폴링
+  // 처리 중인 세션 자동 폴링 (상태별 차등 주기)
   useEffect(() => {
     if (!session) return;
 
@@ -163,14 +189,29 @@ export default function DualViewerPage() {
 
     if (!isProcessing) return;
 
-    // 10초마다 새로고침
+    // 상태별 차등 폴링 주기 (ms)
+    const getPollingInterval = (status: string): number => {
+      switch (status) {
+        case 'pending':
+        case 'analyzing':
+          return 3000; // 초기 단계: 3초 (빠른 피드백)
+        case 'extracting_claims':
+        case 'verifying':
+          return 5000; // 검증 단계: 5초
+        default:
+          return 10000; // 기본: 10초
+      }
+    };
+
+    const pollingInterval = getPollingInterval(session.status);
+
     const interval = setInterval(() => {
-      loadSession();
+      loadSession(true); // isPolling=true로 호출 (로딩 스피너 없이)
       loadAuditLogs();
-    }, 10000);
+    }, pollingInterval);
 
     return () => clearInterval(interval);
-  }, [session, loadSession, loadAuditLogs]);
+  }, [session?.status, loadSession, loadAuditLogs]);
 
   // 페이지 구조 노드 선택 핸들러 (라인 → 문자 위치 변환)
   const handleStructureNodeSelect = useCallback(
@@ -500,19 +541,19 @@ export default function DualViewerPage() {
             <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
               {['pending', 'analyzing', 'extracting_claims', 'verifying'].includes(session.status) ? (
                 <>
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  {/* 진행 상태 표시 컴포넌트 */}
+                  <div className="w-full max-w-md">
+                    <ValidationProgress
+                      currentStep={(session.currentStep as ProcessingStep) || null}
+                      completedSteps={session.completedSteps ?? 0}
+                      totalSteps={session.totalSteps ?? 4}
+                      totalClaims={session.totalClaims ?? undefined}
+                      processedClaims={session.processedClaims ?? undefined}
+                    />
                   </div>
-                  <div>
-                    <h4 className="text-lg font-semibold text-foreground">
-                      {session.status === 'pending' && 'AI 분석 대기 중'}
-                      {session.status === 'analyzing' && '문서 분석 중'}
-                      {session.status === 'extracting_claims' && 'Claim 추출 중'}
-                      {session.status === 'verifying' && '검증 진행 중'}
-                    </h4>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                  <div className="mt-4">
+                    <p className="text-sm text-muted-foreground">
                       AI가 문서를 분석하고 마크다운을 생성하고 있습니다.
-                      <br />잠시 후 새로고침해 주세요.
                     </p>
                   </div>
                   <Button

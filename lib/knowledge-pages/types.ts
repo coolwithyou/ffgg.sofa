@@ -173,6 +173,26 @@ export type RiskLevel = 'high' | 'medium' | 'low';
 export type VerificationLevel = 'regex' | 'llm' | 'human';
 
 /**
+ * 처리 단계 (진행 상태 표시용)
+ * - reconstruct: 마크다운 재구성 중
+ * - extract: Claim 추출 중
+ * - regex: Regex 검증 중
+ * - llm: LLM 검증 중
+ * - complete: 완료
+ */
+export type ProcessingStep = 'reconstruct' | 'extract' | 'regex' | 'llm' | 'complete';
+
+/**
+ * 진행 상태 정보 (UI 표시용)
+ */
+export interface ProgressInfo {
+  currentStep: ProcessingStep;
+  totalSteps: number;
+  completedSteps: number;
+  processedClaims: number;
+}
+
+/**
  * 의심 유형 (AI가 발견한 문제)
  * - added: 원문에 없는 정보가 추가됨
  * - missing: 원문의 정보가 누락됨

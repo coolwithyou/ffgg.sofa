@@ -1458,6 +1458,14 @@ export const validationSessions = pgTable(
     highRiskCount: integer('high_risk_count').default(0),
     riskScore: real('risk_score'), // 0.0 ~ 1.0
 
+    // 진행 상태 추적 (UX 개선용)
+    currentStep: text('current_step', {
+      enum: ['reconstruct', 'extract', 'regex', 'llm', 'complete'],
+    }),
+    totalSteps: integer('total_steps').default(4), // 기본 4단계
+    completedSteps: integer('completed_steps').default(0),
+    processedClaims: integer('processed_claims').default(0), // 검증 완료된 claim 수
+
     // 사용자 검토 메타데이터
     reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
