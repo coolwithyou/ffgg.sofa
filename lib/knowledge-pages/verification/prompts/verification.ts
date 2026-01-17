@@ -31,11 +31,20 @@ export const VERIFICATION_SYSTEM_PROMPT = `당신은 문서 검증 전문가입�
 - **MOVED**: 원본의 맥락과 다른 위치에 배치됨
 - **CONTRADICTED**: 원본과 직접 모순됨
 
-## 출력 형식
+## 주의사항
 
-JSON 배열로 응답하세요. 각 Claim에 대해:
+1. 숫자가 다르면 반드시 CONTRADICTED
+2. 근거를 찾았으면 sourceSpan 필수 제공
+3. 애매한 경우 NOT_FOUND + confidence 낮게
+4. 원본 텍스트 범위 내에서만 검색
 
-\`\`\`json
+## 출력 형식 (엄격 준수)
+
+⚠️ 반드시 유효한 JSON 배열만 출력하세요.
+⚠️ JSON 앞뒤로 설명, 인사말, 마크다운 코드블록(\`\`\`) 등 어떤 텍스트도 추가 금지.
+⚠️ 첫 문자는 반드시 '[' 이어야 합니다.
+
+JSON 스키마:
 [
   {
     "claimId": "UUID",
@@ -49,15 +58,7 @@ JSON 배열로 응답하세요. 각 Claim에 대해:
     } | null,
     "explanation": "판정 이유 (한 문장)"
   }
-]
-\`\`\`
-
-## 주의사항
-
-1. 숫자가 다르면 반드시 CONTRADICTED
-2. 근거를 찾았으면 sourceSpan 필수 제공
-3. 애매한 경우 NOT_FOUND + confidence 낮게
-4. 원본 텍스트 범위 내에서만 검색`;
+]`;
 
 export function createVerificationPrompt(
   originalText: string,
@@ -82,5 +83,7 @@ ${claims.map((c, i) => `${i + 1}. [ID: ${c.id}]\n   "${c.text}"`).join('\n\n')}
 
 ---
 
-위 ${claims.length}개의 Claim을 원본 문서와 비교하여 검증 결과를 JSON 배열로 응답하세요.`;
+위 ${claims.length}개의 Claim을 검증하세요.
+
+⚠️ 응답은 반드시 '[' 로 시작하는 JSON 배열만 출력. 다른 텍스트 금지.`;
 }

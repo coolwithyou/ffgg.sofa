@@ -105,6 +105,30 @@ export async function verifyWithLLM(
 }
 
 /**
+ * LLM 응답에서 JSON 배열 추출
+ * LLM이 JSON 앞뒤에 텍스트를 추가하는 경우에도 배열을 추출합니다.
+ */
+function extractJsonArray(text: string): string | null {
+  // 1. 마크다운 코드 블록 제거
+  let cleaned = text.replace(/```(?:json)?\n?|\n?```/g, '').trim();
+
+  // 2. 이미 '[' 로 시작하면 그대로 반환
+  if (cleaned.startsWith('[')) {
+    return cleaned;
+  }
+
+  // 3. 텍스트 내에서 JSON 배열 찾기 (첫 번째 '[' ~ 마지막 ']')
+  const startIdx = cleaned.indexOf('[');
+  const endIdx = cleaned.lastIndexOf(']');
+
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    return cleaned.slice(startIdx, endIdx + 1);
+  }
+
+  return null;
+}
+
+/**
  * LLM 응답 파싱
  */
 function parseVerificationResults(
@@ -112,9 +136,18 @@ function parseVerificationResults(
   originalClaims: ClaimToVerify[]
 ): VerificationResult[] {
   try {
-    // JSON 코드 블록 제거
-    const cleanJson = llmResponse.replace(/```(?:json)?\n?|\n?```/g, '').trim();
-    const parsed = JSON.parse(cleanJson) as Array<{
+    // JSON 배열 추출 시도
+    const jsonStr = extractJsonArray(llmResponse);
+
+    if (!jsonStr) {
+      console.error(
+        'Failed to extract JSON array from LLM response:',
+        llmResponse.slice(0, 200)
+      );
+      throw new Error('No JSON array found in response');
+    }
+
+    const parsed = JSON.parse(jsonStr) as Array<{
       claimId: string;
       verdict: string;
       confidence: number;
@@ -133,6 +166,7 @@ function parseVerificationResults(
     }));
   } catch (error) {
     console.error('Failed to parse LLM verification results:', error);
+    console.error('Raw response (first 500 chars):', llmResponse.slice(0, 500));
 
     // 파싱 실패 시 모든 Claim을 NOT_FOUND로 처리
     return originalClaims.map((claim) => ({
