@@ -9,8 +9,10 @@
  * - 로딩 인디케이터
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { useStickToBottom } from 'use-stick-to-bottom';
+import { ChevronDown } from 'lucide-react';
 import {
   sendPublicPageMessage,
   type PublicPageChatResponse,
@@ -18,6 +20,7 @@ import {
 } from '../actions';
 import { ProgressIndicator } from '@/components/chat/progress-indicator';
 import { SourcesCollapsible, type Source } from '@/components/chat/sources-collapsible';
+import { MessageActions } from '@/components/chat/message-actions';
 
 interface ChatbotBlockProps {
   chatbotId: string;
@@ -129,12 +132,13 @@ export function ChatbotBlock({
 }: ChatbotBlockProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<ChatError | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  // 스마트 오토스크롤: 사용자가 위로 스크롤하면 자동 스크롤 비활성화
+  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom();
 
   // 초기 웰컴 메시지
   useEffect(() => {
@@ -149,13 +153,6 @@ export function ChatbotBlock({
       ]);
     }
   }, [welcomeMessage, messages.length]);
-
-  // 메시지 스크롤 (편집 모드에서는 비활성화)
-  useEffect(() => {
-    if (!isEditing) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, isEditing]);
 
   // 메시지 전송
   const handleSend = useCallback(async () => {
@@ -236,8 +233,8 @@ export function ChatbotBlock({
       style={containerStyle}
     >
       {/* 메시지 목록 */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-4">
+      <div ref={scrollRef} className="relative flex-1 overflow-y-auto p-4">
+        <div ref={contentRef} className="space-y-4">
           {messages.map((msg) => (
             <MessageBubble
               key={msg.id}
@@ -271,8 +268,19 @@ export function ChatbotBlock({
               )}
             </div>
           )}
-          <div ref={messagesEndRef} />
         </div>
+
+        {/* 스크롤 투 바텀 버튼: 사용자가 위로 스크롤했을 때만 표시 (편집 모드 제외) */}
+        {!isAtBottom && !isEditing && (
+          <button
+            onClick={() => scrollToBottom()}
+            className="absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full shadow-lg transition-all hover:scale-105"
+            style={{ backgroundColor: primaryColor }}
+            aria-label="최신 메시지로 이동"
+          >
+            <ChevronDown className="h-5 w-5 text-white" />
+          </button>
+        )}
       </div>
 
       {/* 입력 영역 */}
@@ -341,26 +349,41 @@ function MessageBubble({
   };
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`} data-role={message.role}>
-      <div
-        className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-          isUser ? '' : 'bg-muted text-foreground'
-        }`}
-        style={isUser ? userStyle : assistantStyle}
-      >
-        {isUser ? (
-          <p className="whitespace-pre-wrap text-sm">{message.content}</p>
-        ) : (
-          <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
+    <div
+      className={`group flex ${isUser ? 'justify-end' : 'justify-start'}`}
+      data-role={message.role}
+    >
+      <div className={`flex max-w-[85%] flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+        <div
+          className={`rounded-2xl px-4 py-3 ${isUser ? '' : 'bg-muted text-foreground'}`}
+          style={isUser ? userStyle : assistantStyle}
+        >
+          {isUser ? (
+            <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+          ) : (
+            <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0">
+              <ReactMarkdown>{message.content}</ReactMarkdown>
+            </div>
+          )}
+          {message.sources && message.sources.length > 0 && (
+            <SourcesCollapsible
+              sources={message.sources}
+              primaryColor={primaryColor}
+              compact
+            />
+          )}
+        </div>
+
+        {/* AI 응답에만 액션 버튼 표시 */}
+        {!isUser && message.id !== 'welcome' && (
+          <div className="mt-1 px-1">
+            <MessageActions
+              messageId={message.id}
+              content={message.content}
+              compact
+              primaryColor={primaryColor}
+            />
           </div>
-        )}
-        {message.sources && message.sources.length > 0 && (
-          <SourcesCollapsible
-            sources={message.sources}
-            primaryColor={primaryColor}
-            compact
-          />
         )}
       </div>
     </div>

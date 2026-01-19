@@ -5,10 +5,12 @@
  * [Week 7] 플로팅 채팅창 UI
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { useStickToBottom } from 'use-stick-to-bottom';
 import { sendWidgetMessage, type WidgetChatError } from './actions';
 import type { WidgetConfig, WidgetMessage } from '@/lib/widget/types';
+import { MessageActions } from '@/components/chat/message-actions';
 
 /**
  * 위젯 채팅 에러 파싱
@@ -73,8 +75,10 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
   });
 
   const [inputValue, setInputValue] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // 스마트 오토스크롤: 사용자가 위로 스크롤하면 자동 스크롤 비활성화
+  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom();
 
   const theme = { ...DEFAULT_THEME_VALUES, ...config?.theme };
   const title = config?.title || '도움이 필요하신가요?';
@@ -98,11 +102,6 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
       }));
     }
   }, [welcomeMessage, state.messages.length]);
-
-  // 메시지 스크롤
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [state.messages]);
 
   // 메시지 전송
   const handleSend = useCallback(async () => {
@@ -177,8 +176,8 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
       </header>
 
       {/* 메시지 목록 */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-4">
+      <div ref={scrollRef} className="relative flex-1 overflow-y-auto p-4">
+        <div ref={contentRef} className="space-y-4">
           {state.messages.map((msg) => (
             <MessageBubble
               key={msg.id}
@@ -197,8 +196,19 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
               )}
             </div>
           )}
-          <div ref={messagesEndRef} />
         </div>
+
+        {/* 스크롤 투 바텀 버튼: 사용자가 위로 스크롤했을 때만 표시 */}
+        {!isAtBottom && (
+          <button
+            onClick={() => scrollToBottom()}
+            className="absolute bottom-4 right-4 flex h-8 w-8 items-center justify-center rounded-full shadow-lg transition-all hover:scale-105"
+            style={{ backgroundColor: theme.primaryColor }}
+            aria-label="최신 메시지로 이동"
+          >
+            <ChevronDownIcon className="h-5 w-5 text-white" />
+          </button>
+        )}
       </div>
 
       {/* 입력 영역 */}
@@ -242,25 +252,39 @@ function MessageBubble({
   const isUser = message.role === 'user';
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className={`max-w-[80%] rounded-2xl px-4 py-2 ${
-          isUser ? 'text-white' : 'bg-gray-100 text-gray-900'
-        }`}
-        style={isUser ? { backgroundColor: primaryColor } : undefined}
-      >
-        {isUser ? (
-          <p className="whitespace-pre-wrap text-sm">{message.content}</p>
-        ) : (
-          <div className="prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
-          </div>
-        )}
-        {message.sources && message.sources.length > 0 && (
-          <div className="mt-2 border-t border-gray-200 pt-2">
-            <p className="text-xs text-gray-500">
-              {message.sources.length}개의 출처에서 참조됨
-            </p>
+    <div className={`group flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div className={`flex max-w-[80%] flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+        <div
+          className={`rounded-2xl px-4 py-2 ${
+            isUser ? 'text-white' : 'bg-gray-100 text-gray-900'
+          }`}
+          style={isUser ? { backgroundColor: primaryColor } : undefined}
+        >
+          {isUser ? (
+            <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+          ) : (
+            <div className="prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0">
+              <ReactMarkdown>{message.content}</ReactMarkdown>
+            </div>
+          )}
+          {message.sources && message.sources.length > 0 && (
+            <div className="mt-2 border-t border-gray-200 pt-2">
+              <p className="text-xs text-gray-500">
+                {message.sources.length}개의 출처에서 참조됨
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* AI 응답에만 액션 버튼 표시 */}
+        {!isUser && message.id !== 'welcome' && (
+          <div className="mt-1 px-1">
+            <MessageActions
+              messageId={message.id}
+              content={message.content}
+              compact
+              primaryColor={primaryColor}
+            />
           </div>
         )}
       </div>
@@ -304,6 +328,25 @@ function SendIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+      />
+    </svg>
+  );
+}
+
+// 아래 화살표 아이콘 (스크롤 투 바텀)
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M19 9l-7 7-7-7"
       />
     </svg>
   );
