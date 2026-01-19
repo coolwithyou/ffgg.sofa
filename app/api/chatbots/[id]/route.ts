@@ -15,6 +15,7 @@ import {
   chatbotDatasets,
   datasets,
   conversations,
+  knowledgePages,
 } from '@/drizzle/schema';
 import { validateSession } from '@/lib/auth/session';
 
@@ -108,6 +109,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .innerJoin(datasets, eq(chatbotDatasets.datasetId, datasets.id))
       .where(eq(chatbotDatasets.chatbotId, id));
 
+    // 인덱싱된 Knowledge Pages (블로그) 수 조회
+    const [knowledgePagesStats] = await db
+      .select({
+        indexedCount: sql<number>`count(*) FILTER (WHERE is_indexed = true)::int`,
+        totalCount: sql<number>`count(*)::int`,
+      })
+      .from(knowledgePages)
+      .where(eq(knowledgePages.chatbotId, id));
+
     // 대화 통계
     const [conversationStats] = await db
       .select({
@@ -123,6 +133,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       chatbot: {
         ...chatbot,
         datasets: linkedDatasets,
+        // RAG 인덱스 생성 가능 여부 판단용 (블로그 페이지 통계)
+        indexedKnowledgePagesCount: knowledgePagesStats?.indexedCount ?? 0,
+        totalKnowledgePagesCount: knowledgePagesStats?.totalCount ?? 0,
         stats: {
           datasetCount: linkedDatasets.length,
           conversations: conversationStats || {

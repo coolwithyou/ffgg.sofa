@@ -17,6 +17,9 @@ import {
   processScheduledDeletions,
   // Knowledge Pages 변환 함수
   convertDocumentToPagesFunction,
+  // Knowledge Pages 검증 함수
+  validateClaimsFunction,
+  expireValidationSessions,
 } from '@/inngest/functions';
 
 // Inngest 함수들을 서빙 (실제 클라이언트 사용)
@@ -35,5 +38,9 @@ export const { GET, POST, PUT } = serve({
     processScheduledDeletions,
     // Knowledge Pages 변환
     convertDocumentToPagesFunction,
+    // Knowledge Pages 검증
+    validateClaimsFunction,
+    // 세션 만료 처리 (Cron)
+    expireValidationSessions,
   ],
 });

@@ -83,6 +83,10 @@ interface ChatbotData {
     datasets: DatasetInfo[];
     updatedAt: string;
     contentUpdatedAt: string | null;
+    /** 인덱싱된 Knowledge Pages (블로그) 수 */
+    indexedKnowledgePagesCount: number;
+    /** 전체 Knowledge Pages 수 */
+    totalKnowledgePagesCount: number;
   };
 }
 
@@ -105,6 +109,8 @@ export default function AISettingsPage() {
 
   // 데이터셋 정보 상태
   const [datasets, setDatasets] = useState<DatasetInfo[]>([]);
+  // 인덱싱된 Knowledge Pages (블로그) 수
+  const [indexedKnowledgePagesCount, setIndexedKnowledgePagesCount] = useState(0);
   // 콘텐츠(데이터셋, 문서) 변경 시점 - 페르소나 재생성 필요 여부 판단에 사용
   const [contentUpdatedAt, setContentUpdatedAt] = useState<string | null>(null);
 
@@ -159,8 +165,8 @@ export default function AISettingsPage() {
 
   const hasDatasets = datasets.length > 0;
   const totalChunks = datasets.reduce((sum, d) => sum + d.chunkCount, 0);
-  // 청크가 1개 이상 있어야 페르소나/RAG 인덱스 재생성 가능
-  const hasContent = totalChunks > 0;
+  // 데이터셋 청크 또는 인덱싱된 블로그 페이지가 있어야 RAG 인덱스 생성 가능
+  const hasContent = totalChunks > 0 || indexedKnowledgePagesCount > 0;
 
   // 챗봇 데이터 로드 함수 (재사용 가능하도록 useCallback으로 래핑)
   const fetchChatbot = useCallback(async (showLoader = true) => {
@@ -175,6 +181,7 @@ export default function AISettingsPage() {
       const { chatbot } = data;
 
       setDatasets(chatbot.datasets || []);
+      setIndexedKnowledgePagesCount(chatbot.indexedKnowledgePagesCount ?? 0);
       setContentUpdatedAt(chatbot.contentUpdatedAt);
 
       if (chatbot.llmConfig) {
@@ -417,31 +424,42 @@ export default function AISettingsPage() {
       </div>
 
       <div className="space-y-6">
-        {/* 데이터셋-페르소나 연동 알림 */}
-        {!hasDatasets ? (
+        {/* RAG 콘텐츠 없음 알림 - 데이터셋 청크도 없고 인덱싱된 블로그도 없는 경우 */}
+        {!hasContent && (
           <Card size="md" className="border-yellow-500/30 bg-yellow-500/5">
             <CardContent className="flex items-start gap-4 pt-6">
               <AlertTriangle className="h-5 w-5 shrink-0 text-yellow-500" />
               <div>
                 <p className="font-medium text-foreground">
-                  연결된 데이터셋이 없습니다
+                  RAG 콘텐츠가 없습니다
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  AI 페르소나를 자동 생성하려면 먼저 데이터셋을 연결해주세요.
-                  데이터셋의 문서를 분석하여 챗봇의 전문 분야와 응답 주제를 자동으로 설정합니다.
+                  AI 페르소나와 RAG 인덱스를 생성하려면 다음 중 하나가 필요합니다:
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => window.location.href = '/console/chatbot/datasets'}
-                >
-                  데이터셋 관리로 이동
-                </Button>
+                <ul className="mt-2 list-inside list-disc text-sm text-muted-foreground">
+                  <li>데이터셋 문서 (승인된 청크 1개 이상)</li>
+                  <li>발행된 블로그 페이지 (인덱싱된 페이지 1개 이상)</li>
+                </ul>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.location.href = '/console/chatbot/datasets'}
+                  >
+                    데이터셋 관리
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.location.href = '/console/chatbot/blog'}
+                  >
+                    블로그 관리
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
-        ) : null}
+        )}
 
         {/* RAG 인덱스 자동 생성 중 알림 배너 */}
         {ragStatus === 'generating' && (

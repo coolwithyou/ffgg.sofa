@@ -21,7 +21,7 @@ import { DocumentStatusBadge } from '@/components/ui/document-status-badge';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { canReprocessDocument, getReprocessType } from '@/lib/constants/document';
-import { useCurrentChatbot } from '../../hooks/use-console-state';
+import { useCurrentChatbot } from '../../../hooks/use-console-state';
 
 interface DocumentListProps {
   initialData: GetDocumentsResult;

@@ -30,6 +30,12 @@ export interface TokenUsageParams {
   featureType: FeatureType;
   inputTokens: number;
   outputTokens: number;
+  /** 캐시 메트릭 등 추가 메타데이터 */
+  metadata?: {
+    cacheCreationInputTokens?: number;
+    cacheReadInputTokens?: number;
+    [key: string]: unknown;
+  };
 }
 
 export interface ModelPrice {

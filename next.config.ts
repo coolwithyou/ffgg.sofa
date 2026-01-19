@@ -5,6 +5,16 @@ import type { NextConfig } from "next";
  * [W-007] 보안 헤더 설정
  */
 const nextConfig: NextConfig = {
+  // Turbopack 설정 (Next.js 16+ 기본)
+  turbopack: {},
+
+  // react-pdf 호환성을 위한 Webpack 설정 (Turbopack fallback 시 사용)
+  // Note: Turbopack에서 canvas: false가 직접 지원되지 않음
+  webpack: (config) => {
+    config.resolve.alias.canvas = false;
+    return config;
+  },
+
   // Node.js 전용 패키지를 서버 외부 패키지로 지정 (번들링 제외)
   // __dirname 에러 방지 - Vercel 서버리스 환경에서 ESM/CommonJS 호환성 문제 해결
   serverExternalPackages: [

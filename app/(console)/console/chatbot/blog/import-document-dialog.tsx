@@ -5,10 +5,14 @@
  *
  * 문서를 업로드하면 LLM이 분석하여 Knowledge Pages로 자동 변환합니다.
  * RAG 청킹 파이프라인을 거치지 않고 바로 페이지로 변환됩니다.
+ *
+ * Human-in-the-loop 검증 옵션:
+ * - 활성화 시: 3단계 검증(Regex → LLM → Human) 후 승인 시 페이지 생성
+ * - 비활성화 시: AI가 바로 초안 페이지로 변환 (기존 방식)
  */
 
 import { useState, useRef } from 'react';
-import { FileUp, FileText, X, Loader2 } from 'lucide-react';
+import { FileUp, FileText, X, Loader2, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -20,11 +24,15 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
 import {
   uploadAndConvertDocument,
+  uploadMarkdownDirect,
   type KnowledgePageTreeNode,
 } from './actions';
+import { createValidationSessionFromDocument } from './validation/actions';
 
 // 지원되는 파일 타입
 const SUPPORTED_TYPES = {
@@ -52,10 +60,14 @@ export function ImportDocumentDialog({
   onImportStarted,
   trigger,
 }: ImportDocumentDialogProps) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [useHumanValidation, setUseHumanValidation] = useState(false);
+  const [isMarkdownFile, setIsMarkdownFile] = useState(false);
+  const [useDirectUpload, setUseDirectUpload] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,6 +78,17 @@ export function ImportDocumentDialog({
     if (selectedFile.size > MAX_FILE_SIZE) {
       toast.error(`파일 크기는 10MB 이하여야 합니다.`);
       return;
+    }
+
+    // 마크다운 파일 감지
+    const isMarkdown =
+      selectedFile.name.endsWith('.md') ||
+      selectedFile.name.endsWith('.markdown') ||
+      selectedFile.type === 'text/markdown';
+    setIsMarkdownFile(isMarkdown);
+    if (isMarkdown) {
+      // 마크다운 파일은 기본적으로 직접 저장 활성화
+      setUseDirectUpload(true);
     }
 
     setFile(selectedFile);
@@ -81,6 +104,16 @@ export function ImportDocumentDialog({
       return;
     }
 
+    // 마크다운 파일 감지
+    const isMarkdown =
+      droppedFile.name.endsWith('.md') ||
+      droppedFile.name.endsWith('.markdown') ||
+      droppedFile.type === 'text/markdown';
+    setIsMarkdownFile(isMarkdown);
+    if (isMarkdown) {
+      setUseDirectUpload(true);
+    }
+
     setFile(droppedFile);
   };
 
@@ -90,6 +123,7 @@ export function ImportDocumentDialog({
 
   const removeFile = () => {
     setFile(null);
+    setIsMarkdownFile(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -110,18 +144,71 @@ export function ImportDocumentDialog({
         formData.append('parentPageId', selectedParentId);
       }
 
-      const result = await uploadAndConvertDocument(formData);
+      // 마크다운 파일 직접 업로드
+      if (isMarkdownFile && useDirectUpload) {
+        const result = await uploadMarkdownDirect(formData);
 
-      if (result.success) {
-        toast.success(
-          '문서를 업로드했습니다. 백그라운드에서 페이지로 변환 중입니다.',
-          { duration: 5000 }
+        if (result.success) {
+          toast.success(
+            `${result.pageCount}개 페이지가 생성되었습니다.`,
+            { duration: 5000 }
+          );
+          setOpen(false);
+          resetForm();
+          onImportStarted?.();
+        } else {
+          toast.error(result.error || '마크다운 업로드에 실패했습니다.');
+        }
+        return;
+      }
+
+      // Human-in-the-loop 검증 사용 여부에 따라 분기
+      if (useHumanValidation) {
+        // Step 1: 먼저 문서를 업로드 (변환 없이)
+        formData.append('skipConversion', 'true');
+        const uploadResult = await uploadAndConvertDocument(formData);
+
+        if (!uploadResult.success || !uploadResult.documentId) {
+          toast.error(uploadResult.error || '문서 업로드에 실패했습니다.');
+          return;
+        }
+
+        // Step 2: HITL 검증 세션 생성
+        const validationResult = await createValidationSessionFromDocument(
+          uploadResult.documentId,
+          chatbotId,
+          selectedParentId ?? undefined
         );
-        setOpen(false);
-        resetForm();
-        onImportStarted?.();
+
+        if (validationResult.success) {
+          toast.success(
+            '검증 세션이 생성되었습니다. 검증 페이지로 이동합니다.',
+            { duration: 3000 }
+          );
+          setOpen(false);
+          resetForm();
+          // 검증 세션 상세 페이지로 이동
+          router.push(
+            `/console/chatbot/blog/validation/${validationResult.sessionId}?chatbotId=${chatbotId}`
+          );
+        } else {
+          toast.error('검증 세션 생성에 실패했습니다.');
+        }
       } else {
-        toast.error(result.error || '업로드에 실패했습니다.');
+        // 기존 방식: 직접 변환
+        const result = await uploadAndConvertDocument(formData);
+
+        if (result.success) {
+          toast.success(
+            '문서를 업로드했습니다. 백그라운드에서 페이지로 변환 중입니다.',
+            { duration: 5000 }
+          );
+          setOpen(false);
+          resetForm();
+          onImportStarted?.();
+        } else {
+          toast.error(result.error || '업로드에 실패했습니다.');
+        }
       }
     } catch {
       toast.error('업로드 중 오류가 발생했습니다.');
@@ -133,6 +220,9 @@ export function ImportDocumentDialog({
   const resetForm = () => {
     setFile(null);
     setSelectedParentId(null);
+    setUseHumanValidation(false);
+    setIsMarkdownFile(false);
+    setUseDirectUpload(true);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -261,13 +351,87 @@ export function ImportDocumentDialog({
             </p>
           </div>
 
+          {/* 마크다운 직접 저장 옵션 (마크다운 파일일 때만 표시) */}
+          {isMarkdownFile && (
+            <div className="flex items-center justify-between rounded-lg border border-border p-4">
+              <div className="flex items-start gap-3">
+                <FileText className="mt-0.5 h-5 w-5 text-primary" />
+                <div className="space-y-1">
+                  <Label
+                    htmlFor="direct-upload"
+                    className="text-sm font-medium leading-none"
+                  >
+                    마크다운 직접 저장
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    헤딩(##) 기준으로 페이지를 자동 분할합니다
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="direct-upload"
+                checked={useDirectUpload}
+                onCheckedChange={setUseDirectUpload}
+                disabled={isUploading}
+              />
+            </div>
+          )}
+
+          {/* Human-in-the-loop 검증 옵션 (마크다운 직접 저장이 아닐 때만 표시) */}
+          {(!isMarkdownFile || !useDirectUpload) && (
+            <div className="flex items-center justify-between rounded-lg border border-border p-4">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="mt-0.5 h-5 w-5 text-primary" />
+                <div className="space-y-1">
+                  <Label
+                    htmlFor="human-validation"
+                    className="text-sm font-medium leading-none"
+                  >
+                    Human-in-the-loop 검증
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    AI 추출 결과를 사람이 검토한 후 페이지를 생성합니다
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="human-validation"
+                checked={useHumanValidation}
+                onCheckedChange={setUseHumanValidation}
+                disabled={isUploading}
+              />
+            </div>
+          )}
+
           {/* 안내 메시지 */}
           <div className="rounded-lg bg-primary/5 p-3 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">💡 변환 안내</p>
+            <p className="font-medium text-foreground">
+              {isMarkdownFile && useDirectUpload
+                ? '📝 마크다운 직접 저장'
+                : useHumanValidation
+                  ? '🛡️ 검증 모드'
+                  : '💡 변환 안내'}
+            </p>
             <ul className="mt-1 space-y-1 text-xs">
-              <li>• 문서 내용을 AI가 분석하여 적절한 페이지로 분할합니다</li>
-              <li>• 변환된 페이지는 "초안" 상태로 생성됩니다</li>
-              <li>• 변환 후 내용을 검토하고 발행해주세요</li>
+              {isMarkdownFile && useDirectUpload ? (
+                <>
+                  <li>• 마크다운 파일을 ## 헤딩 기준으로 분할합니다</li>
+                  <li>• YAML 프론트매터에서 제목/설명을 자동 추출합니다</li>
+                  <li>• LLM 변환 없이 바로 &ldquo;초안&rdquo; 페이지로 저장됩니다</li>
+                </>
+              ) : useHumanValidation ? (
+                <>
+                  <li>• 문서를 AI가 분석하고 Claim을 추출합니다</li>
+                  <li>• 3단계 검증(Regex → LLM → Human)을 거칩니다</li>
+                  <li>• 검토 후 승인하면 Knowledge Pages가 생성됩니다</li>
+                </>
+              ) : (
+                <>
+                  <li>• 문서 내용을 AI가 분석하여 적절한 페이지로 분할합니다</li>
+                  <li>• 변환된 페이지는 &ldquo;초안&rdquo; 상태로 생성됩니다</li>
+                  <li>• 변환 후 내용을 검토하고 발행해주세요</li>
+                </>
+              )}
             </ul>
           </div>
         </div>
@@ -284,7 +448,21 @@ export function ImportDocumentDialog({
             {isUploading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                업로드 중...
+                {isMarkdownFile && useDirectUpload
+                  ? '저장 중...'
+                  : useHumanValidation
+                    ? '검증 세션 생성 중...'
+                    : '업로드 중...'}
+              </>
+            ) : isMarkdownFile && useDirectUpload ? (
+              <>
+                <FileText className="mr-2 h-4 w-4" />
+                직접 저장
+              </>
+            ) : useHumanValidation ? (
+              <>
+                <ShieldCheck className="mr-2 h-4 w-4" />
+                검증 시작
               </>
             ) : (
               '변환 시작'

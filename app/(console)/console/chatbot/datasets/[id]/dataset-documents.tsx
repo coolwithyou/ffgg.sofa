@@ -13,7 +13,7 @@ import { FileText, Trash2, RotateCcw, ExternalLink, Search, X, Unlink } from 'lu
 import { DocumentProgressModal } from '@/components/document-progress-modal';
 import { DocumentStatusBadge } from '@/components/ui/document-status-badge';
 import { DocumentChunks } from './document-chunks';
-import { unassignDocumentFromDataset } from '@/app/(console)/console/chatbot/actions';
+import { unassignDocumentFromDataset } from '@/app/(console)/console/chatbot/docu/actions';
 import { useAlertDialog } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 

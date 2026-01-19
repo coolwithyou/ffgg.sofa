@@ -59,96 +59,96 @@ function SidebarChatbotSwitcher() {
 
   return (
     <>
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <SidebarMenuButton
-              size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-            >
-              {/* 챗봇 아이콘 */}
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary/10">
-                <Bot className="size-4 text-primary" />
-              </div>
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <SidebarMenuButton
+                size="lg"
+                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+              >
+                {/* 챗봇 아이콘 */}
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary/10">
+                  <Bot className="size-4 text-primary" />
+                </div>
 
-              {/* 챗봇 이름 (축소 시 숨김) */}
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">
-                  {currentChatbot?.name ?? '챗봇 선택'}
-                </span>
-                {currentChatbot?.slug && (
-                  <span className="truncate text-xs text-muted-foreground">
-                    /{currentChatbot.slug}
+                {/* 챗봇 이름 (축소 시 숨김) */}
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">
+                    {currentChatbot?.name ?? '챗봇 선택'}
                   </span>
-                )}
-              </div>
+                  {currentChatbot?.slug && (
+                    <span className="truncate text-xs text-muted-foreground">
+                      /{currentChatbot.slug}
+                    </span>
+                  )}
+                </div>
 
-              {/* 공개 상태 + 드롭다운 화살표 */}
-              <div className="flex items-center gap-1">
-                {currentChatbot?.publicPageEnabled && (
-                  <span className="size-2 rounded-full bg-green-500" />
-                )}
-                <ChevronsUpDown className="ml-auto size-4" />
-              </div>
-            </SidebarMenuButton>
-          </DropdownMenuTrigger>
+                {/* 공개 상태 + 드롭다운 화살표 */}
+                <div className="flex items-center gap-1">
+                  {currentChatbot?.publicPageEnabled && (
+                    <span className="size-2 rounded-full bg-green-500" />
+                  )}
+                  <ChevronsUpDown className="ml-auto size-4" />
+                </div>
+              </SidebarMenuButton>
+            </DropdownMenuTrigger>
 
-          <DropdownMenuContent
-            className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
-            align="start"
-            side="bottom"
-            sideOffset={4}
-          >
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              챗봇 목록
-            </DropdownMenuLabel>
-
-            {chatbots.length === 0 ? (
-              <div className="px-2 py-3 text-center text-sm text-muted-foreground">
-                등록된 챗봇이 없습니다
-              </div>
-            ) : (
-              chatbots.map((bot, index) => {
-                const isSelected = currentChatbotIndex === index;
-                return (
-                  <DropdownMenuItem
-                    key={bot.id}
-                    onClick={() => handleSelect(index)}
-                    className="gap-2 p-2"
-                  >
-                    <div className="flex size-6 items-center justify-center rounded-sm border">
-                      <Bot className="size-4 shrink-0" />
-                    </div>
-                    <span className="flex-1 truncate">{bot.name}</span>
-                    {bot.publicPageEnabled && (
-                      <span className="size-2 rounded-full bg-green-500" />
-                    )}
-                    {isSelected && <Check className="size-4" />}
-                  </DropdownMenuItem>
-                );
-              })
-            )}
-
-            <DropdownMenuSeparator />
-
-            <DropdownMenuItem
-              className="gap-2 p-2"
-              onClick={openCreateDialog}
+            <DropdownMenuContent
+              className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
+              align="start"
+              side="bottom"
+              sideOffset={4}
             >
-              <div className="flex size-6 items-center justify-center rounded-md border bg-background">
-                <Plus className="size-4" />
-              </div>
-              <div className="font-medium text-muted-foreground">새 챗봇 추가</div>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </SidebarMenuItem>
-    </SidebarMenu>
-    <CreateChatbotDialog
-      isOpen={isCreateDialogOpen}
-      onClose={closeCreateDialog}
-    />
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                챗봇 목록
+              </DropdownMenuLabel>
+
+              {chatbots.length === 0 ? (
+                <div className="px-2 py-3 text-center text-sm text-muted-foreground">
+                  등록된 챗봇이 없습니다
+                </div>
+              ) : (
+                chatbots.map((bot, index) => {
+                  const isSelected = currentChatbotIndex === index;
+                  return (
+                    <DropdownMenuItem
+                      key={bot.id}
+                      onClick={() => handleSelect(index)}
+                      className="gap-2 p-2"
+                    >
+                      <div className="flex size-6 items-center justify-center rounded-sm border">
+                        <Bot className="size-4 shrink-0" />
+                      </div>
+                      <span className="flex-1 truncate">{bot.name}</span>
+                      {bot.publicPageEnabled && (
+                        <span className="size-2 rounded-full bg-green-500" />
+                      )}
+                      {isSelected && <Check className="size-4" />}
+                    </DropdownMenuItem>
+                  );
+                })
+              )}
+
+              <DropdownMenuSeparator />
+
+              <DropdownMenuItem
+                className="gap-2 p-2"
+                onClick={openCreateDialog}
+              >
+                <div className="flex size-6 items-center justify-center rounded-md border bg-background">
+                  <Plus className="size-4" />
+                </div>
+                <div className="font-medium text-muted-foreground">새 챗봇 추가</div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </SidebarMenuItem>
+      </SidebarMenu>
+      <CreateChatbotDialog
+        isOpen={isCreateDialogOpen}
+        onClose={closeCreateDialog}
+      />
     </>
   );
 }

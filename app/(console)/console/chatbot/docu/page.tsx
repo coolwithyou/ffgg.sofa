@@ -13,8 +13,8 @@ import { DocumentUpload } from './_components/document-upload';
 import { LibraryDocumentList } from './_components/library-document-list';
 import { UploadGuide } from './_components/upload-guide';
 import { TemplateDownload } from './_components/template-download';
-import { useCurrentChatbot } from '../hooks/use-console-state';
-import { NoChatbotState } from '../components/no-chatbot-state';
+import { useCurrentChatbot } from '../../hooks/use-console-state';
+import { NoChatbotState } from '../../components/no-chatbot-state';
 import {
   getDocuments,
   getLibraryDocuments,

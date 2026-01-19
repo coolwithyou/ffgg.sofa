@@ -10,7 +10,7 @@
  * 4. Knowledge Pages DB 저장 (Draft 상태)
  */
 
-import { createAnthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
 import { createKnowledgePage } from '@/app/(console)/console/chatbot/blog/actions';
 import { logger } from '@/lib/logger';
@@ -22,6 +22,10 @@ import {
   CONTENT_GENERATION_SYSTEM_PROMPT,
   createContentGenerationPrompt,
 } from './prompts/content-generation';
+import {
+  truncateWithWarning,
+  TRUNCATION_LIMITS,
+} from './utils/truncation';
 import type {
   DocumentStructure,
   PageNode,
@@ -30,9 +34,6 @@ import type {
   ConversionProgress,
   ConversionResult,
 } from './types';
-
-// Anthropic 클라이언트 생성
-const anthropic = createAnthropic();
 
 /**
  * 문서 → Knowledge Pages 변환 메인 함수
@@ -141,10 +142,10 @@ export async function convertDocumentToPages(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
 
-    logger.error('[DocumentToPages] Conversion failed', {
+    logger.error('[DocumentToPages] Conversion failed', error as Error, {
       chatbotId,
       documentId,
-      error: errorMessage,
+      errorMessage,
     });
 
     onProgress?.({
@@ -166,16 +167,18 @@ export async function convertDocumentToPages(
  * Step 1: LLM으로 문서 구조 분석
  */
 async function analyzeDocumentStructure(documentText: string): Promise<DocumentStructure> {
-  // 문서가 너무 길면 처음 부분만 사용 (토큰 제한)
-  const maxChars = 100000; // 약 25k 토큰
-  const truncatedText =
-    documentText.length > maxChars ? documentText.slice(0, maxChars) + '\n\n[문서가 너무 길어 일부만 분석합니다...]' : documentText;
+  // Gemini 2.5 Flash: 65,536 출력 토큰 지원 (현재 권장 모델)
+  const truncation = truncateWithWarning(documentText, {
+    maxChars: TRUNCATION_LIMITS.STRUCTURE_ANALYSIS,
+    context: 'document-to-pages/structure-analysis',
+    truncationMessage: '\n\n[문서가 너무 길어 일부만 분석합니다...]',
+  });
 
   const { text } = await generateText({
-    model: anthropic('claude-3-5-haiku-latest'),
+    model: google('gemini-2.5-flash'),
     system: STRUCTURE_ANALYSIS_SYSTEM_PROMPT,
-    prompt: createStructureAnalysisPrompt(truncatedText),
-    maxTokens: 4096,
+    prompt: createStructureAnalysisPrompt(truncation.text),
+    maxOutputTokens: 8192,
     temperature: 0,
   });
 
@@ -192,8 +195,7 @@ async function analyzeDocumentStructure(documentText: string): Promise<DocumentS
 
     return structure;
   } catch (parseError) {
-    logger.error('[DocumentToPages] Failed to parse structure JSON', {
-      error: parseError instanceof Error ? parseError.message : String(parseError),
+    logger.error('[DocumentToPages] Failed to parse structure JSON', parseError as Error, {
       rawText: text.slice(0, 500),
     });
 
@@ -231,9 +233,9 @@ async function generatePagesContent(
     // MVP에서는 전체 텍스트 사용, 추후 페이지 매핑 구현 필요
     const sourceText = extractSourceText(fullDocumentText, node.sourcePages);
 
-    // LLM으로 콘텐츠 생성
+    // LLM으로 콘텐츠 생성 (Gemini 2.0 Flash)
     const { text } = await generateText({
-      model: anthropic('claude-3-5-haiku-latest'),
+      model: google('gemini-2.5-flash'),
       system: CONTENT_GENERATION_SYSTEM_PROMPT,
       prompt: createContentGenerationPrompt(
         node.title,
@@ -242,7 +244,7 @@ async function generatePagesContent(
         sourceText,
         node.sourcePages
       ),
-      maxTokens: 4096,
+      maxOutputTokens: 16384,
       temperature: 0,
     });
 
@@ -290,10 +292,11 @@ async function savePagesToDatabase(
       // 하위 페이지 재귀 저장
       await savePagesToDatabase(page.children, chatbotId, documentId, result.page.id);
     } else if (!result.success) {
-      logger.error('[DocumentToPages] Failed to create page', {
-        title: page.title,
-        error: result.error,
-      });
+      logger.error(
+        '[DocumentToPages] Failed to create page',
+        new Error(result.error || 'Unknown error'),
+        { title: page.title }
+      );
     }
   }
 }
@@ -312,9 +315,13 @@ function countPages(nodes: PageNode[]): number {
  * TODO: PDF 페이지 매핑 구현 시 개선 필요
  */
 function extractSourceText(fullText: string, _sourcePages: number[]): string {
-  // 토큰 제한을 위해 최대 길이 설정
-  const maxChars = 50000; // 약 12.5k 토큰
-  return fullText.length > maxChars ? fullText.slice(0, maxChars) + '\n\n[텍스트가 너무 길어 일부만 사용합니다...]' : fullText;
+  // Gemini 2.0 Flash는 큰 컨텍스트 지원
+  const truncation = truncateWithWarning(fullText, {
+    maxChars: TRUNCATION_LIMITS.SOURCE_TEXT_EXTRACTION,
+    context: 'document-to-pages/extract-source-text',
+    truncationMessage: '\n\n[텍스트가 너무 길어 일부만 사용합니다...]',
+  });
+  return truncation.text;
 }
 
 /**
@@ -352,4 +359,125 @@ function calculateConfidence(generatedContent: string, sourceText: string): numb
  */
 export function countAllPages(pages: GeneratedPage[]): number {
   return pages.reduce((sum, page) => sum + 1 + countAllPages(page.children || []), 0);
+}
+
+// =============================================================================
+// Human-in-the-loop 검증 후 페이지 생성
+// =============================================================================
+
+/**
+ * 검증된 구조에서 Knowledge Pages 생성
+ *
+ * Human-in-the-loop 검증 세션이 승인된 후, 검증된 마크다운과 구조 정보를
+ * 사용하여 Knowledge Pages를 생성합니다. LLM 호출 없이 직접 페이지를 생성합니다.
+ *
+ * @param structure - 검증 세션의 structureJson (PageNode[] with startLine/endLine)
+ * @param markdown - 검증된 reconstructedMarkdown
+ * @param chatbotId - 챗봇 ID
+ * @param documentId - 원본 문서 ID
+ * @param parentPageId - 상위 페이지 ID (선택)
+ * @returns 생성된 페이지 수
+ */
+export async function createPagesFromStructure(
+  structure: DocumentStructure,
+  markdown: string,
+  chatbotId: string,
+  documentId: string,
+  parentPageId?: string
+): Promise<{ success: boolean; pageCount: number; error?: string }> {
+  try {
+    logger.info('[createPagesFromStructure] Starting page creation from verified structure', {
+      chatbotId,
+      documentId,
+      pageCount: structure.pages.length,
+    });
+
+    // 마크다운을 라인 배열로 분할
+    const lines = markdown.split('\n');
+
+    // PageNode[] → GeneratedPage[] 변환 (라인 정보로 콘텐츠 추출)
+    const generatedPages = convertPageNodesToGeneratedPages(structure.pages, lines);
+
+    if (generatedPages.length === 0) {
+      logger.warn('[createPagesFromStructure] No pages generated from structure');
+      return { success: true, pageCount: 0 };
+    }
+
+    // DB에 저장 (undefined를 null로 변환)
+    await savePagesToDatabase(generatedPages, chatbotId, documentId, parentPageId ?? null);
+
+    const totalPages = countAllPages(generatedPages);
+    logger.info('[createPagesFromStructure] Pages created successfully', {
+      chatbotId,
+      documentId,
+      totalPages,
+    });
+
+    return { success: true, pageCount: totalPages };
+  } catch (error) {
+    logger.error('[createPagesFromStructure] Failed to create pages', error as Error, {
+      chatbotId,
+      documentId,
+    });
+    return {
+      success: false,
+      pageCount: 0,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * PageNode[]를 GeneratedPage[]로 변환
+ *
+ * 라인 정보(startLine/endLine)를 사용하여 마크다운에서 콘텐츠 추출
+ */
+function convertPageNodesToGeneratedPages(
+  nodes: PageNode[],
+  lines: string[]
+): GeneratedPage[] {
+  return nodes.map((node) => {
+    // 라인 정보가 있으면 해당 범위의 콘텐츠 추출
+    let content: string;
+
+    if (node.startLine !== undefined && node.endLine !== undefined) {
+      // 0-based index 변환 (LLM이 1-based로 반환하므로)
+      const startIdx = Math.max(0, node.startLine - 1);
+      const endIdx = Math.min(lines.length, node.endLine);
+
+      // 해당 범위의 라인 추출
+      const sectionLines = lines.slice(startIdx, endIdx);
+
+      // 섹션 제목 라인은 제외하고 콘텐츠만 사용
+      // (제목은 page.title로 이미 저장됨)
+      const contentLines = sectionLines.filter((line) => {
+        const trimmed = line.trim();
+        // 헤더 라인이면서 현재 섹션의 제목과 일치하면 제외
+        if (trimmed.startsWith('#') && trimmed.includes(node.title)) {
+          return false;
+        }
+        return true;
+      });
+
+      content = contentLines.join('\n').trim();
+    } else {
+      // 라인 정보가 없으면 요약을 콘텐츠로 사용
+      content = node.contentSummary;
+    }
+
+    // 콘텐츠가 비어있으면 요약으로 대체
+    if (!content || content.length < 10) {
+      content = node.contentSummary || `${node.title} 섹션`;
+    }
+
+    return {
+      id: node.id,
+      title: node.title,
+      content,
+      sourcePages: node.sourcePages,
+      // 검증된 콘텐츠이므로 높은 신뢰도
+      confidence: 0.95,
+      children: convertPageNodesToGeneratedPages(node.children, lines),
+    };
+  });
 }

@@ -1390,3 +1390,294 @@ export const knowledgePageVersions = pgTable(
 // Knowledge Page Versions 타입 추론용
 export type KnowledgePageVersion = typeof knowledgePageVersions.$inferSelect;
 export type NewKnowledgePageVersion = typeof knowledgePageVersions.$inferInsert;
+
+// =============================================================================
+// Human-in-the-loop Verification System
+// =============================================================================
+
+/**
+ * 검증 세션 테이블
+ *
+ * 문서 → Knowledge Pages 변환 과정에서 생성되는 검증 단위입니다.
+ * 하나의 문서 업로드당 하나의 세션이 생성됩니다.
+ *
+ * 상태 머신:
+ * pending → analyzing → extracting_claims → verifying → ready_for_review → reviewing → approved/rejected
+ */
+export const validationSessions = pgTable(
+  'validation_sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    chatbotId: uuid('chatbot_id')
+      .notNull()
+      .references(() => chatbots.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+
+    // 원본 및 재구성 데이터
+    originalText: text('original_text').notNull(),
+    originalPdfUrl: text('original_pdf_url'), // S3 URL (PDF인 경우)
+    reconstructedMarkdown: text('reconstructed_markdown'), // LLM 재구성 결과
+    structureJson: jsonb('structure_json'), // 구조 분석 JSON
+
+    // 페이지 매핑 (PDF → 텍스트 위치)
+    pageMapping: jsonb('page_mapping').$type<
+      {
+        pageNumber: number;
+        startChar: number;
+        endChar: number;
+      }[]
+    >(),
+
+    // 상태 머신
+    status: text('status', {
+      enum: [
+        'pending', // 생성됨, 분석 대기
+        'analyzing', // 구조 분석 중
+        'extracting_claims', // Claim 추출 중
+        'verifying', // 검증 중
+        'ready_for_review', // 검토 준비 완료
+        'reviewing', // 사용자 검토 중
+        'approved', // 승인 완료
+        'rejected', // 거부됨
+        'expired', // 만료됨
+      ],
+    })
+      .notNull()
+      .default('pending'),
+
+    // 검증 결과 요약 (UI 표시용)
+    totalClaims: integer('total_claims').default(0),
+    supportedCount: integer('supported_count').default(0),
+    contradictedCount: integer('contradicted_count').default(0),
+    notFoundCount: integer('not_found_count').default(0),
+    highRiskCount: integer('high_risk_count').default(0),
+    riskScore: real('risk_score'), // 0.0 ~ 1.0
+
+    // 진행 상태 추적 (UX 개선용)
+    currentStep: text('current_step', {
+      enum: ['reconstruct', 'extract', 'regex', 'llm', 'complete'],
+    }),
+    totalSteps: integer('total_steps').default(4), // 기본 4단계
+    completedSteps: integer('completed_steps').default(0),
+    processedClaims: integer('processed_claims').default(0), // 검증 완료된 claim 수
+
+    // 사용자 검토 메타데이터
+    reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    reviewNote: text('review_note'),
+
+    // 생성된 페이지 (승인 후)
+    generatedPagesCount: integer('generated_pages_count').default(0),
+
+    // 타임스탬프
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }), // 7일 후
+  },
+  (table) => [
+    index('idx_validation_sessions_chatbot').on(table.chatbotId),
+    index('idx_validation_sessions_status').on(table.status),
+    index('idx_validation_sessions_document').on(table.documentId),
+    index('idx_validation_sessions_expires').on(table.expiresAt),
+  ]
+);
+
+// ValidationSession 타입 추론용
+export type ValidationSession = typeof validationSessions.$inferSelect;
+export type NewValidationSession = typeof validationSessions.$inferInsert;
+
+/**
+ * Claim 테이블
+ *
+ * 재구성된 문서에서 추출된 검증 가능한 주장입니다.
+ * 각 Claim은 원문의 근거(SourceSpan)와 매핑됩니다.
+ *
+ * 검증 레벨: regex → llm → human
+ */
+export const claims = pgTable(
+  'claims',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => validationSessions.id, { onDelete: 'cascade' }),
+
+    // Claim 내용
+    claimText: text('claim_text').notNull(), // "연락처 수는 30개입니다"
+    claimType: text('claim_type', {
+      enum: ['numeric', 'contact', 'date', 'text', 'list', 'table'],
+    }).notNull(),
+
+    // 재구성본에서의 위치
+    reconstructedLocation: jsonb('reconstructed_location').$type<{
+      startLine: number;
+      endLine: number;
+      startChar: number;
+      endChar: number;
+    }>(),
+
+    // AI 자동 검증 결과
+    verdict: text('verdict', {
+      enum: ['supported', 'contradicted', 'not_found', 'pending'],
+    })
+      .notNull()
+      .default('pending'),
+    confidence: real('confidence'), // 0.0 ~ 1.0
+    verificationLevel: text('verification_level', {
+      enum: ['regex', 'llm', 'human'],
+    }),
+    verificationDetail: text('verification_detail'), // 검증 상세 설명
+
+    // 위험도 분류
+    riskLevel: text('risk_level', {
+      enum: ['high', 'medium', 'low'],
+    })
+      .notNull()
+      .default('low'),
+
+    // 의심 유형 (AI가 발견한 문제)
+    suspicionType: text('suspicion_type', {
+      enum: ['added', 'missing', 'moved', 'contradicted', 'none'],
+    }),
+    suspicionDetail: text('suspicion_detail'),
+
+    // 사용자 검토 결과
+    humanVerdict: text('human_verdict', {
+      enum: ['approved', 'rejected', 'modified', 'skipped'],
+    }),
+    humanNote: text('human_note'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+
+    // 정렬용
+    sortOrder: integer('sort_order').notNull().default(0),
+
+    // 타임스탬프
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_claims_session').on(table.sessionId),
+    index('idx_claims_verdict').on(table.verdict),
+    index('idx_claims_risk').on(table.riskLevel),
+    index('idx_claims_human_verdict').on(table.humanVerdict),
+  ]
+);
+
+// Claim 타입 추론용
+export type Claim = typeof claims.$inferSelect;
+export type NewClaim = typeof claims.$inferInsert;
+
+/**
+ * SourceSpan 테이블
+ *
+ * Claim의 원문 근거 영역입니다.
+ * 하나의 Claim은 0~N개의 SourceSpan을 가질 수 있습니다.
+ */
+export const sourceSpans = pgTable(
+  'source_spans',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    claimId: uuid('claim_id')
+      .notNull()
+      .references(() => claims.id, { onDelete: 'cascade' }),
+
+    // 원문 위치
+    sourceText: text('source_text').notNull(), // 매칭된 원문 스니펫
+    startChar: integer('start_char').notNull(),
+    endChar: integer('end_char').notNull(),
+    pageNumber: integer('page_number'), // PDF 페이지 (1-indexed)
+
+    // 매칭 품질
+    matchScore: real('match_score'), // 0.0 ~ 1.0
+    matchMethod: text('match_method', {
+      enum: ['exact', 'fuzzy', 'semantic'],
+    }).notNull(),
+
+    // 타임스탬프
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [index('idx_source_spans_claim').on(table.claimId)]
+);
+
+// SourceSpan 타입 추론용
+export type SourceSpan = typeof sourceSpans.$inferSelect;
+export type NewSourceSpan = typeof sourceSpans.$inferInsert;
+
+/**
+ * ValidationAuditLog 테이블
+ *
+ * 검증 과정의 모든 액션을 기록하는 감사 로그입니다.
+ * 누가, 언제, 어떤 검증 액션을 수행했는지 추적합니다.
+ * 컴플라이언스 및 감사 추적용입니다.
+ */
+export const validationAuditLogs = pgTable(
+  'validation_audit_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => validationSessions.id, { onDelete: 'cascade' }),
+    // 사용자 ID (시스템 자동 작업 시 null 가능)
+    userId: uuid('user_id').references(() => users.id, {
+      onDelete: 'cascade',
+    }),
+
+    // 액션 유형
+    action: text('action', {
+      enum: [
+        'session_viewed', // 세션 열람
+        'session_approved', // 세션 승인
+        'session_rejected', // 세션 거부
+        'session_expired', // 세션 만료 (시스템 자동)
+        'session_deleted', // 세션 삭제
+        'claim_reviewed', // Claim 검토
+        'claim_approved', // Claim 승인
+        'claim_rejected', // Claim 거부
+        'claim_modified', // Claim 수정
+        'markdown_edited', // 마크다운 수정
+        'masking_applied', // 마스킹 적용
+        'masking_revealed', // 마스킹 해제
+        'export_generated', // 리포트 생성
+      ],
+    }).notNull(),
+
+    // 대상 (Claim ID 등)
+    targetType: text('target_type', {
+      enum: ['session', 'claim', 'markdown'],
+    }),
+    targetId: text('target_id'),
+
+    // 변경 내역
+    previousValue: text('previous_value'),
+    newValue: text('new_value'),
+
+    // 추가 메타데이터
+    metadata: jsonb('metadata').$type<{
+      reason?: string;
+      claimText?: string;
+      verdict?: string;
+      [key: string]: unknown;
+    }>(),
+
+    // 클라이언트 정보
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+
+    // 타임스탬프
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_audit_logs_session').on(table.sessionId),
+    index('idx_audit_logs_user').on(table.userId),
+    index('idx_audit_logs_action').on(table.action),
+    index('idx_audit_logs_created').on(table.createdAt),
+  ]
+);
+
+// ValidationAuditLog 타입 추론용
+export type ValidationAuditLog = typeof validationAuditLogs.$inferSelect;
+export type NewValidationAuditLog = typeof validationAuditLogs.$inferInsert;

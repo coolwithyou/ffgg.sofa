@@ -18,3 +18,7 @@ export { processScheduledDeletions } from './account-deletion';
 
 // Knowledge Pages 변환 함수
 export { convertDocumentToPagesFunction } from './convert-document-to-pages';
+
+// Knowledge Pages 검증 함수
+export { validateClaimsFunction } from './validate-claims';
+export { expireValidationSessions } from './expire-validation-sessions';

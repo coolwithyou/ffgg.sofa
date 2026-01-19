@@ -438,7 +438,7 @@ export async function uploadQAAsDocument(
   }
 
   revalidatePath('/console/chatbot/faq');
-  revalidatePath('/console/chatbot');
+  revalidatePath('/console/chatbot/docu');
 
   return { documentId: newDocumentId, success: true, updatedQAPair };
 }

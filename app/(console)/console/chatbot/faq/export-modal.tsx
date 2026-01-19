@@ -98,7 +98,7 @@ export function ExportModal({
 
       // 3초 후 문서 관리 페이지로 이동 (Console 경로로 업데이트)
       setTimeout(() => {
-        router.push('/console/chatbot');
+        router.push('/console/chatbot/docu');
       }, 2000);
     } catch (error) {
       setExportResult({

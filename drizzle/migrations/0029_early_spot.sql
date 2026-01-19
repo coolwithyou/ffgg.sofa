@@ -1,0 +1,1 @@
+ALTER TABLE "validation_audit_logs" ALTER COLUMN "user_id" DROP NOT NULL;
