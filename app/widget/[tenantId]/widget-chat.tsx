@@ -11,16 +11,12 @@ import { useStickToBottom } from 'use-stick-to-bottom';
 import { sendWidgetMessage, type WidgetChatError } from './actions';
 import type { WidgetConfig, WidgetMessage } from '@/lib/widget/types';
 import { MessageActions } from '@/components/chat/message-actions';
+import { ErrorMessage, type ChatError } from '@/components/chat/error-message';
 
 /**
  * 위젯 채팅 에러 파싱
  */
-interface ParsedError {
-  message: string;
-  code?: 'INSUFFICIENT_POINTS' | 'RATE_LIMIT' | 'VALIDATION_ERROR';
-}
-
-function parseError(error: unknown): ParsedError {
+function parseError(error: unknown): ChatError {
   if (!(error instanceof Error)) {
     return { message: '메시지 전송에 실패했습니다.' };
   }
@@ -44,7 +40,11 @@ interface WidgetChatState {
   isLoading: boolean;
   messages: WidgetMessage[];
   sessionId: string | null;
-  error: ParsedError | null;
+  error: ChatError | null;
+  /** 마지막 사용자 메시지 (재시도용) */
+  lastUserMessage: string | null;
+  /** 재시도 중 여부 */
+  isRetrying: boolean;
 }
 
 interface WidgetChatProps {
@@ -72,6 +72,8 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
     messages: [],
     sessionId: null,
     error: null,
+    lastUserMessage: null,
+    isRetrying: false,
   });
 
   const [inputValue, setInputValue] = useState('');
@@ -103,51 +105,83 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
     }
   }, [welcomeMessage, state.messages.length]);
 
-  // 메시지 전송
+  // 메시지 전송 (내부 함수 - 실제 API 호출)
+  const sendMessage = useCallback(
+    async (message: string, addUserMessage = true) => {
+      if (addUserMessage) {
+        const userMessage: WidgetMessage = {
+          id: `user-${Date.now()}`,
+          role: 'user',
+          content: message,
+          timestamp: new Date().toISOString(),
+        };
+        setState((prev) => ({
+          ...prev,
+          isLoading: true,
+          error: null,
+          lastUserMessage: message,
+          messages: [...prev.messages, userMessage],
+        }));
+      } else {
+        setState((prev) => ({
+          ...prev,
+          isLoading: true,
+          error: null,
+          lastUserMessage: message,
+        }));
+      }
+
+      try {
+        const response = await sendWidgetMessage(tenantId, message, state.sessionId || undefined, chatbotId);
+
+        const assistantMessage: WidgetMessage = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: response.message,
+          timestamp: new Date().toISOString(),
+          sources: response.sources,
+        };
+
+        setState((prev) => ({
+          ...prev,
+          isLoading: false,
+          sessionId: response.sessionId,
+          messages: [...prev.messages, assistantMessage],
+          error: null,
+          lastUserMessage: null,
+        }));
+      } catch (error) {
+        setState((prev) => ({
+          ...prev,
+          isLoading: false,
+          error: parseError(error),
+        }));
+      }
+    },
+    [state.sessionId, tenantId, chatbotId]
+  );
+
+  // 메시지 전송 (사용자 입력)
   const handleSend = useCallback(async () => {
     const message = inputValue.trim();
     if (!message || state.isLoading || message.length > MAX_MESSAGE_LENGTH) return;
 
     setInputValue('');
-    const userMessage: WidgetMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: message,
-      timestamp: new Date().toISOString(),
-    };
+    await sendMessage(message);
+  }, [inputValue, state.isLoading, sendMessage]);
 
-    setState((prev) => ({
-      ...prev,
-      isLoading: true,
-      error: null,
-      messages: [...prev.messages, userMessage],
-    }));
+  // 재시도
+  const handleRetry = useCallback(async () => {
+    if (!state.lastUserMessage || state.isRetrying) return;
+
+    setState((prev) => ({ ...prev, isRetrying: true, error: null }));
 
     try {
-      const response = await sendWidgetMessage(tenantId, message, state.sessionId || undefined, chatbotId);
-
-      const assistantMessage: WidgetMessage = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: response.message,
-        timestamp: new Date().toISOString(),
-        sources: response.sources,
-      };
-
-      setState((prev) => ({
-        ...prev,
-        isLoading: false,
-        sessionId: response.sessionId,
-        messages: [...prev.messages, assistantMessage],
-      }));
-    } catch (error) {
-      setState((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: parseError(error),
-      }));
+      await sendMessage(state.lastUserMessage, false);
+    } finally {
+      setState((prev) => ({ ...prev, isRetrying: false }));
     }
-  }, [inputValue, state.isLoading, state.sessionId, tenantId]);
+  }, [state.lastUserMessage, state.isRetrying, sendMessage]);
 
   // 키보드 이벤트
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -187,14 +221,13 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
           ))}
           {state.isLoading && <TypingIndicator primaryColor={theme.primaryColor} />}
           {state.error && (
-            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
-              {state.error.message}
-              {state.error.code === 'INSUFFICIENT_POINTS' && (
-                <p className="mt-1 text-xs opacity-80">
-                  서비스 이용이 일시적으로 제한되었습니다.
-                </p>
-              )}
-            </div>
+            <ErrorMessage
+              error={state.error}
+              onRetry={handleRetry}
+              isRetrying={state.isRetrying}
+              primaryColor={theme.primaryColor}
+              compact
+            />
           )}
         </div>
 

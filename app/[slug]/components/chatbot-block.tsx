@@ -21,6 +21,7 @@ import {
 import { ProgressIndicator } from '@/components/chat/progress-indicator';
 import { SourcesCollapsible, type Source } from '@/components/chat/sources-collapsible';
 import { MessageActions } from '@/components/chat/message-actions';
+import { ErrorMessage, type ChatError } from '@/components/chat/error-message';
 
 interface ChatbotBlockProps {
   chatbotId: string;
@@ -78,12 +79,6 @@ interface Message {
 // 메시지 최대 길이
 const MAX_MESSAGE_LENGTH = 4000;
 
-// 에러 상태
-interface ChatError {
-  message: string;
-  code?: 'INSUFFICIENT_POINTS' | 'RATE_LIMIT' | 'VALIDATION_ERROR';
-}
-
 /**
  * 에러 메시지 파싱
  * JSON 형식의 에러 메시지를 파싱하여 구조화된 에러 정보를 반환
@@ -136,6 +131,8 @@ export function ChatbotBlock({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<ChatError | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [lastUserMessage, setLastUserMessage] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   // 스마트 오토스크롤: 사용자가 위로 스크롤하면 자동 스크롤 비활성화
   const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom();
@@ -154,48 +151,74 @@ export function ChatbotBlock({
     }
   }, [welcomeMessage, messages.length]);
 
-  // 메시지 전송
+  // 메시지 전송 (내부 함수 - 실제 API 호출)
+  const sendMessage = useCallback(
+    async (message: string, addUserMessage = true) => {
+      if (addUserMessage) {
+        const userMessage: Message = {
+          id: `user-${Date.now()}`,
+          role: 'user',
+          content: message,
+          timestamp: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, userMessage]);
+      }
+
+      setLastUserMessage(message);
+      setIsLoading(true);
+
+      try {
+        const response: PublicPageChatResponse = await sendPublicPageMessage(
+          chatbotId,
+          tenantId,
+          message,
+          sessionId || undefined
+        );
+
+        const assistantMessage: Message = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: response.message,
+          timestamp: new Date().toISOString(),
+          sources: response.sources,
+        };
+
+        setMessages((prev) => [...prev, assistantMessage]);
+        setSessionId(response.sessionId);
+        setError(null);
+        setLastUserMessage(null);
+      } catch (err) {
+        setError(parseError(err));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId, chatbotId, tenantId]
+  );
+
+  // 메시지 전송 (사용자 입력)
   const handleSend = useCallback(async () => {
     const message = inputValue.trim();
     if (!message || isLoading || message.length > MAX_MESSAGE_LENGTH) return;
 
     setInputValue('');
     setError(null);
+    await sendMessage(message);
+  }, [inputValue, isLoading, sendMessage]);
 
-    const userMessage: Message = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: message,
-      timestamp: new Date().toISOString(),
-    };
+  // 재시도
+  const handleRetry = useCallback(async () => {
+    if (!lastUserMessage || isRetrying) return;
 
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
+    setIsRetrying(true);
+    setError(null);
 
     try {
-      const response: PublicPageChatResponse = await sendPublicPageMessage(
-        chatbotId,
-        tenantId,
-        message,
-        sessionId || undefined
-      );
-
-      const assistantMessage: Message = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: response.message,
-        timestamp: new Date().toISOString(),
-        sources: response.sources,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-      setSessionId(response.sessionId);
-    } catch (err) {
-      setError(parseError(err));
+      await sendMessage(lastUserMessage, false);
     } finally {
-      setIsLoading(false);
+      setIsRetrying(false);
     }
-  }, [inputValue, isLoading, sessionId, chatbotId, tenantId]);
+  }, [lastUserMessage, isRetrying, sendMessage]);
 
   // 키보드 이벤트
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -259,14 +282,13 @@ export function ChatbotBlock({
             </div>
           )}
           {error && (
-            <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-              {error.message}
-              {error.code === 'INSUFFICIENT_POINTS' && (
-                <p className="mt-1 text-xs opacity-80">
-                  서비스 이용이 일시적으로 제한되었습니다.
-                </p>
-              )}
-            </div>
+            <ErrorMessage
+              error={error}
+              onRetry={handleRetry}
+              isRetrying={isRetrying}
+              primaryColor={primaryColor}
+              compact
+            />
           )}
         </div>
 
