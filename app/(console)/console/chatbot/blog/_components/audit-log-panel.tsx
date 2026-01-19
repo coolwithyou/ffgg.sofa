@@ -48,6 +48,7 @@ type AuditAction =
   | 'session_approved'
   | 'session_rejected'
   | 'session_expired'
+  | 'session_deleted'
   | 'claim_reviewed'
   | 'claim_approved'
   | 'claim_rejected'
@@ -110,6 +111,11 @@ const actionConfig: Record<
     icon: Clock,
     label: '세션 만료',
     color: 'text-muted-foreground',
+  },
+  session_deleted: {
+    icon: XCircle,
+    label: '세션 삭제',
+    color: 'text-destructive',
   },
   claim_reviewed: {
     icon: Eye,

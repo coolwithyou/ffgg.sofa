@@ -12,7 +12,7 @@
  */
 
 import { createAnthropic } from '@ai-sdk/anthropic';
-import { generateText, type CoreMessage } from 'ai';
+import { generateText, type ModelMessage } from 'ai';
 import { logger } from '@/lib/logger';
 
 /**
@@ -79,7 +79,7 @@ export async function generateWithCache(
   });
 
   // 메시지 구성: 시스템 프롬프트에 cache_control 적용
-  const messages: CoreMessage[] = [
+  const messages: ModelMessage[] = [
     {
       role: 'user',
       content: userPrompt,
@@ -90,11 +90,11 @@ export async function generateWithCache(
     model: anthropic(model),
     system: systemPrompt,
     messages,
-    maxTokens: maxOutputTokens,
+    maxOutputTokens,
     temperature,
     // Anthropic Prompt Caching 활성화
-    // experimental_providerMetadata로 cache_control 전달
-    experimental_providerMetadata: {
+    // providerOptions로 cache_control 전달
+    providerOptions: {
       anthropic: {
         cacheControl: {
           type: 'ephemeral',
@@ -104,7 +104,7 @@ export async function generateWithCache(
   });
 
   // 캐시 사용량 로깅 (디버깅용)
-  const providerMetadata = result.experimental_providerMetadata?.anthropic as
+  const providerMetadata = result.providerMetadata?.anthropic as
     | { cacheCreationInputTokens?: number; cacheReadInputTokens?: number }
     | undefined;
 
@@ -123,8 +123,8 @@ export async function generateWithCache(
   return {
     text: result.text,
     usage: {
-      inputTokens: result.usage?.promptTokens ?? 0,
-      outputTokens: result.usage?.completionTokens ?? 0,
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
       cacheCreationInputTokens: cacheCreationTokens,
       cacheReadInputTokens: cacheReadTokens,
     },

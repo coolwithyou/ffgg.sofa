@@ -101,7 +101,7 @@ export const validateClaimsFunction = inngestClient.createFunction(
 
       // 실패 시 세션 상태를 rejected로 업데이트
       try {
-        await updateSessionStatus(sessionId, 'rejected', {
+        await updateSessionStatus(sessionId, 'rejected', undefined, {
           reviewNote: `검증 실패: ${(error as Error).message || 'Unknown error'}`,
         });
       } catch (updateError) {
