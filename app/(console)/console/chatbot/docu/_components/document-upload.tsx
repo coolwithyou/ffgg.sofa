@@ -13,7 +13,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronDown, Database, Library } from 'lucide-react';
 import { DocumentPreviewModal, type UploadState } from './document-preview-modal';
 import { DocumentProgressModal } from '@/components/document-progress-modal';
-import { useTenantSettings } from '../../hooks/use-console-state';
+import { useTenantSettings } from '../../../hooks/use-console-state';
 import type { ParsePreviewResponse } from '@/app/api/documents/preview/parse/route';
 import type { ChunkPreviewResponse } from '@/app/api/documents/preview/chunk/route';
 import type { ChunkingStrategy } from '@/types/experiment';

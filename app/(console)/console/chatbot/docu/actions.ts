@@ -195,7 +195,7 @@ export async function deleteDocument(documentId: string): Promise<{ success: boo
     // 삭제 (cascade로 청크도 함께 삭제됨)
     await db.delete(documents).where(eq(documents.id, documentId));
 
-    revalidatePath('/console/chatbot');
+    revalidatePath('/console/chatbot/docu');
 
     logger.info('Document deleted', { documentId, tenantId: session.tenantId });
     return { success: true };
@@ -267,7 +267,7 @@ export async function reprocessDocument(documentId: string): Promise<{ success: 
       },
     });
 
-    revalidatePath('/console/chatbot');
+    revalidatePath('/console/chatbot/docu');
 
     logger.info('Document reprocess triggered', {
       documentId,
@@ -558,7 +558,7 @@ export async function moveDocumentToDataset(
       })
       .where(eq(datasets.id, targetDatasetId));
 
-    revalidatePath('/console/chatbot');
+    revalidatePath('/console/chatbot/docu');
     revalidatePath('/console/chatbot/datasets');
     revalidatePath(`/console/chatbot/datasets/${targetDatasetId}`);
 
@@ -676,7 +676,7 @@ export async function duplicateDocumentToDataset(
       })
       .where(eq(datasets.id, targetDatasetId));
 
-    revalidatePath('/console/chatbot');
+    revalidatePath('/console/chatbot/docu');
     revalidatePath('/console/chatbot/datasets');
     revalidatePath(`/console/chatbot/datasets/${targetDatasetId}`);
 
@@ -752,7 +752,7 @@ export async function unassignDocumentFromDataset(
       })
       .where(eq(datasets.id, sourceDatasetId));
 
-    revalidatePath('/console/chatbot');
+    revalidatePath('/console/chatbot/docu');
     revalidatePath('/console/chatbot/datasets');
     revalidatePath(`/console/chatbot/datasets/${sourceDatasetId}`);
 

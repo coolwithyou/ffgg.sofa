@@ -84,7 +84,7 @@ export function StalledDocumentsBanner({ documents }: StalledDocumentsBannerProp
             {isPending ? '재시작 중...' : '모두 재시작'}
           </button>
           <Link
-            href="/console/chatbot"
+            href="/console/chatbot/docu"
             className="text-sm text-orange-600 hover:text-orange-500"
           >
             문서 관리 →
