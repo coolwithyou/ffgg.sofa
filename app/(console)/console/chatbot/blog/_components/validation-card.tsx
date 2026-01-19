@@ -9,6 +9,7 @@ import {
   CardContent,
 } from '@/components/ui/card';
 import type { ValidationSessionWithDocument } from '../validation/actions';
+import type { ProcessingStep } from '@/lib/knowledge-pages/types';
 import { FileText, Clock, AlertTriangle, Loader2, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -31,6 +32,15 @@ const statusConfig: Record<
   approved: { label: '승인됨', color: 'bg-green-500/10 text-green-500' },
   rejected: { label: '거부됨', color: 'bg-destructive/10 text-destructive' },
   expired: { label: '만료됨', color: 'bg-muted text-muted-foreground' },
+};
+
+// 처리 단계 레이블 (간략 버전)
+const STEP_LABELS: Record<ProcessingStep, string> = {
+  reconstruct: '마크다운 재구성',
+  extract: 'Claim 추출',
+  regex: 'Regex 검증',
+  llm: 'LLM 검증',
+  complete: '완료',
 };
 
 export function ValidationCard({ session, onDelete }: ValidationCardProps) {
@@ -102,16 +112,35 @@ export function ValidationCard({ session, onDelete }: ValidationCardProps) {
       </CardHeader>
 
       <CardContent>
-        {/* 처리 중 상태 표시 */}
+        {/* 처리 중 상태 표시 - 진행률 바 포함 */}
         {isProcessing && (
-          <div className="mb-3 flex items-center gap-2 rounded-md bg-primary/10 px-3 py-2">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            <span className="text-sm text-primary">
-              {session.status === 'pending' && 'AI 분석 대기 중...'}
-              {session.status === 'analyzing' && '문서 분석 중...'}
-              {session.status === 'extracting_claims' && 'Claim 추출 중...'}
-              {session.status === 'verifying' && '검증 진행 중...'}
-            </span>
+          <div className="mb-3 rounded-md bg-primary/10 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span className="flex-1 text-sm font-medium text-primary">
+                {session.currentStep
+                  ? STEP_LABELS[session.currentStep as ProcessingStep]
+                  : session.status === 'pending'
+                    ? 'AI 분석 대기 중'
+                    : '처리 중'}
+              </span>
+              {(session.totalSteps ?? 0) > 0 && (
+                <span className="text-xs text-primary/70">
+                  {session.completedSteps ?? 0}/{session.totalSteps} 단계
+                </span>
+              )}
+            </div>
+            {/* 미니 진행률 바 */}
+            {(session.totalSteps ?? 0) > 0 && (
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-primary/20">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-500"
+                  style={{
+                    width: `${((session.completedSteps ?? 0) / (session.totalSteps ?? 1)) * 100}%`,
+                  }}
+                />
+              </div>
+            )}
           </div>
         )}
 
