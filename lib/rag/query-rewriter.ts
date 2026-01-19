@@ -20,6 +20,10 @@ export interface QueryRewriteOptions {
   trackingContext?: TrackingContext;
   /** 페르소나의 포함 주제 (키워드 확장에 사용) */
   includedTopics?: string[];
+  /** 전문 분야 (도메인 맥락용) */
+  expertiseArea?: string;
+  /** 도메인 용어 사전 (동음이의어 해소용) */
+  domainGlossary?: Record<string, string>;
 }
 
 /**
@@ -132,6 +136,43 @@ const REWRITE_SYSTEM_PROMPT = `당신은 대화 맥락을 고려하여 후속 �
 홍길동의 아들 이름은 무엇인가요?`;
 
 /**
+ * 도메인 컨텍스트를 반영한 시스템 프롬프트 생성
+ * 도메인 정보가 없으면 기존 프롬프트 반환
+ */
+function buildDomainAwarePrompt(options: QueryRewriteOptions): string {
+  const { expertiseArea, includedTopics, domainGlossary } = options;
+
+  // 도메인 정보가 없으면 기존 프롬프트 사용
+  if (!expertiseArea && !includedTopics?.length && !domainGlossary) {
+    return REWRITE_SYSTEM_PROMPT;
+  }
+
+  const glossarySection =
+    domainGlossary && Object.keys(domainGlossary).length > 0
+      ? `\n## 도메인 용어 사전\n${Object.entries(domainGlossary)
+          .map(([term, def]) => `- ${term}: ${def}`)
+          .join('\n')}`
+      : '';
+
+  return `당신은 대화 맥락을 고려하여 질문을 재작성하는 전문가입니다.
+
+## 도메인 정보
+- 전문 분야: ${expertiseArea || '일반'}
+- 관련 주제: ${includedTopics?.join(', ') || '없음'}${glossarySection}
+
+## 동음이의어 처리 규칙
+- 질문에 도메인 주제와 관련된 단어가 있다면, 반드시 도메인 맥락에서 해석하세요.
+- 도메인 용어 사전에 있는 용어는 해당 정의에 따라 재작성하세요.
+- 예시: "포수"가 옻칠 관련 챗봇이면 "옻칠 포수(布水) 기법"으로 재작성
+
+## 규칙
+1. 대명사를 구체적 명사로 교체
+2. 생략된 맥락 정보를 명시적으로 포함
+3. 도메인 컨텍스트를 반영하여 재작성
+4. 재작성된 질문만 출력 (설명, 인용부호 없이)`;
+}
+
+/**
  * 대화 맥락을 고려하여 쿼리를 재작성합니다.
  *
  * @param currentQuery - 현재 사용자 질문
@@ -144,40 +185,70 @@ export async function rewriteQuery(
   conversationHistory: ChatMessage[],
   options: QueryRewriteOptions = {}
 ): Promise<string> {
-  const { maxHistoryMessages = 4, temperature = 0.3, maxTokens = 150, trackingContext, includedTopics } = options;
+  const {
+    maxHistoryMessages = 4,
+    temperature = 0.3,
+    maxTokens = 150,
+    trackingContext,
+    includedTopics,
+    expertiseArea,
+    domainGlossary,
+  } = options;
 
-  // 로깅: includedTopics 확인
+  // 도메인 컨텍스트 존재 여부 확인
+  const hasDomainContext = !!(
+    expertiseArea ||
+    (domainGlossary && Object.keys(domainGlossary).length > 0)
+  );
+
+  // 로깅: includedTopics 및 도메인 컨텍스트 확인
   logger.debug('Query rewrite started', {
     query: currentQuery,
     includedTopicsCount: includedTopics?.length ?? 0,
     includedTopics: includedTopics?.slice(0, 5), // 처음 5개만 로깅
     hasHistory: conversationHistory.length > 0,
+    hasDomainContext,
+    expertiseArea,
   });
 
   // 1. 키워드 확장 (히스토리와 무관하게 항상 적용)
-  let expandedQuery = expandQueryWithKeywords(currentQuery, includedTopics || []);
+  const expandedQuery = expandQueryWithKeywords(currentQuery, includedTopics || []);
 
-  // 2. 히스토리가 없으면 확장된 쿼리 반환 (첫 질문)
-  if (conversationHistory.length === 0) {
+  // 2. 히스토리가 없고 도메인 컨텍스트도 없으면 확장된 쿼리 반환
+  if (conversationHistory.length === 0 && !hasDomainContext) {
     return expandedQuery;
   }
 
   try {
-    // 최근 N개 메시지만 사용
-    const recentHistory = conversationHistory
-      .slice(-maxHistoryMessages)
-      .map((m) => `${m.role === 'user' ? '사용자' : '어시스턴트'}: ${m.content}`)
-      .join('\n');
+    // 도메인 인지 프롬프트 생성
+    const systemPrompt = buildDomainAwarePrompt(options);
 
-    const userPrompt = `[이전 대화]
+    // 히스토리가 없는 경우 (도메인 컨텍스트만 있는 경우)
+    let userPrompt: string;
+    if (conversationHistory.length === 0) {
+      userPrompt = `다음 질문을 도메인 맥락에 맞게 재작성하세요:
+
+[질문]
+${expandedQuery}
+
+[재작성된 질문]`;
+    } else {
+      // 최근 N개 메시지만 사용
+      const recentHistory = conversationHistory
+        .slice(-maxHistoryMessages)
+        .map((m) => `${m.role === 'user' ? '사용자' : '어시스턴트'}: ${m.content}`)
+        .join('\n');
+
+      userPrompt = `[이전 대화]
 ${recentHistory}
 
 [현재 질문]
 ${expandedQuery}
 
 [재작성된 질문]`;
+    }
 
-    const rewritten = await generateWithFallback(REWRITE_SYSTEM_PROMPT, userPrompt, {
+    const rewritten = await generateWithFallback(systemPrompt, userPrompt, {
       temperature,
       maxTokens,
       trackingContext: trackingContext
@@ -201,6 +272,7 @@ ${expandedQuery}
       original: currentQuery,
       rewritten: result,
       historyLength: conversationHistory.length,
+      hasDomainContext,
     });
 
     return result;
@@ -209,6 +281,7 @@ ${expandedQuery}
       originalQuery: currentQuery,
       expandedQuery,
       historyLength: conversationHistory.length,
+      hasDomainContext,
     });
     // 실패 시 확장된 쿼리 반환 (Graceful degradation)
     return expandedQuery;

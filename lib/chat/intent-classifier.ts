@@ -34,6 +34,21 @@ export interface PersonaConfig {
   /** 제외되는 주제 목록 (이 주제들은 OUT_OF_SCOPE로 분류) */
   excludedTopics?: string[];
   tone: 'professional' | 'friendly' | 'casual';
+
+  /**
+   * 도메인 용어 사전 (동음이의어 해소용)
+   *
+   * 키: 동음이의어/도메인 용어
+   * 값: 해당 도메인에서의 정의
+   *
+   * @example
+   * {
+   *   "포수": "布水, 옻칠 마감 기법으로 물을 뿌려 광택을 내는 과정",
+   *   "생칠": "生漆, 옻나무에서 채취한 천연 옻",
+   *   "건칠": "乾漆, 옻을 바른 후 건조시킨 상태"
+   * }
+   */
+  domainGlossary?: Record<string, string>;
 }
 
 /** 기본 페르소나 설정 (추후 DB로 마이그레이션) */
@@ -44,6 +59,7 @@ export const DEFAULT_PERSONA: PersonaConfig = {
   includedTopics: [],
   excludedTopics: [],
   tone: 'friendly',
+  domainGlossary: {},
 };
 
 // ============================================================================
@@ -76,12 +92,15 @@ const OUT_OF_SCOPE_PATTERNS: RegExp[] = [
 
 /**
  * 규칙 기반 빠른 분류 (LLM 호출 없이)
+ * 체크 순서: CHITCHAT → includedTopics → excludedTopics → OUT_OF_SCOPE 패턴
+ * @param message - 사용자 메시지
+ * @param persona - 페르소나 설정 (도메인 키워드 우선 처리용)
  * @returns 매칭되면 IntentResult, 아니면 null
  */
-function classifyByRules(message: string): IntentResult | null {
+function classifyByRules(message: string, persona?: PersonaConfig): IntentResult | null {
   const trimmed = message.trim();
 
-  // CHITCHAT 패턴 체크
+  // 1. CHITCHAT 패턴 체크 (기존 유지)
   for (const pattern of CHITCHAT_PATTERNS) {
     if (pattern.test(trimmed)) {
       return {
@@ -93,7 +112,39 @@ function classifyByRules(message: string): IntentResult | null {
     }
   }
 
-  // OUT_OF_SCOPE 패턴 체크
+  // 2. [신규] 도메인 키워드 우선 체크 (OUT_OF_SCOPE보다 먼저!)
+  // 관리자가 명시적으로 지정한 도메인 주제는 OUT_OF_SCOPE 패턴보다 우선
+  if (persona?.includedTopics?.length) {
+    const messageLower = trimmed.toLowerCase();
+    for (const topic of persona.includedTopics) {
+      if (messageLower.includes(topic.toLowerCase())) {
+        return {
+          intent: 'DOMAIN_QUERY',
+          confidence: 0.92,
+          reasoning: `도메인 주제 "${topic}" 매칭`,
+          rulesMatch: true,
+        };
+      }
+    }
+  }
+
+  // 3. [신규] excludedTopics 체크
+  // 관리자가 명시적으로 제외한 주제는 OUT_OF_SCOPE로 분류
+  if (persona?.excludedTopics?.length) {
+    const messageLower = trimmed.toLowerCase();
+    for (const topic of persona.excludedTopics) {
+      if (messageLower.includes(topic.toLowerCase())) {
+        return {
+          intent: 'OUT_OF_SCOPE',
+          confidence: 0.9,
+          reasoning: `제외 주제 "${topic}" 매칭`,
+          rulesMatch: true,
+        };
+      }
+    }
+  }
+
+  // 4. 기존 OUT_OF_SCOPE 패턴 (마지막에)
   for (const pattern of OUT_OF_SCOPE_PATTERNS) {
     if (pattern.test(trimmed)) {
       return {
@@ -303,8 +354,8 @@ export async function classifyIntent(
 ): Promise<IntentResult> {
   const startTime = Date.now();
 
-  // 1. 규칙 기반 빠른 분류 시도
-  const rulesResult = classifyByRules(message);
+  // 1. 규칙 기반 빠른 분류 시도 (persona 전달하여 도메인 키워드 우선 처리)
+  const rulesResult = classifyByRules(message, persona);
   if (rulesResult) {
     logger.debug('Intent classified by rules', {
       message: message.slice(0, 50),

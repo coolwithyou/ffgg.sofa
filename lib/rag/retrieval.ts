@@ -12,7 +12,7 @@
  */
 
 import { db } from '@/lib/db';
-import { chunks, knowledgePages, knowledgePageVersions } from '@/drizzle/schema';
+import { chunks } from '@/drizzle/schema';
 import { sql, eq, and } from 'drizzle-orm';
 import { embedText, type EmbeddingTrackingContext } from './embedding';
 import { logger } from '@/lib/logger';
@@ -40,6 +40,38 @@ interface RankedResult {
   denseScore?: number;
 }
 
+
+/**
+ * 검색 쿼리 도메인 컨텍스트
+ * 동음이의어 해소를 위해 검색 쿼리에 도메인 정보를 주입할 때 사용
+ */
+export interface DomainContext {
+  /** 전문 분야 (쿼리 프리픽스로 사용) */
+  expertiseArea?: string;
+}
+
+/**
+ * 검색 쿼리에 도메인 컨텍스트 주입
+ *
+ * 도메인 정보가 있으면 쿼리 앞에 프리픽스로 추가하여
+ * 임베딩 생성 시 도메인 맥락이 반영되도록 함
+ *
+ * @param query - 원본 검색 쿼리
+ * @param domainContext - 도메인 컨텍스트 (expertiseArea 포함)
+ * @returns 도메인 정보가 주입된 쿼리
+ *
+ * @example
+ * injectDomainContext('포수에 대해 알려줘', { expertiseArea: '옻칠 기법' })
+ * // '[옻칠 기법] 포수에 대해 알려줘'
+ */
+export function injectDomainContext(
+  query: string,
+  domainContext?: DomainContext
+): string {
+  if (!domainContext?.expertiseArea) return query;
+  return `[${domainContext.expertiseArea}] ${query}`;
+}
+
 const DEFAULT_LIMIT = 5;
 const RRF_K = 60; // Reciprocal Rank Fusion 상수
 
@@ -51,15 +83,19 @@ export async function hybridSearch(
   tenantId: string,
   query: string,
   limit: number = DEFAULT_LIMIT,
-  trackingContext?: EmbeddingTrackingContext
+  trackingContext?: EmbeddingTrackingContext,
+  domainContext?: DomainContext
 ): Promise<SearchResult[]> {
   const startTime = Date.now();
+
+  // 도메인 컨텍스트 주입 (동음이의어 해소용)
+  const enrichedQuery = injectDomainContext(query, domainContext);
 
   try {
     // 병렬로 두 검색 수행
     const [denseResults, sparseResults] = await Promise.all([
-      denseSearch(tenantId, query, limit * 2, trackingContext),
-      sparseSearch(tenantId, query, limit * 2),
+      denseSearch(tenantId, enrichedQuery, limit * 2, trackingContext),
+      sparseSearch(tenantId, enrichedQuery, limit * 2),
     ]);
 
     // RRF로 결과 병합
@@ -73,6 +109,7 @@ export async function hybridSearch(
     logger.info('Hybrid search completed', {
       tenantId,
       queryLength: query.length,
+      enrichedQuery: enrichedQuery !== query ? enrichedQuery : undefined,
       denseCount: denseResults.length,
       sparseCount: sparseResults.length,
       hybridCount: hybridResults.length,
@@ -99,7 +136,8 @@ export async function hybridSearchMultiDataset(
   datasetIds: string[],
   query: string,
   limit: number = DEFAULT_LIMIT,
-  trackingContext?: EmbeddingTrackingContext
+  trackingContext?: EmbeddingTrackingContext,
+  domainContext?: DomainContext
 ): Promise<SearchResult[]> {
   const startTime = Date.now();
 
@@ -108,11 +146,14 @@ export async function hybridSearchMultiDataset(
     return [];
   }
 
+  // 도메인 컨텍스트 주입 (동음이의어 해소용)
+  const enrichedQuery = injectDomainContext(query, domainContext);
+
   try {
     // 병렬로 두 검색 수행
     const [denseResults, sparseResults] = await Promise.all([
-      denseSearchMultiDataset(tenantId, datasetIds, query, limit * 2, trackingContext),
-      sparseSearchMultiDataset(tenantId, datasetIds, query, limit * 2),
+      denseSearchMultiDataset(tenantId, datasetIds, enrichedQuery, limit * 2, trackingContext),
+      sparseSearchMultiDataset(tenantId, datasetIds, enrichedQuery, limit * 2),
     ]);
 
     // RRF로 결과 병합
@@ -128,7 +169,8 @@ export async function hybridSearchMultiDataset(
     logger.info('[HybridSearch] Multi-dataset search completed', {
       tenantId,
       datasetIds,
-      searchQuery: query, // 실제 검색에 사용된 쿼리
+      searchQuery: query, // 원본 쿼리
+      enrichedQuery: enrichedQuery !== query ? enrichedQuery : undefined, // 도메인 컨텍스트 적용 시에만
       queryLength: query.length,
       denseCount: denseResults.length,
       sparseCount: sparseResults.length,
@@ -775,19 +817,23 @@ export async function searchWithKnowledgePages(
   datasetIds: string[],
   query: string,
   limit: number = DEFAULT_LIMIT,
-  trackingContext?: EmbeddingTrackingContext
+  trackingContext?: EmbeddingTrackingContext,
+  domainContext?: DomainContext
 ): Promise<SearchResult[]> {
   const startTime = Date.now();
+
+  // 도메인 컨텍스트 주입 (Knowledge Pages 검색에도 적용)
+  const enrichedQuery = injectDomainContext(query, domainContext);
 
   try {
     // 병렬로 두 검색 수행
     const [chunkResults, pageResults] = await Promise.all([
       // 기존 청크 검색 (데이터셋이 있는 경우)
       datasetIds.length > 0
-        ? hybridSearchMultiDataset(tenantId, datasetIds, query, limit, trackingContext)
-        : hybridSearch(tenantId, query, limit, trackingContext),
-      // Knowledge Pages 검색
-      searchKnowledgePages(chatbotId, query, limit, trackingContext),
+        ? hybridSearchMultiDataset(tenantId, datasetIds, query, limit, trackingContext, domainContext)
+        : hybridSearch(tenantId, query, limit, trackingContext, domainContext),
+      // Knowledge Pages 검색 (enrichedQuery 사용)
+      searchKnowledgePages(chatbotId, enrichedQuery, limit, trackingContext),
     ]);
 
     // 두 결과를 RRF로 병합
@@ -797,6 +843,8 @@ export async function searchWithKnowledgePages(
     logger.info('Combined search completed', {
       tenantId,
       chatbotId,
+      originalQuery: query,
+      enrichedQuery: enrichedQuery !== query ? enrichedQuery : undefined,
       chunkCount: chunkResults.length,
       pageCount: pageResults.length,
       mergedCount: mergedResults.length,

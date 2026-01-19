@@ -6,9 +6,9 @@
 import { logger } from '@/lib/logger';
 import {
   hybridSearch,
-  hybridSearchMultiDataset,
   searchWithKnowledgePages,
   type SearchResult,
+  type DomainContext,
 } from '@/lib/rag/retrieval';
 import { generateResponse, type GenerateOptions } from '@/lib/rag/generator';
 import { rewriteQuery } from '@/lib/rag/query-rewriter';
@@ -53,7 +53,7 @@ export async function processChat(
     // 1. 챗봇 조회 (chatbotId가 없으면 기본 챗봇 사용)
     stepStart = Date.now();
     let chatbotId = request.chatbotId;
-    let chatbot = chatbotId
+    const chatbot = chatbotId
       ? await getChatbot(chatbotId, tenantId)
       : await getDefaultChatbot(tenantId);
     timings['1_chatbot_lookup'] = Date.now() - stepStart;
@@ -195,6 +195,9 @@ export async function processChat(
           },
           // 페르소나의 포함 주제를 전달하여 키워드 확장 적용
           includedTopics: persona.includedTopics,
+          // 도메인 컨텍스트 전달 (동음이의어 해소용)
+          expertiseArea: persona.expertiseArea,
+          domainGlossary: persona.domainGlossary,
         });
 
         if (searchQuery !== request.message) {
@@ -216,6 +219,10 @@ export async function processChat(
 
       // Hybrid Search로 관련 청크 + Knowledge Pages 검색 (Re-ranking을 위해 더 많이 검색)
       const embeddingTrackingContext = { tenantId, chatbotId: chatbotId ?? undefined };
+      // 도메인 컨텍스트 (동음이의어 해소용)
+      const domainContext: DomainContext = {
+        expertiseArea: persona.expertiseArea,
+      };
       let searchResults: SearchResult[];
 
       if (chatbotId) {
@@ -227,10 +234,11 @@ export async function processChat(
           datasetIds,
           searchQuery,
           initialSearchLimit,
-          embeddingTrackingContext
+          embeddingTrackingContext,
+          domainContext
         );
       } else {
-        searchResults = await hybridSearch(tenantId, searchQuery, initialSearchLimit, embeddingTrackingContext);
+        searchResults = await hybridSearch(tenantId, searchQuery, initialSearchLimit, embeddingTrackingContext, domainContext);
       }
 
       return { searchQuery, searchResults };
