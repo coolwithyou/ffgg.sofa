@@ -9,7 +9,7 @@
  * - 로딩 인디케이터
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useStickToBottom } from 'use-stick-to-bottom';
 import { ChevronDown } from 'lucide-react';
@@ -22,6 +22,7 @@ import { ProgressIndicator } from '@/components/chat/progress-indicator';
 import { SourcesCollapsible, type Source } from '@/components/chat/sources-collapsible';
 import { MessageActions } from '@/components/chat/message-actions';
 import { ErrorMessage, type ChatError } from '@/components/chat/error-message';
+import { SendIcon } from '@/components/chat/icons';
 
 interface ChatbotBlockProps {
   chatbotId: string;
@@ -230,25 +231,32 @@ export function ChatbotBlock({
 
   const isInputValid = inputValue.trim().length > 0 && inputValue.length <= MAX_MESSAGE_LENGTH;
 
-  // 컨테이너 스타일 계산
-  const containerStyle: React.CSSProperties = {
-    minHeight,
-    maxHeight,
-    ...(backgroundColor && { backgroundColor }),
-    ...(borderColor && { borderColor }),
-  };
+  // 스타일 객체 메모이제이션 (의존성 변경 시에만 재생성)
+  const containerStyle = useMemo<React.CSSProperties>(
+    () => ({
+      minHeight,
+      maxHeight,
+      ...(backgroundColor && { backgroundColor }),
+      ...(borderColor && { borderColor }),
+    }),
+    [minHeight, maxHeight, backgroundColor, borderColor]
+  );
 
-  // 입력 필드 스타일 계산
-  const inputStyle: React.CSSProperties = {
-    ...(inputBackgroundColor && { backgroundColor: inputBackgroundColor }),
-    ...(inputTextColor && { color: inputTextColor }),
-  };
+  const inputStyle = useMemo<React.CSSProperties>(
+    () => ({
+      ...(inputBackgroundColor && { backgroundColor: inputBackgroundColor }),
+      ...(inputTextColor && { color: inputTextColor }),
+    }),
+    [inputBackgroundColor, inputTextColor]
+  );
 
-  // 버튼 스타일 계산
-  const buttonStyle: React.CSSProperties = {
-    backgroundColor: buttonBackgroundColor || primaryColor,
-    color: buttonTextColor || '#ffffff',
-  };
+  const buttonStyle = useMemo<React.CSSProperties>(
+    () => ({
+      backgroundColor: buttonBackgroundColor || primaryColor,
+      color: buttonTextColor || '#ffffff',
+    }),
+    [buttonBackgroundColor, buttonTextColor, primaryColor]
+  );
 
   return (
     <div
@@ -412,16 +420,3 @@ function MessageBubble({
   );
 }
 
-// 전송 아이콘
-function SendIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-      />
-    </svg>
-  );
-}

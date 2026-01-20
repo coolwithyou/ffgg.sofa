@@ -5,13 +5,15 @@
  * [Week 7] 플로팅 채팅창 UI
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useStickToBottom } from 'use-stick-to-bottom';
+import { ChevronDown } from 'lucide-react';
 import { sendWidgetMessage, type WidgetChatError } from './actions';
 import type { WidgetConfig, WidgetMessage } from '@/lib/widget/types';
 import { MessageActions } from '@/components/chat/message-actions';
 import { ErrorMessage, type ChatError } from '@/components/chat/error-message';
+import { SendIcon } from '@/components/chat/icons';
 
 /**
  * 위젯 채팅 에러 파싱
@@ -82,7 +84,11 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
   // 스마트 오토스크롤: 사용자가 위로 스크롤하면 자동 스크롤 비활성화
   const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom();
 
-  const theme = { ...DEFAULT_THEME_VALUES, ...config?.theme };
+  // 테마 객체 메모이제이션 (config.theme이 변경될 때만 재생성)
+  const theme = useMemo(
+    () => ({ ...DEFAULT_THEME_VALUES, ...config?.theme }),
+    [config?.theme]
+  );
   const title = config?.title || '도움이 필요하신가요?';
   const subtitle = config?.subtitle || '무엇이든 물어보세요';
   const placeholder = config?.placeholder || '메시지를 입력하세요...';
@@ -239,7 +245,7 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
             style={{ backgroundColor: theme.primaryColor }}
             aria-label="최신 메시지로 이동"
           >
-            <ChevronDownIcon className="h-5 w-5 text-white" />
+            <ChevronDown className="h-5 w-5 text-white" />
           </button>
         )}
       </div>
@@ -347,40 +353,3 @@ function TypingIndicator({ primaryColor }: { primaryColor: string }) {
   );
 }
 
-// 전송 아이콘
-function SendIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-      />
-    </svg>
-  );
-}
-
-// 아래 화살표 아이콘 (스크롤 투 바텀)
-function ChevronDownIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M19 9l-7 7-7-7"
-      />
-    </svg>
-  );
-}

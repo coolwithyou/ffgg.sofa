@@ -104,30 +104,29 @@ const AlertDialogDescription = React.forwardRef<
 AlertDialogDescription.displayName =
   AlertDialogPrimitive.Description.displayName;
 
+// 모듈 스코프: 렌더링마다 재생성 방지
+const ACTION_VARIANT_STYLES = {
+  default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+  // shadcn/ui 패턴: destructive는 outline 스타일 (빨간 텍스트 + 투명 배경)
+  destructive: 'border border-destructive bg-transparent text-destructive hover:bg-destructive/10',
+} as const;
+
 const AlertDialogAction = React.forwardRef<
   React.ComponentRef<typeof AlertDialogPrimitive.Action>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action> & {
     variant?: 'default' | 'destructive';
   }
->(({ className, variant = 'default', ...props }, ref) => {
-  const variantStyles = {
-    default: 'bg-primary text-primary-foreground hover:bg-primary/90',
-    // shadcn/ui 패턴: destructive는 outline 스타일 (빨간 텍스트 + 투명 배경)
-    destructive: 'border border-destructive bg-transparent text-destructive hover:bg-destructive/10',
-  };
-
-  return (
-    <AlertDialogPrimitive.Action
-      ref={ref}
-      className={cn(
-        'inline-flex h-10 items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
-        variantStyles[variant],
-        className
-      )}
-      {...props}
-    />
-  );
-});
+>(({ className, variant = 'default', ...props }, ref) => (
+  <AlertDialogPrimitive.Action
+    ref={ref}
+    className={cn(
+      'inline-flex h-10 items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+      ACTION_VARIANT_STYLES[variant],
+      className
+    )}
+    {...props}
+  />
+));
 AlertDialogAction.displayName = AlertDialogPrimitive.Action.displayName;
 
 const AlertDialogCancel = React.forwardRef<
