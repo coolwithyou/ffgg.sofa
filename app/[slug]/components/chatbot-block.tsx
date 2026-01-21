@@ -23,6 +23,13 @@ import { SourcesCollapsible, type Source } from '@/components/chat/sources-colla
 import { MessageActions } from '@/components/chat/message-actions';
 import { ErrorMessage, type ChatError } from '@/components/chat/error-message';
 import { SendIcon } from '@/components/chat/icons';
+import {
+  ChatThemeProvider,
+  useChatTheme,
+  getUserMessageStyle,
+  getAssistantMessageStyle,
+  type ChatTheme,
+} from '@/components/chat/chat-theme-context';
 
 interface ChatbotBlockProps {
   chatbotId: string;
@@ -126,6 +133,81 @@ export function ChatbotBlock({
   assistantMessageBackgroundColor,
   assistantMessageTextColor,
 }: ChatbotBlockProps) {
+  // 테마 객체 메모이제이션
+  const theme = useMemo<ChatTheme>(
+    () => ({
+      primaryColor,
+      textColor,
+      userMessageBackgroundColor,
+      userMessageTextColor,
+      assistantMessageBackgroundColor,
+      assistantMessageTextColor,
+    }),
+    [
+      primaryColor,
+      textColor,
+      userMessageBackgroundColor,
+      userMessageTextColor,
+      assistantMessageBackgroundColor,
+      assistantMessageTextColor,
+    ]
+  );
+
+  return (
+    <ChatThemeProvider theme={theme}>
+      <ChatbotBlockContent
+        chatbotId={chatbotId}
+        tenantId={tenantId}
+        welcomeMessage={welcomeMessage}
+        placeholder={placeholder}
+        minHeight={minHeight}
+        maxHeight={maxHeight}
+        isEditing={isEditing}
+        borderColor={borderColor}
+        backgroundColor={backgroundColor}
+        inputBackgroundColor={inputBackgroundColor}
+        inputTextColor={inputTextColor}
+        buttonBackgroundColor={buttonBackgroundColor}
+        buttonTextColor={buttonTextColor}
+      />
+    </ChatThemeProvider>
+  );
+}
+
+// ChatbotBlock 내부 콘텐츠 (Context 소비)
+interface ChatbotBlockContentProps {
+  chatbotId: string;
+  tenantId: string;
+  welcomeMessage: string;
+  placeholder: string;
+  minHeight: number;
+  maxHeight: number;
+  isEditing: boolean;
+  borderColor?: string;
+  backgroundColor?: string;
+  inputBackgroundColor?: string;
+  inputTextColor?: string;
+  buttonBackgroundColor?: string;
+  buttonTextColor?: string;
+}
+
+function ChatbotBlockContent({
+  chatbotId,
+  tenantId,
+  welcomeMessage,
+  placeholder,
+  minHeight,
+  maxHeight,
+  isEditing,
+  borderColor,
+  backgroundColor,
+  inputBackgroundColor,
+  inputTextColor,
+  buttonBackgroundColor,
+  buttonTextColor,
+}: ChatbotBlockContentProps) {
+  const theme = useChatTheme();
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -252,10 +334,10 @@ export function ChatbotBlock({
 
   const buttonStyle = useMemo<React.CSSProperties>(
     () => ({
-      backgroundColor: buttonBackgroundColor || primaryColor,
+      backgroundColor: buttonBackgroundColor || theme.primaryColor,
       color: buttonTextColor || '#ffffff',
     }),
-    [buttonBackgroundColor, buttonTextColor, primaryColor]
+    [buttonBackgroundColor, buttonTextColor, theme.primaryColor]
   );
 
   return (
@@ -267,25 +349,17 @@ export function ChatbotBlock({
       <div ref={scrollRef} className="relative flex-1 overflow-y-auto p-4">
         <div ref={contentRef} className="space-y-4">
           {messages.map((msg) => (
-            <MessageBubble
-              key={msg.id}
-              message={msg}
-              primaryColor={primaryColor}
-              userMessageBackgroundColor={userMessageBackgroundColor}
-              userMessageTextColor={userMessageTextColor}
-              assistantMessageBackgroundColor={assistantMessageBackgroundColor}
-              assistantMessageTextColor={assistantMessageTextColor}
-            />
+            <MessageBubble key={msg.id} message={msg} />
           ))}
           {isLoading && (
             <div className="flex justify-start">
               <div
                 className="max-w-[85%] rounded-2xl px-4 py-3"
                 style={{
-                  backgroundColor: assistantMessageBackgroundColor || undefined,
+                  backgroundColor: theme.assistantMessageBackgroundColor || undefined,
                 }}
               >
-                <ProgressIndicator isLoading={isLoading} primaryColor={primaryColor} compact />
+                <ProgressIndicator isLoading={isLoading} primaryColor={theme.primaryColor} compact />
               </div>
             </div>
           )}
@@ -294,7 +368,7 @@ export function ChatbotBlock({
               error={error}
               onRetry={handleRetry}
               isRetrying={isRetrying}
-              primaryColor={primaryColor}
+              primaryColor={theme.primaryColor}
               compact
             />
           )}
@@ -305,7 +379,7 @@ export function ChatbotBlock({
           <button
             onClick={() => scrollToBottom()}
             className="absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full shadow-lg transition-all hover:scale-105"
-            style={{ backgroundColor: primaryColor }}
+            style={{ backgroundColor: theme.primaryColor }}
             aria-label="최신 메시지로 이동"
           >
             <ChevronDown className="h-5 w-5 text-white" />
@@ -348,35 +422,14 @@ export function ChatbotBlock({
   );
 }
 
-// 메시지 버블 컴포넌트
-function MessageBubble({
-  message,
-  primaryColor,
-  userMessageBackgroundColor,
-  userMessageTextColor,
-  assistantMessageBackgroundColor,
-  assistantMessageTextColor,
-}: {
-  message: Message;
-  primaryColor: string;
-  userMessageBackgroundColor?: string;
-  userMessageTextColor?: string;
-  assistantMessageBackgroundColor?: string;
-  assistantMessageTextColor?: string;
-}) {
+// 메시지 버블 컴포넌트 - Context에서 테마를 가져옴 (Props Drilling 제거)
+function MessageBubble({ message }: { message: Message }) {
+  const theme = useChatTheme();
   const isUser = message.role === 'user';
 
-  // 사용자 메시지 스타일 계산
-  const userStyle: React.CSSProperties = {
-    backgroundColor: userMessageBackgroundColor || primaryColor,
-    color: userMessageTextColor || '#ffffff',
-  };
-
-  // AI 응답 스타일 계산
-  const assistantStyle: React.CSSProperties = {
-    ...(assistantMessageBackgroundColor && { backgroundColor: assistantMessageBackgroundColor }),
-    ...(assistantMessageTextColor && { color: assistantMessageTextColor }),
-  };
+  // 헬퍼 함수로 스타일 계산
+  const userStyle = getUserMessageStyle(theme);
+  const assistantStyle = getAssistantMessageStyle(theme);
 
   return (
     <div
@@ -398,7 +451,7 @@ function MessageBubble({
           {message.sources && message.sources.length > 0 && (
             <SourcesCollapsible
               sources={message.sources}
-              primaryColor={primaryColor}
+              primaryColor={theme.primaryColor}
               compact
             />
           )}
@@ -411,7 +464,7 @@ function MessageBubble({
               messageId={message.id}
               content={message.content}
               compact
-              primaryColor={primaryColor}
+              primaryColor={theme.primaryColor}
             />
           </div>
         )}
@@ -419,4 +472,3 @@ function MessageBubble({
     </div>
   );
 }
-

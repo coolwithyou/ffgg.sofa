@@ -14,6 +14,12 @@ import type { WidgetConfig, WidgetMessage } from '@/lib/widget/types';
 import { MessageActions } from '@/components/chat/message-actions';
 import { ErrorMessage, type ChatError } from '@/components/chat/error-message';
 import { SendIcon } from '@/components/chat/icons';
+import {
+  ChatThemeProvider,
+  useChatTheme,
+  getUserMessageStyle,
+  type ChatTheme,
+} from '@/components/chat/chat-theme-context';
 
 /**
  * 위젯 채팅 에러 파싱
@@ -84,11 +90,22 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
   // 스마트 오토스크롤: 사용자가 위로 스크롤하면 자동 스크롤 비활성화
   const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom();
 
-  // 테마 객체 메모이제이션 (config.theme이 변경될 때만 재생성)
-  const theme = useMemo(
+  // 위젯 테마 객체 메모이제이션 (config.theme이 변경될 때만 재생성)
+  const widgetTheme = useMemo(
     () => ({ ...DEFAULT_THEME_VALUES, ...config?.theme }),
     [config?.theme]
   );
+
+  // 채팅 버블용 ChatTheme 객체 (ChatThemeContext용)
+  const chatTheme = useMemo<ChatTheme>(
+    () => ({
+      primaryColor: widgetTheme.primaryColor,
+      textColor: widgetTheme.textColor,
+      // 위젯은 기본 스타일 사용 (primaryColor, 흰색 텍스트)
+    }),
+    [widgetTheme.primaryColor, widgetTheme.textColor]
+  );
+
   const title = config?.title || '도움이 필요하신가요?';
   const subtitle = config?.subtitle || '무엇이든 물어보세요';
   const placeholder = config?.placeholder || '메시지를 입력하세요...';
@@ -201,54 +218,52 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
     <div
       className="flex h-screen flex-col"
       style={{
-        fontFamily: theme.fontFamily,
-        backgroundColor: theme.backgroundColor,
-        color: theme.textColor,
+        fontFamily: widgetTheme.fontFamily,
+        backgroundColor: widgetTheme.backgroundColor,
+        color: widgetTheme.textColor,
       }}
     >
       {/* 헤더 */}
       <header
         className="flex-shrink-0 px-4 py-3"
-        style={{ backgroundColor: theme.primaryColor }}
+        style={{ backgroundColor: widgetTheme.primaryColor }}
       >
         <h1 className="text-lg font-semibold text-white">{title}</h1>
         {subtitle && <p className="text-sm text-white/80">{subtitle}</p>}
       </header>
 
-      {/* 메시지 목록 */}
-      <div ref={scrollRef} className="relative flex-1 overflow-y-auto p-4">
-        <div ref={contentRef} className="space-y-4">
-          {state.messages.map((msg) => (
-            <MessageBubble
-              key={msg.id}
-              message={msg}
-              primaryColor={theme.primaryColor}
-            />
-          ))}
-          {state.isLoading && <TypingIndicator primaryColor={theme.primaryColor} />}
-          {state.error && (
-            <ErrorMessage
-              error={state.error}
-              onRetry={handleRetry}
-              isRetrying={state.isRetrying}
-              primaryColor={theme.primaryColor}
-              compact
-            />
+      {/* 메시지 목록 - ChatThemeProvider로 래핑하여 MessageBubble이 Context 사용 */}
+      <ChatThemeProvider theme={chatTheme}>
+        <div ref={scrollRef} className="relative flex-1 overflow-y-auto p-4">
+          <div ref={contentRef} className="space-y-4">
+            {state.messages.map((msg) => (
+              <MessageBubble key={msg.id} message={msg} />
+            ))}
+            {state.isLoading && <TypingIndicator primaryColor={widgetTheme.primaryColor} />}
+            {state.error && (
+              <ErrorMessage
+                error={state.error}
+                onRetry={handleRetry}
+                isRetrying={state.isRetrying}
+                primaryColor={widgetTheme.primaryColor}
+                compact
+              />
+            )}
+          </div>
+
+          {/* 스크롤 투 바텀 버튼: 사용자가 위로 스크롤했을 때만 표시 */}
+          {!isAtBottom && (
+            <button
+              onClick={() => scrollToBottom()}
+              className="absolute bottom-4 right-4 flex h-8 w-8 items-center justify-center rounded-full shadow-lg transition-all hover:scale-105"
+              style={{ backgroundColor: widgetTheme.primaryColor }}
+              aria-label="최신 메시지로 이동"
+            >
+              <ChevronDown className="h-5 w-5 text-white" />
+            </button>
           )}
         </div>
-
-        {/* 스크롤 투 바텀 버튼: 사용자가 위로 스크롤했을 때만 표시 */}
-        {!isAtBottom && (
-          <button
-            onClick={() => scrollToBottom()}
-            className="absolute bottom-4 right-4 flex h-8 w-8 items-center justify-center rounded-full shadow-lg transition-all hover:scale-105"
-            style={{ backgroundColor: theme.primaryColor }}
-            aria-label="최신 메시지로 이동"
-          >
-            <ChevronDown className="h-5 w-5 text-white" />
-          </button>
-        )}
-      </div>
+      </ChatThemeProvider>
 
       {/* 입력 영역 */}
       <div className="flex-shrink-0 border-t p-4">
@@ -267,7 +282,7 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
             onClick={handleSend}
             disabled={state.isLoading || !inputValue.trim()}
             className="flex h-10 w-10 items-center justify-center rounded-full transition-colors disabled:opacity-50"
-            style={{ backgroundColor: theme.primaryColor }}
+            style={{ backgroundColor: widgetTheme.primaryColor }}
           >
             <SendIcon className="h-5 w-5 text-white" />
           </button>
@@ -280,24 +295,22 @@ export function WidgetChat({ tenantId, chatbotId, config }: WidgetChatProps) {
   );
 }
 
-// 메시지 버블 컴포넌트
-function MessageBubble({
-  message,
-  primaryColor,
-}: {
-  message: WidgetMessage;
-  primaryColor: string;
-}) {
+// 메시지 버블 컴포넌트 - ChatThemeContext에서 테마를 가져옴
+function MessageBubble({ message }: { message: WidgetMessage }) {
+  const theme = useChatTheme();
   const isUser = message.role === 'user';
+
+  // 헬퍼 함수로 사용자 메시지 스타일 계산
+  const userStyle = getUserMessageStyle(theme);
 
   return (
     <div className={`group flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[80%] flex-col ${isUser ? 'items-end' : 'items-start'}`}>
         <div
           className={`rounded-2xl px-4 py-2 ${
-            isUser ? 'text-white' : 'bg-gray-100 text-gray-900'
+            isUser ? '' : 'bg-gray-100 text-gray-900'
           }`}
-          style={isUser ? { backgroundColor: primaryColor } : undefined}
+          style={isUser ? userStyle : undefined}
         >
           {isUser ? (
             <p className="whitespace-pre-wrap text-sm">{message.content}</p>
@@ -322,7 +335,7 @@ function MessageBubble({
               messageId={message.id}
               content={message.content}
               compact
-              primaryColor={primaryColor}
+              primaryColor={theme.primaryColor}
             />
           </div>
         )}

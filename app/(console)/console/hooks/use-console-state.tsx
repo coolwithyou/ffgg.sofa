@@ -14,6 +14,11 @@ import {
   type ConsoleChatbot,
   type ConsoleMode,
   type SaveStatus,
+  type UIState,
+  type ChatbotListState,
+  type TenantState,
+  type PageEditorState,
+  type WidgetEditorState,
 } from '../types';
 import {
   DEFAULT_PUBLIC_PAGE_CONFIG,
@@ -32,94 +37,131 @@ import {
   canEnableAdvancedMode as checkCanEnableAdvancedMode,
 } from '@/lib/tier/types';
 
+// ============================================================
 // Context 생성
+// ============================================================
+
 const ConsoleContext = createContext<ConsoleContextValue | null>(null);
 
+// ============================================================
+// 초기 상태 정의
+// ============================================================
+
+const INITIAL_UI_STATE: UIState = {
+  mode: 'page',
+  selectedBlockId: null,
+  isCreateDialogOpen: false,
+};
+
+const createInitialChatbotState = (
+  initialChatbots: ConsoleChatbot[]
+): ChatbotListState => ({
+  chatbots: initialChatbots,
+  currentChatbotIndex: 0,
+  isLoading: initialChatbots.length === 0,
+});
+
+const INITIAL_TENANT_STATE: TenantState = {
+  tier: 'free',
+  tenantSettings: DEFAULT_TENANT_SETTINGS,
+  isLoading: true,
+};
+
+const INITIAL_PAGE_EDITOR_STATE: PageEditorState = {
+  config: DEFAULT_PUBLIC_PAGE_CONFIG,
+  originalConfig: null,
+  saveStatus: 'saved',
+};
+
+const createInitialWidgetState = (): WidgetEditorState => ({
+  config: { ...DEFAULT_WIDGET_CONFIG, tenantId: '' },
+  originalConfig: null,
+  saveStatus: 'saved',
+});
+
+// ============================================================
 // Provider Props
+// ============================================================
+
 interface ConsoleProviderProps {
   children: ReactNode;
   initialChatbots?: ConsoleChatbot[];
 }
 
+// ============================================================
 // Provider 컴포넌트
+// ============================================================
+
 export function ConsoleProvider({
   children,
   initialChatbots = [],
 }: ConsoleProviderProps) {
-  // 기본 상태
-  const [mode, setMode] = useState<ConsoleMode>('page');
-  const [chatbots, setChatbots] = useState<ConsoleChatbot[]>(initialChatbots);
-  const [currentChatbotIndex, setCurrentChatbotIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(initialChatbots.length === 0);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+  // ────────────────────────────────────────────────────────────
+  // 도메인별 상태 (5개의 그룹화된 useState)
+  // ────────────────────────────────────────────────────────────
 
-  // Widget 저장 상태 (분리 관리)
-  const [widgetSaveStatus, setWidgetSaveStatus] = useState<SaveStatus>('saved');
+  const [uiState, setUIState] = useState<UIState>(INITIAL_UI_STATE);
 
-  // 블록 에디터 상태
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
-
-  // 챗봇 생성 다이얼로그 상태
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-
-  // 테넌트 설정 상태
-  const [tier, setTier] = useState<Tier>('free');
-  const [tenantSettings, setTenantSettings] = useState<TenantSettings>(
-    DEFAULT_TENANT_SETTINGS
+  const [chatbotState, setChatbotState] = useState<ChatbotListState>(() =>
+    createInitialChatbotState(initialChatbots)
   );
-  const [isTenantLoading, setIsTenantLoading] = useState(true);
 
-  // 현재 챗봇 (파생 상태)
+  const [tenantState, setTenantState] =
+    useState<TenantState>(INITIAL_TENANT_STATE);
+
+  const [pageEditor, setPageEditor] = useState<PageEditorState>(
+    INITIAL_PAGE_EDITOR_STATE
+  );
+
+  const [widgetEditor, setWidgetEditor] = useState<WidgetEditorState>(
+    createInitialWidgetState
+  );
+
+  // ────────────────────────────────────────────────────────────
+  // 파생 상태
+  // ────────────────────────────────────────────────────────────
+
   const currentChatbot = useMemo(
-    () => chatbots[currentChatbotIndex] ?? null,
-    [chatbots, currentChatbotIndex]
+    () => chatbotState.chatbots[chatbotState.currentChatbotIndex] ?? null,
+    [chatbotState.chatbots, chatbotState.currentChatbotIndex]
   );
 
-  // Page 설정 (현재 챗봇 기준)
-  const [pageConfig, setPageConfig] = useState<PublicPageConfig>(
-    currentChatbot?.publicPageConfig ?? DEFAULT_PUBLIC_PAGE_CONFIG
-  );
-
-  // 원본 설정 (변경사항 비교용)
-  const [originalPageConfig, setOriginalPageConfig] =
-    useState<PublicPageConfig | null>(null);
-
-  // Widget 설정 (현재 챗봇 기준)
-  const [widgetConfig, setWidgetConfig] = useState<WidgetConfig>(
-    currentChatbot?.widgetConfig ?? { ...DEFAULT_WIDGET_CONFIG, tenantId: '' }
-  );
-
-  // Widget 원본 설정 (변경사항 비교용)
-  const [originalWidgetConfig, setOriginalWidgetConfig] =
-    useState<WidgetConfig | null>(null);
-
+  // ────────────────────────────────────────────────────────────
   // 챗봇 변경 시 설정 동기화
+  // ────────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (currentChatbot) {
       // Page 설정 동기화
-      setPageConfig(currentChatbot.publicPageConfig);
-      setOriginalPageConfig(currentChatbot.publicPageConfig);
-      setSaveStatus('saved');
+      setPageEditor({
+        config: currentChatbot.publicPageConfig,
+        originalConfig: currentChatbot.publicPageConfig,
+        saveStatus: 'saved',
+      });
 
       // Widget 설정 동기화
-      setWidgetConfig(currentChatbot.widgetConfig);
-      setOriginalWidgetConfig(currentChatbot.widgetConfig);
-      setWidgetSaveStatus('saved');
+      setWidgetEditor({
+        config: currentChatbot.widgetConfig,
+        originalConfig: currentChatbot.widgetConfig,
+        saveStatus: 'saved',
+      });
 
       // 블록 선택 초기화
-      setSelectedBlockId(null);
+      setUIState((prev) => ({ ...prev, selectedBlockId: null }));
     }
   }, [currentChatbot]);
 
-  // 챗봇 목록 로드
+  // ────────────────────────────────────────────────────────────
+  // 챗봇 목록 액션
+  // ────────────────────────────────────────────────────────────
+
   const reloadChatbots = useCallback(async () => {
-    setIsLoading(true);
+    setChatbotState((prev) => ({ ...prev, isLoading: true }));
     try {
       const res = await fetch('/api/chatbots');
       if (!res.ok) throw new Error('Failed to fetch chatbots');
       const data = await res.json();
 
-      // API 응답을 ConsoleChatbot 형태로 변환
       const mapped: ConsoleChatbot[] = data.chatbots.map((bot: any) => ({
         id: bot.id,
         name: bot.name,
@@ -127,22 +169,24 @@ export function ConsoleProvider({
         publicPageEnabled: bot.publicPageEnabled ?? false,
         publicPageConfig: parsePublicPageConfig(bot.publicPageConfig),
         tenantId: bot.tenantId,
-        // Widget 관련 필드
         widgetEnabled: bot.widgetEnabled ?? false,
         widgetApiKey: bot.widgetApiKey ?? null,
         widgetConfig: parseWidgetConfig(bot.widgetConfig, bot.tenantId),
       }));
 
-      setChatbots(mapped);
-      if (currentChatbotIndex >= mapped.length) {
-        setCurrentChatbotIndex(0);
-      }
+      setChatbotState((prev) => ({
+        chatbots: mapped,
+        currentChatbotIndex:
+          prev.currentChatbotIndex >= mapped.length
+            ? 0
+            : prev.currentChatbotIndex,
+        isLoading: false,
+      }));
     } catch (error) {
       console.error('Failed to load chatbots:', error);
-    } finally {
-      setIsLoading(false);
+      setChatbotState((prev) => ({ ...prev, isLoading: false }));
     }
-  }, [currentChatbotIndex]);
+  }, []);
 
   // 초기 로드
   useEffect(() => {
@@ -151,19 +195,24 @@ export function ConsoleProvider({
     }
   }, [initialChatbots.length, reloadChatbots]);
 
-  // 테넌트 설정 로드
+  // ────────────────────────────────────────────────────────────
+  // 테넌트 설정 액션
+  // ────────────────────────────────────────────────────────────
+
   const loadTenantSettings = useCallback(async () => {
-    setIsTenantLoading(true);
+    setTenantState((prev) => ({ ...prev, isLoading: true }));
     try {
       const res = await fetch('/api/tenants/settings');
       if (!res.ok) throw new Error('Failed to fetch tenant settings');
       const data = await res.json();
-      setTier(normalizeTier(data.tier));
-      setTenantSettings(data.settings || DEFAULT_TENANT_SETTINGS);
+      setTenantState({
+        tier: normalizeTier(data.tier),
+        tenantSettings: data.settings || DEFAULT_TENANT_SETTINGS,
+        isLoading: false,
+      });
     } catch (error) {
       console.error('Failed to load tenant settings:', error);
-    } finally {
-      setIsTenantLoading(false);
+      setTenantState((prev) => ({ ...prev, isLoading: false }));
     }
   }, []);
 
@@ -172,26 +221,21 @@ export function ConsoleProvider({
     loadTenantSettings();
   }, [loadTenantSettings]);
 
-  // 외부에서 tier 갱신용 (구독 변경 후 호출)
   const refreshTier = useCallback(async () => {
     await loadTenantSettings();
   }, [loadTenantSettings]);
 
-  // 고급 모드 활성화 여부 확인
   const isAdvancedModeEnabled = useCallback(() => {
-    return tenantSettings.advancedDatasetMode === true;
-  }, [tenantSettings]);
+    return tenantState.tenantSettings.advancedDatasetMode === true;
+  }, [tenantState.tenantSettings]);
 
-  // 고급 모드 활성화 가능 여부 (티어 기반)
   const canEnableAdvancedMode = useCallback(() => {
-    return checkCanEnableAdvancedMode(tier);
-  }, [tier]);
+    return checkCanEnableAdvancedMode(tenantState.tier);
+  }, [tenantState.tier]);
 
-  // 고급 모드 설정
   const setAdvancedMode = useCallback(
     async (enabled: boolean) => {
-      // Premium 아닌 경우 활성화 불가
-      if (enabled && !checkCanEnableAdvancedMode(tier)) {
+      if (enabled && !checkCanEnableAdvancedMode(tenantState.tier)) {
         console.warn('Advanced mode is only available for premium tier');
         return;
       }
@@ -205,188 +249,235 @@ export function ConsoleProvider({
 
         if (!res.ok) throw new Error('Failed to update settings');
 
-        setTenantSettings((prev) => ({
+        setTenantState((prev) => ({
           ...prev,
-          advancedDatasetMode: enabled,
+          tenantSettings: {
+            ...prev.tenantSettings,
+            advancedDatasetMode: enabled,
+          },
         }));
       } catch (error) {
         console.error('Failed to set advanced mode:', error);
         throw error;
       }
     },
-    [tier]
+    [tenantState.tier]
   );
 
-  // 챗봇 선택 (인덱스)
+  // ────────────────────────────────────────────────────────────
+  // 챗봇 선택 액션
+  // ────────────────────────────────────────────────────────────
+
   const selectChatbot = useCallback(
     (index: number) => {
-      if (index >= 0 && index < chatbots.length) {
-        setCurrentChatbotIndex(index);
+      if (index >= 0 && index < chatbotState.chatbots.length) {
+        setChatbotState((prev) => ({ ...prev, currentChatbotIndex: index }));
       }
     },
-    [chatbots.length]
+    [chatbotState.chatbots.length]
   );
 
-  // 챗봇 선택 (ID)
   const selectChatbotById = useCallback(
     (id: string) => {
-      const index = chatbots.findIndex((bot) => bot.id === id);
+      const index = chatbotState.chatbots.findIndex((bot) => bot.id === id);
       if (index !== -1) {
-        setCurrentChatbotIndex(index);
+        setChatbotState((prev) => ({ ...prev, currentChatbotIndex: index }));
       }
     },
-    [chatbots]
+    [chatbotState.chatbots]
   );
 
-  // 챗봇 네비게이션 (캐러셀용)
   const navigateChatbot = useCallback(
     (direction: 'prev' | 'next') => {
-      if (chatbots.length === 0) return;
+      if (chatbotState.chatbots.length === 0) return;
 
-      setCurrentChatbotIndex((prev) => {
-        if (direction === 'prev') {
-          return prev > 0 ? prev - 1 : chatbots.length - 1;
-        } else {
-          return prev < chatbots.length - 1 ? prev + 1 : 0;
-        }
+      setChatbotState((prev) => {
+        const newIndex =
+          direction === 'prev'
+            ? prev.currentChatbotIndex > 0
+              ? prev.currentChatbotIndex - 1
+              : prev.chatbots.length - 1
+            : prev.currentChatbotIndex < prev.chatbots.length - 1
+              ? prev.currentChatbotIndex + 1
+              : 0;
+        return { ...prev, currentChatbotIndex: newIndex };
       });
     },
-    [chatbots.length]
+    [chatbotState.chatbots.length]
   );
 
-  // Page 설정 업데이트
-  // 함수형 업데이터 또는 객체를 받아 처리합니다.
+  // ────────────────────────────────────────────────────────────
+  // UI 상태 액션
+  // ────────────────────────────────────────────────────────────
+
+  const setMode = useCallback((mode: ConsoleMode) => {
+    setUIState((prev) => ({ ...prev, mode }));
+  }, []);
+
+  const selectBlock = useCallback((id: string | null) => {
+    setUIState((prev) => ({ ...prev, selectedBlockId: id }));
+  }, []);
+
+  const openCreateDialog = useCallback(() => {
+    setUIState((prev) => ({ ...prev, isCreateDialogOpen: true }));
+  }, []);
+
+  const closeCreateDialog = useCallback(() => {
+    setUIState((prev) => ({ ...prev, isCreateDialogOpen: false }));
+  }, []);
+
+  // ────────────────────────────────────────────────────────────
+  // Page 설정 액션
+  // ────────────────────────────────────────────────────────────
+
   const updatePageConfig = useCallback(
     (
       partialOrUpdater:
         | Partial<PublicPageConfig>
         | ((prev: PublicPageConfig) => Partial<PublicPageConfig>)
     ) => {
-      setPageConfig((prev) => {
+      setPageEditor((prev) => {
         const partial =
           typeof partialOrUpdater === 'function'
-            ? partialOrUpdater(prev)
+            ? partialOrUpdater(prev.config)
             : partialOrUpdater;
-        return { ...prev, ...partial };
+        return {
+          ...prev,
+          config: { ...prev.config, ...partial },
+          saveStatus: 'unsaved',
+        };
       });
-      setSaveStatus('unsaved');
     },
     []
   );
 
   const updateHeaderConfig = useCallback(
     (partial: Partial<PublicPageConfig['header']>) => {
-      setPageConfig((prev) => ({
+      setPageEditor((prev) => ({
         ...prev,
-        header: { ...prev.header, ...partial },
+        config: { ...prev.config, header: { ...prev.config.header, ...partial } },
+        saveStatus: 'unsaved',
       }));
-      setSaveStatus('unsaved');
     },
     []
   );
 
   const updateThemeConfig = useCallback(
     (partial: Partial<PublicPageConfig['theme']>) => {
-      setPageConfig((prev) => ({
+      setPageEditor((prev) => ({
         ...prev,
-        theme: { ...prev.theme, ...partial },
+        config: { ...prev.config, theme: { ...prev.config.theme, ...partial } },
+        saveStatus: 'unsaved',
       }));
-      setSaveStatus('unsaved');
     },
     []
   );
 
   const updateSeoConfig = useCallback(
     (partial: Partial<PublicPageConfig['seo']>) => {
-      setPageConfig((prev) => ({
+      setPageEditor((prev) => ({
         ...prev,
-        seo: { ...prev.seo, ...partial },
+        config: { ...prev.config, seo: { ...prev.config.seo, ...partial } },
+        saveStatus: 'unsaved',
       }));
-      setSaveStatus('unsaved');
     },
     []
   );
 
   const updateChatbotConfig = useCallback(
     (partial: Partial<PublicPageConfig['chatbot']>) => {
-      setPageConfig((prev) => ({
+      setPageEditor((prev) => ({
         ...prev,
-        chatbot: { ...prev.chatbot, ...partial },
+        config: {
+          ...prev.config,
+          chatbot: { ...prev.config.chatbot, ...partial },
+        },
+        saveStatus: 'unsaved',
       }));
-      setSaveStatus('unsaved');
     },
     []
   );
 
-  // Widget 설정 업데이트
-  const updateWidgetConfig = useCallback(
-    (partial: Partial<WidgetConfig>) => {
-      setWidgetConfig((prev) => ({ ...prev, ...partial }));
-      setWidgetSaveStatus('unsaved');
-    },
-    []
-  );
+  const setSaveStatus = useCallback((status: SaveStatus) => {
+    setPageEditor((prev) => ({ ...prev, saveStatus: status }));
+  }, []);
+
+  const setOriginalPageConfig = useCallback((config: PublicPageConfig) => {
+    setPageEditor((prev) => ({ ...prev, originalConfig: config }));
+  }, []);
+
+  // ────────────────────────────────────────────────────────────
+  // Widget 설정 액션
+  // ────────────────────────────────────────────────────────────
+
+  const updateWidgetConfig = useCallback((partial: Partial<WidgetConfig>) => {
+    setWidgetEditor((prev) => ({
+      ...prev,
+      config: { ...prev.config, ...partial },
+      saveStatus: 'unsaved',
+    }));
+  }, []);
 
   const updateWidgetTheme = useCallback(
     (partial: Partial<WidgetConfig['theme']>) => {
-      setWidgetConfig((prev) => ({
+      setWidgetEditor((prev) => ({
         ...prev,
-        theme: { ...prev.theme, ...partial },
+        config: { ...prev.config, theme: { ...prev.config.theme, ...partial } },
+        saveStatus: 'unsaved',
       }));
-      setWidgetSaveStatus('unsaved');
     },
     []
   );
 
-  // 블록 선택
-  const selectBlock = useCallback((id: string | null) => {
-    setSelectedBlockId(id);
+  const setWidgetSaveStatus = useCallback((status: SaveStatus) => {
+    setWidgetEditor((prev) => ({ ...prev, saveStatus: status }));
   }, []);
 
-  // 챗봇 생성 다이얼로그 열기/닫기
-  const openCreateDialog = useCallback(() => {
-    setIsCreateDialogOpen(true);
+  const setOriginalWidgetConfig = useCallback((config: WidgetConfig) => {
+    setWidgetEditor((prev) => ({ ...prev, originalConfig: config }));
   }, []);
 
-  const closeCreateDialog = useCallback(() => {
-    setIsCreateDialogOpen(false);
-  }, []);
+  // ────────────────────────────────────────────────────────────
+  // Context 값 (외부 API - 하위 호환성 유지)
+  // ────────────────────────────────────────────────────────────
 
-  // Context 값
   const value: ConsoleContextValue = useMemo(
     () => ({
-      // 상태
-      mode,
-      chatbots,
-      currentChatbotIndex,
+      // UI 상태 (펼쳐서 전달)
+      mode: uiState.mode,
+      selectedBlockId: uiState.selectedBlockId,
+      isCreateDialogOpen: uiState.isCreateDialogOpen,
+
+      // 챗봇 상태 (펼쳐서 전달)
+      chatbots: chatbotState.chatbots,
+      currentChatbotIndex: chatbotState.currentChatbotIndex,
+      isLoading: chatbotState.isLoading,
       currentChatbot,
-      isLoading,
-      pageConfig,
-      originalPageConfig,
-      saveStatus,
-      // 테넌트 상태
-      tier,
-      tenantSettings,
-      isTenantLoading,
-      // Widget 상태
-      widgetConfig,
-      originalWidgetConfig,
-      widgetSaveStatus,
-      // 블록 에디터 상태
-      selectedBlockId,
-      // 챗봇 생성 다이얼로그 상태
-      isCreateDialogOpen,
-      // 액션
+
+      // 테넌트 상태 (펼쳐서 전달)
+      tier: tenantState.tier,
+      tenantSettings: tenantState.tenantSettings,
+      isTenantLoading: tenantState.isLoading,
+
+      // Page 에디터 상태 (펼쳐서 전달)
+      pageConfig: pageEditor.config,
+      originalPageConfig: pageEditor.originalConfig,
+      saveStatus: pageEditor.saveStatus,
+
+      // Widget 에디터 상태 (펼쳐서 전달)
+      widgetConfig: widgetEditor.config,
+      originalWidgetConfig: widgetEditor.originalConfig,
+      widgetSaveStatus: widgetEditor.saveStatus,
+
+      // 모든 액션
       setMode,
       selectChatbot,
       selectChatbotById,
       navigateChatbot,
-      // 테넌트 설정 액션
       refreshTier,
       isAdvancedModeEnabled,
       canEnableAdvancedMode,
       setAdvancedMode,
-      // Page 설정 액션
       updatePageConfig,
       updateHeaderConfig,
       updateThemeConfig,
@@ -394,36 +485,25 @@ export function ConsoleProvider({
       updateChatbotConfig,
       setSaveStatus,
       setOriginalPageConfig,
-      // Widget 액션
       updateWidgetConfig,
       updateWidgetTheme,
       setWidgetSaveStatus,
       setOriginalWidgetConfig,
-      // 블록 에디터 액션
       selectBlock,
-      // 챗봇 생성 다이얼로그 액션
       openCreateDialog,
       closeCreateDialog,
-      // 공통 액션
       reloadChatbots,
     }),
     [
-      mode,
-      chatbots,
-      currentChatbotIndex,
+      // 도메인 상태 객체 (5개)
+      uiState,
+      chatbotState,
+      tenantState,
+      pageEditor,
+      widgetEditor,
       currentChatbot,
-      isLoading,
-      pageConfig,
-      originalPageConfig,
-      saveStatus,
-      tier,
-      tenantSettings,
-      isTenantLoading,
-      widgetConfig,
-      originalWidgetConfig,
-      widgetSaveStatus,
-      selectedBlockId,
-      isCreateDialogOpen,
+      // 액션 함수들 (useCallback으로 안정적)
+      setMode,
       selectChatbot,
       selectChatbotById,
       navigateChatbot,
@@ -436,8 +516,12 @@ export function ConsoleProvider({
       updateThemeConfig,
       updateSeoConfig,
       updateChatbotConfig,
+      setSaveStatus,
+      setOriginalPageConfig,
       updateWidgetConfig,
       updateWidgetTheme,
+      setWidgetSaveStatus,
+      setOriginalWidgetConfig,
       selectBlock,
       openCreateDialog,
       closeCreateDialog,
@@ -450,7 +534,10 @@ export function ConsoleProvider({
   );
 }
 
+// ============================================================
 // 커스텀 훅
+// ============================================================
+
 export function useConsole(): ConsoleContextValue {
   const context = useContext(ConsoleContext);
   if (!context) {
@@ -459,7 +546,10 @@ export function useConsole(): ConsoleContextValue {
   return context;
 }
 
-// 선택적 훅 (하위 컴포넌트용)
+// ============================================================
+// 선택적 훅 (하위 컴포넌트용 - 세분화된 구독)
+// ============================================================
+
 export function useConsoleMode() {
   const { mode, setMode } = useConsole();
   return { mode, setMode };

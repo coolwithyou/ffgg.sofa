@@ -3,6 +3,16 @@ import type { WidgetConfig } from '@/lib/widget/types';
 import type { Tier } from '@/lib/tier/constants';
 import type { TenantSettings } from '@/lib/tier/types';
 
+// ============================================================
+// 기본 타입 정의
+// ============================================================
+
+// 편집 모드
+export type ConsoleMode = 'page' | 'widget';
+
+// 저장 상태
+export type SaveStatus = 'saved' | 'saving' | 'error' | 'unsaved';
+
 // 챗봇 기본 정보 (목록용)
 export interface ConsoleChatbot {
   id: string;
@@ -17,11 +27,58 @@ export interface ConsoleChatbot {
   widgetConfig: WidgetConfig;
 }
 
-// 편집 모드
-export type ConsoleMode = 'page' | 'widget';
+// ============================================================
+// 도메인별 상태 타입 (내부 상태 관리용)
+// ============================================================
 
-// 저장 상태
-export type SaveStatus = 'saved' | 'saving' | 'error' | 'unsaved';
+/**
+ * UI 상태: 모드, 블록 선택, 다이얼로그 등 일시적 UI 상태
+ */
+export interface UIState {
+  mode: ConsoleMode;
+  selectedBlockId: string | null;
+  isCreateDialogOpen: boolean;
+}
+
+/**
+ * 챗봇 상태: 챗봇 목록 및 선택 관리
+ */
+export interface ChatbotListState {
+  chatbots: ConsoleChatbot[];
+  currentChatbotIndex: number;
+  isLoading: boolean;
+}
+
+/**
+ * 테넌트 상태: 티어 및 설정 관리
+ */
+export interface TenantState {
+  tier: Tier;
+  tenantSettings: TenantSettings;
+  isLoading: boolean;
+}
+
+/**
+ * Page 에디터 상태: 설정, 원본, 저장 상태
+ */
+export interface PageEditorState {
+  config: PublicPageConfig;
+  originalConfig: PublicPageConfig | null;
+  saveStatus: SaveStatus;
+}
+
+/**
+ * Widget 에디터 상태: 설정, 원본, 저장 상태
+ */
+export interface WidgetEditorState {
+  config: WidgetConfig;
+  originalConfig: WidgetConfig | null;
+  saveStatus: SaveStatus;
+}
+
+// ============================================================
+// Context 상태 타입 (외부 API - 하위 호환성 유지)
+// ============================================================
 
 // Context 상태 타입
 export interface ConsoleState {

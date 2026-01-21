@@ -204,31 +204,44 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // 통계 포함 옵션
-    if (includeStats) {
-      const chatbotsWithStats = await Promise.all(
-        chatbotsWithDraft.map(async (chatbot) => {
-          // 연결된 데이터셋 수
-          const [datasetCount] = await db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(chatbotDatasets)
-            .where(eq(chatbotDatasets.chatbotId, chatbot.id));
-
-          // 대화 수
-          const [conversationCount] = await db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(conversations)
-            .where(eq(conversations.chatbotId, chatbot.id));
-
-          return {
-            ...chatbot,
-            stats: {
-              datasetCount: datasetCount?.count || 0,
-              conversationCount: conversationCount?.count || 0,
-            },
-          };
+    // 통계 포함 옵션 (Batch 쿼리로 N+1 문제 해결)
+    if (includeStats && chatbotIds.length > 0) {
+      // 배치 쿼리: 모든 챗봇의 데이터셋 수를 한 번에 조회
+      const datasetCounts = await db
+        .select({
+          chatbotId: chatbotDatasets.chatbotId,
+          count: sql<number>`count(*)::int`,
         })
+        .from(chatbotDatasets)
+        .where(inArray(chatbotDatasets.chatbotId, chatbotIds))
+        .groupBy(chatbotDatasets.chatbotId);
+
+      // 배치 쿼리: 모든 챗봇의 대화 수를 한 번에 조회
+      const conversationCounts = await db
+        .select({
+          chatbotId: conversations.chatbotId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(conversations)
+        .where(inArray(conversations.chatbotId, chatbotIds))
+        .groupBy(conversations.chatbotId);
+
+      // Map으로 변환하여 O(1) 조회
+      const datasetCountMap = new Map(
+        datasetCounts.map((d) => [d.chatbotId, d.count])
       );
+      const conversationCountMap = new Map(
+        conversationCounts.map((c) => [c.chatbotId, c.count])
+      );
+
+      // 챗봇 목록에 통계 병합
+      const chatbotsWithStats = chatbotsWithDraft.map((chatbot) => ({
+        ...chatbot,
+        stats: {
+          datasetCount: datasetCountMap.get(chatbot.id) || 0,
+          conversationCount: conversationCountMap.get(chatbot.id) || 0,
+        },
+      }));
 
       return NextResponse.json({ chatbots: chatbotsWithStats });
     }

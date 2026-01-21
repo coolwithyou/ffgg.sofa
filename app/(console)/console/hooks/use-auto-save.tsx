@@ -11,19 +11,13 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { useConsole } from './use-console-state';
+import { useIdleTimer } from './use-idle-timer';
+import { useSaveWithRetry, type SaveError } from './use-save-with-retry';
 import { AUTO_SAVE_CONFIG } from '../config/auto-save.config';
 import type { PublicPageConfig } from '@/lib/public-page/types';
 
-/**
- * 에러 상태 타입
- */
-export interface SaveError {
-  message: string;
-  code?: string;
-  retryCount: number;
-  canRetry: boolean;
-  timestamp: Date;
-}
+// SaveError 타입 re-export (하위 호환성)
+export type { SaveError };
 
 /**
  * 자동 저장 훅 옵션
@@ -47,6 +41,8 @@ interface UseAutoSaveOptions {
  *
  * 자동 저장 비활성화 시:
  * - 변경 감지만 수행하고 저장은 수동으로만 가능
+ *
+ * 리팩토링: useIdleTimer + useSaveWithRetry 조합
  */
 export function useAutoSave(options?: UseAutoSaveOptions) {
   const {
@@ -74,140 +70,109 @@ export function useAutoSave(options?: UseAutoSaveOptions) {
     return stored !== null ? stored === 'true' : AUTO_SAVE_CONFIG.defaultAutoSaveEnabled;
   });
 
-  // 에러 상태 관리
-  const [error, setError] = useState<SaveError | null>(null);
-  const retryCountRef = useRef(0);
-
-  // 타이머 refs
-  const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Throttle 관리용 refs
   const lastSaveTimeRef = useRef<number>(0);
+  const throttleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 마지막 저장된 설정 (중복 저장 방지용)
   const lastSavedConfigRef = useRef<PublicPageConfig | null>(null);
 
-  // 저장 진행 중 여부 (중복 호출 방지)
-  const isSavingRef = useRef(false);
+  // 현재 pageConfig를 ref로 유지 (저장 함수에서 최신값 참조)
+  const pageConfigRef = useRef(pageConfig);
+  pageConfigRef.current = pageConfig;
 
   // 자동 저장 설정 변경 시 localStorage에 저장
   useEffect(() => {
     localStorage.setItem('sofa-auto-save-enabled', String(isAutoSaveEnabled));
   }, [isAutoSaveEnabled]);
 
-  // 타이머 정리 함수들
-  const clearIdleTimer = useCallback(() => {
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
+  // Throttle 타이머 정리
+  const clearThrottleTimer = useCallback(() => {
+    if (throttleTimerRef.current) {
+      clearTimeout(throttleTimerRef.current);
+      throttleTimerRef.current = null;
     }
   }, []);
 
-  const clearRetryTimer = useCallback(() => {
-    if (retryTimerRef.current) {
-      clearTimeout(retryTimerRef.current);
-      retryTimerRef.current = null;
+  // 저장 함수 (useSaveWithRetry에 전달)
+  const saveFn = useCallback(async () => {
+    if (!currentChatbot) {
+      return { success: false, error: new Error('챗봇이 선택되지 않았습니다') };
     }
-  }, []);
 
-  // 에러 초기화
-  const clearError = useCallback(() => {
-    setError(null);
-    retryCountRef.current = 0;
-    clearRetryTimer();
-  }, [clearRetryTimer]);
+    const config = pageConfigRef.current;
 
-  // 저장 API 호출
-  const saveToServer = useCallback(
-    async (config: PublicPageConfig, isRetry = false) => {
-      if (!currentChatbot) return false;
-      if (isSavingRef.current) return false;
+    setSaveStatus('saving');
 
-      // Throttle 체크 (재시도가 아닐 때만)
-      if (!isRetry) {
-        const now = Date.now();
-        const timeSinceLastSave = now - lastSaveTimeRef.current;
-        if (timeSinceLastSave < minSaveInterval && lastSaveTimeRef.current > 0) {
-          // throttle 시간이 지난 후 저장 스케줄
-          const delay = minSaveInterval - timeSinceLastSave;
-          idleTimerRef.current = setTimeout(() => {
-            saveToServer(config, false);
-          }, delay);
-          return false;
-        }
+    const response = await fetch(
+      `/api/chatbots/${currentChatbot.id}/public-page`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config }),
       }
+    );
 
-      isSavingRef.current = true;
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      setSaveStatus('error');
+      throw new Error(errorData.message || '저장에 실패했습니다');
+    }
 
-      try {
-        setSaveStatus('saving');
+    // 성공
+    lastSavedConfigRef.current = config;
+    lastSaveTimeRef.current = Date.now();
+    setOriginalPageConfig(config);
+    setSaveStatus('saved');
 
-        const response = await fetch(
-          `/api/chatbots/${currentChatbot.id}/public-page`,
-          {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ config }),
-          }
-        );
+    return { success: true };
+  }, [currentChatbot, setSaveStatus, setOriginalPageConfig]);
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || '저장에 실패했습니다');
-        }
-
-        // 성공
-        lastSavedConfigRef.current = config;
-        lastSaveTimeRef.current = Date.now();
-        setOriginalPageConfig(config);
-        setSaveStatus('saved');
-        clearError();
-        toast.success('저장됨');
-        onSaveSuccess?.();
-        return true;
-      } catch (err) {
-        console.error('Save failed:', err);
-
-        const errorMessage =
-          err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다';
-        const canRetry = retryCountRef.current < maxRetries;
-
-        const saveError: SaveError = {
-          message: errorMessage,
-          code: err instanceof Error ? (err as Error & { code?: string }).code : undefined,
-          retryCount: retryCountRef.current,
-          canRetry,
-          timestamp: new Date(),
-        };
-
-        setError(saveError);
-        setSaveStatus('error');
-        toast.error('저장 실패', { description: errorMessage });
-        onSaveError?.(saveError);
-
-        // 자동 재시도
-        if (autoRetry && canRetry && !isRetry) {
-          retryCountRef.current += 1;
-          retryTimerRef.current = setTimeout(() => {
-            saveToServer(config, true);
-          }, AUTO_SAVE_CONFIG.retryDelay);
-        }
-        return false;
-      } finally {
-        isSavingRef.current = false;
-      }
+  // useSaveWithRetry 훅 사용
+  const {
+    save: executeSave,
+    retry: executeRetry,
+    clearError,
+    error,
+    isSaving,
+  } = useSaveWithRetry(saveFn, {
+    maxRetries,
+    retryDelay: AUTO_SAVE_CONFIG.retryDelay,
+    autoRetry,
+    onSuccess: () => {
+      toast.success('저장됨');
+      onSaveSuccess?.();
     },
-    [
-      currentChatbot,
-      minSaveInterval,
-      setSaveStatus,
-      setOriginalPageConfig,
-      clearError,
-      maxRetries,
-      autoRetry,
-      onSaveSuccess,
-      onSaveError,
-    ]
-  );
+    onError: (saveError) => {
+      toast.error('저장 실패', { description: saveError.message });
+      onSaveError?.(saveError);
+    },
+  });
+
+  // Throttle을 고려한 저장 실행
+  const saveWithThrottle = useCallback(async () => {
+    const now = Date.now();
+    const timeSinceLastSave = now - lastSaveTimeRef.current;
+
+    if (timeSinceLastSave < minSaveInterval && lastSaveTimeRef.current > 0) {
+      // Throttle 시간이 지난 후 저장 스케줄
+      clearThrottleTimer();
+      const delay = minSaveInterval - timeSinceLastSave;
+      throttleTimerRef.current = setTimeout(() => {
+        executeSave();
+      }, delay);
+      return false;
+    }
+
+    return executeSave();
+  }, [minSaveInterval, clearThrottleTimer, executeSave]);
+
+  // Idle 타이머 훅 사용
+  const { reset: resetIdleTimer, cancel: cancelIdleTimer } = useIdleTimer({
+    delay: idleDelay,
+    onIdle: saveWithThrottle,
+    autoStart: false,
+  });
 
   // 변경사항 존재 여부 계산
   const hasChanges =
@@ -243,22 +208,18 @@ export function useAutoSave(options?: UseAutoSaveOptions) {
 
     // 자동 저장이 비활성화되어 있으면 여기서 종료
     if (!isAutoSaveEnabled) {
-      clearIdleTimer();
+      cancelIdleTimer();
       return;
     }
 
-    // 기존 idle 타이머 취소 후 새로 스케줄
-    clearIdleTimer();
-    idleTimerRef.current = setTimeout(() => {
-      saveToServer(pageConfig);
-    }, idleDelay);
+    // Idle 타이머 리셋 (새 변경 감지)
+    resetIdleTimer();
   }, [
     pageConfig,
     originalPageConfig,
     isAutoSaveEnabled,
-    idleDelay,
-    saveToServer,
-    clearIdleTimer,
+    resetIdleTimer,
+    cancelIdleTimer,
     setSaveStatus,
     saveStatus,
   ]);
@@ -266,28 +227,26 @@ export function useAutoSave(options?: UseAutoSaveOptions) {
   // 컴포넌트 언마운트 시 정리
   useEffect(() => {
     return () => {
-      clearIdleTimer();
-      clearRetryTimer();
+      cancelIdleTimer();
+      clearThrottleTimer();
     };
-  }, [clearIdleTimer, clearRetryTimer]);
+  }, [cancelIdleTimer, clearThrottleTimer]);
 
   // 수동 저장 함수 (버튼 클릭 시)
   const saveNow = useCallback(async () => {
-    clearIdleTimer();
-    clearRetryTimer();
-    retryCountRef.current = 0;
+    cancelIdleTimer();
+    clearThrottleTimer();
     // Throttle 무시하고 즉시 저장
     lastSaveTimeRef.current = 0;
-    return saveToServer(pageConfig);
-  }, [clearIdleTimer, clearRetryTimer, saveToServer, pageConfig]);
+    return executeSave();
+  }, [cancelIdleTimer, clearThrottleTimer, executeSave]);
 
   // 수동 재시도 함수
   const retry = useCallback(() => {
-    clearRetryTimer();
-    retryCountRef.current = 0;
+    clearThrottleTimer();
     lastSaveTimeRef.current = 0;
-    saveToServer(pageConfig);
-  }, [clearRetryTimer, saveToServer, pageConfig]);
+    executeRetry();
+  }, [clearThrottleTimer, executeRetry]);
 
   // 자동 저장 토글
   const toggleAutoSave = useCallback((enabled?: boolean) => {
