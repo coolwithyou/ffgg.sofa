@@ -7,7 +7,7 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { reprocessDocument } from '@/app/(portal)/documents/actions';
+import { reprocessDocument } from '@/app/(console)/console/chatbot/docu/actions';
 import { useRouter } from 'next/navigation';
 
 interface StalledDocument {

@@ -3,7 +3,11 @@ import type { NextConfig } from "next";
 /**
  * Next.js 설정
  * [W-007] 보안 헤더 설정
+ * [Phase 4] CSP 보안 강화 - 개발/프로덕션 환경 분리
  */
+
+const isDev = process.env.NODE_ENV === "development";
+
 const nextConfig: NextConfig = {
   // Turbopack 설정 (Next.js 16+ 기본)
   turbopack: {},
@@ -67,15 +71,16 @@ const nextConfig: NextConfig = {
             value: "camera=(), microphone=(), geolocation=()",
           },
           // CSP (Content Security Policy)
+          // [Phase 4] 개발 환경에서만 'unsafe-eval' 허용 (HMR용), 프로덕션에서는 제거
           {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' http://t1.daumcdn.net https://t1.daumcdn.net http://dapi.kakao.com https://dapi.kakao.com", // Next.js + Kakao SDK
+              `script-src 'self' ${isDev ? "'unsafe-eval'" : ""} 'unsafe-inline' http://t1.daumcdn.net https://t1.daumcdn.net http://dapi.kakao.com https://dapi.kakao.com`.trim().replace(/\s+/g, ' '), // Next.js + Kakao SDK
               "style-src 'self' 'unsafe-inline'", // Tailwind 필요
               "img-src 'self' data: blob: https: http://*.daumcdn.net https://*.daumcdn.net", // Kakao Maps 타일 이미지
               "font-src 'self' data:",
-              "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech http://dapi.kakao.com https://dapi.kakao.com", // Kakao Geocoder API
+              `connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech https://*.supabase.co https://*.supabase.in wss://*.supabase.co http://dapi.kakao.com https://dapi.kakao.com ${isDev ? "ws://localhost:*" : ""}`.trim().replace(/\s+/g, ' '), // Supabase + Kakao Geocoder API
               "frame-src http://postcode.map.daum.net https://postcode.map.daum.net https://www.google.com https://maps.google.com", // Daum 우편번호 + Google Maps iframe
               "frame-ancestors 'none'",
               "base-uri 'self'",
@@ -101,15 +106,16 @@ const nextConfig: NextConfig = {
             key: "X-Frame-Options",
             value: "ALLOWALL",
           },
+          // [Phase 4] CSP 보안 강화 - 개발/프로덕션 환경 분리
           {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://t1.daumcdn.net https://dapi.kakao.com",
+              `script-src 'self' ${isDev ? "'unsafe-eval'" : ""} 'unsafe-inline' https://t1.daumcdn.net https://dapi.kakao.com`.trim().replace(/\s+/g, ' '),
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https: http://*.daumcdn.net https://*.daumcdn.net", // Kakao Maps 타일 이미지
               "font-src 'self' data:",
-              "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech https://dapi.kakao.com",
+              `connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech https://*.supabase.co wss://*.supabase.co https://dapi.kakao.com ${isDev ? "ws://localhost:*" : ""}`.trim().replace(/\s+/g, ' '),
               "frame-ancestors *", // iframe 허용
               "base-uri 'self'",
               "form-action 'self'",
@@ -139,15 +145,16 @@ const nextConfig: NextConfig = {
             key: "Referrer-Policy",
             value: "strict-origin-when-cross-origin",
           },
+          // [Phase 4] CSP 보안 강화 - 개발/프로덕션 환경 분리
           {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://t1.daumcdn.net https://dapi.kakao.com",
+              `script-src 'self' ${isDev ? "'unsafe-eval'" : ""} 'unsafe-inline' https://t1.daumcdn.net https://dapi.kakao.com`.trim().replace(/\s+/g, ' '),
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https: http://*.daumcdn.net https://*.daumcdn.net", // Kakao Maps 타일 이미지
               "font-src 'self' data:",
-              "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech https://dapi.kakao.com",
+              `connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://*.neon.tech wss://*.neon.tech https://*.supabase.co wss://*.supabase.co https://dapi.kakao.com ${isDev ? "ws://localhost:*" : ""}`.trim().replace(/\s+/g, ' '),
               "frame-src https://www.google.com https://maps.google.com", // Google Maps iframe 허용
               "frame-ancestors 'none'", // iframe 완전 차단
               "base-uri 'self'",

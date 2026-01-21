@@ -11,7 +11,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Loader2, AlertTriangle } from 'lucide-react';
 import { SimpleDialog } from '@/components/ui/dialog';
-import { createChatbot } from '@/app/(portal)/chatbots/actions';
+import { createChatbot } from '@/lib/actions/chatbot-actions';
 import { useConsole } from '../hooks/use-console-state';
 import { TIER_LIMITS, TIER_NAMES, type Tier } from '@/lib/tier/constants';
 
